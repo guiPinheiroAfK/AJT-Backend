@@ -3,7 +3,7 @@ spring:
     name: ajt-backend
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/ajt_db
+    url: jdbc:postgresql://localhost:5454/ajt_db
     username: postgres
     password: postgres
     driver-class-name: org.postgresql.Driver
