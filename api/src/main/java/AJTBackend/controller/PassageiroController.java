@@ -48,6 +48,13 @@ public class PassageiroController {
         return ResponseEntity.ok(service.atualizar(id, dto));
     }
 
+    @PatchMapping("/{id}")
+    public ResponseEntity<PassageiroResponseDTO> atualizarParcial(
+            @PathVariable Long id,
+            @RequestBody PassageiroRequestDTO dto) {
+        return ResponseEntity.ok(service.atualizarParcial(id, dto));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
         service.deletar(id);

@@ -61,6 +61,27 @@ public class PassageiroService {
         return toResponseDTO(atualizado);
     }
 
+    public PassageiroResponseDTO atualizarParcial(Long id, PassageiroRequestDTO dto) {
+        Passageiro passageiro = repository.findById(id)
+                .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
+
+        if (dto.nome() != null) {
+            passageiro.setNome(dto.nome());
+        }
+        if (dto.tipoDocumento() != null) {
+            passageiro.setTipoDocumento(dto.tipoDocumento());
+        }
+        if (dto.documento() != null) {
+            passageiro.setDocumento(dto.documento());
+        }
+        if (dto.nacionalidade() != null) {
+            passageiro.setNacionalidade(dto.nacionalidade());
+        }
+
+        Passageiro atualizado = repository.save(passageiro);
+        return toResponseDTO(atualizado);
+    }
+
     public void deletar(Long id) {
         if (!repository.existsById(id)) {
             throw new PassageiroNaoEncontradoException(id);
