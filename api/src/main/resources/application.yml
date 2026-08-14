@@ -26,5 +26,5 @@ server:
   port: 8080
 
 jwt:
-  secret: troque-essa-chave-depois-por-uma-bem-grande-e-aleatoria-64chars-no-minimo
-  expiration: 86400000 # 24h em ms
+  secret: "coloque-aqui-uma-chave-bem-grande-e-aleatoria-de-pelo-menos-32-caracteres"
+  expiration: 86400000 # 24h em milissegundos
