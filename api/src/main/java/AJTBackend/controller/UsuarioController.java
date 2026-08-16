@@ -3,6 +3,7 @@ package AJTBackend.controller;
 import AJTBackend.dto.UsuarioRequestDTO;
 import AJTBackend.dto.UsuarioResponseDTO;
 import AJTBackend.service.UsuarioService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,14 +34,14 @@ public class UsuarioController {
     }
 
     @PostMapping
-    public ResponseEntity<UsuarioResponseDTO> criar(@RequestBody UsuarioRequestDTO dto) {
+    public ResponseEntity<UsuarioResponseDTO> criar(@Valid @RequestBody UsuarioRequestDTO dto) {
         UsuarioResponseDTO criado = usuarioService.criar(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<UsuarioResponseDTO> atualizar(@PathVariable Long id,
-                                                        @RequestBody UsuarioRequestDTO dto) {
+                                                        @Valid @RequestBody UsuarioRequestDTO dto) {
         return ResponseEntity.ok(usuarioService.atualizar(id, dto));
     }
 

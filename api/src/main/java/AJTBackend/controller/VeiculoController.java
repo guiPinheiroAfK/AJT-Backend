@@ -3,6 +3,7 @@ package AJTBackend.controller;
 import AJTBackend.dto.VeiculoRequestDTO;
 import AJTBackend.dto.VeiculoResponseDTO;
 import AJTBackend.service.VeiculoService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,14 +34,14 @@ public class VeiculoController {
     }
 
     @PostMapping
-    public ResponseEntity<VeiculoResponseDTO> criar(@RequestBody VeiculoRequestDTO dto) {
+    public ResponseEntity<VeiculoResponseDTO> criar(@Valid @RequestBody VeiculoRequestDTO dto) {
         VeiculoResponseDTO criado = veiculoService.criar(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<VeiculoResponseDTO> atualizar(@PathVariable Long id,
-                                                        @RequestBody VeiculoRequestDTO dto) {
+                                                        @Valid @RequestBody VeiculoRequestDTO dto) {
         return ResponseEntity.ok(veiculoService.atualizar(id, dto));
     }
 

@@ -3,6 +3,7 @@ package AJTBackend.controller;
 import AJTBackend.dto.MotoristaRequestDTO;
 import AJTBackend.dto.MotoristaResponseDTO;
 import AJTBackend.service.MotoristaService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -33,14 +34,14 @@ public class MotoristaController {
     }
 
     @PostMapping
-    public ResponseEntity<MotoristaResponseDTO> criar(@RequestBody MotoristaRequestDTO dto) {
+    public ResponseEntity<MotoristaResponseDTO> criar(@Valid @RequestBody MotoristaRequestDTO dto) {
         MotoristaResponseDTO criado = motoristaService.criar(dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(criado);
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<MotoristaResponseDTO> atualizar(@PathVariable Long id,
-                                                          @RequestBody MotoristaRequestDTO dto) {
+                                                          @Valid @RequestBody MotoristaRequestDTO dto) {
         return ResponseEntity.ok(motoristaService.atualizar(id, dto));
     }
 
