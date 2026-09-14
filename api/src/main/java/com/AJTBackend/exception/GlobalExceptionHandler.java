@@ -147,6 +147,34 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(erro);
     }
 
+    @ExceptionHandler(TransferNaoEncontradoException.class)
+    public ResponseEntity<ErroResponseDTO> handleTransferNaoEncontrado(
+            TransferNaoEncontradoException ex) {
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Recurso não encontrado",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
+    }
+
+    @ExceptionHandler(PontoColetaNaoEncontradoException.class)
+    public ResponseEntity<ErroResponseDTO> handlePontoColetaNaoEncontrado(
+            PontoColetaNaoEncontradoException ex) {
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Recurso não encontrado",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
+    }
+
     @ExceptionHandler(CredenciaisInvalidasException.class)
     public ResponseEntity<ErroResponseDTO> handleCredenciaisInvalidas(
             CredenciaisInvalidasException ex) {
