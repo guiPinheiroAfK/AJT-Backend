@@ -39,7 +39,8 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // login continua público
-                        .anyRequest().authenticated() // todo o resto agora exige token válido
+                        .requestMatchers("/api/usuarios/**").hasRole("ADMIN") // só ADMIN gerencia usuários/perfis
+                        .anyRequest().authenticated() // todo o resto exige token válido
                 )
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(jsonAuthErrorHandler)

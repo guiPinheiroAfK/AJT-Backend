@@ -30,6 +30,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ajt_db
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      AJT_JWT_SECRET: ${AJT_JWT_SECRET}
+      AJT_JWT_EXPIRATION: ${AJT_JWT_EXPIRATION:-86400000}
 
 volumes:
   ajt_data:
