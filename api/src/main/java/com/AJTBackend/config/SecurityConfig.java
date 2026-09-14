@@ -19,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JsonAuthErrorHandler jsonAuthErrorHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -39,6 +40,10 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // login continua público
                         .anyRequest().authenticated() // todo o resto agora exige token válido
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(jsonAuthErrorHandler)
+                        .accessDeniedHandler(jsonAuthErrorHandler)
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
