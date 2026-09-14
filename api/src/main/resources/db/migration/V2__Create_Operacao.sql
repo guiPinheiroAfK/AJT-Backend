@@ -9,10 +9,10 @@
 --  Agrupa transfers por motorista + veículo + data (RF009).
 -- ──────────────────────────────────────────────────────────────
 CREATE TABLE ordens_servico (
-    id           SERIAL PRIMARY KEY,
+    id           BIGSERIAL PRIMARY KEY,
     data_servico DATE   NOT NULL,
-    motorista_id INT REFERENCES motoristas(id),
-    veiculo_id   INT REFERENCES veiculos(id),
+    motorista_id BIGINT REFERENCES motoristas(id),
+    veiculo_id   BIGINT REFERENCES veiculos(id),
     status       VARCHAR(20) NOT NULL DEFAULT 'ABERTA'
 );
 
@@ -21,7 +21,7 @@ CREATE TABLE ordens_servico (
 --  os_id fica NULL até o transfer ser agrupado numa OS.
 -- ──────────────────────────────────────────────────────────────
 CREATE TABLE transfers (
-    id             SERIAL       PRIMARY KEY,
+    id             BIGSERIAL    PRIMARY KEY,
     data_transfer  DATE         NOT NULL,
     hora_transfer  TIME         NOT NULL,
     origem         VARCHAR(100) NOT NULL,
@@ -30,7 +30,7 @@ CREATE TABLE transfers (
     valor_base     DECIMAL(10,2),
     valor_original DECIMAL(10,2),                  -- valor na moeda de origem (RF016)
     moeda_origem   VARCHAR(10),
-    os_id          INT REFERENCES ordens_servico(id)
+    os_id          BIGINT REFERENCES ordens_servico(id)
 );
 
 -- ──────────────────────────────────────────────────────────────
@@ -38,8 +38,8 @@ CREATE TABLE transfers (
 --  Múltiplos pontos ordenados dentro de UM transfer (RF008).
 -- ──────────────────────────────────────────────────────────────
 CREATE TABLE pontos_coleta (
-    id               SERIAL PRIMARY KEY,
-    transfer_id      INT REFERENCES transfers(id) ON DELETE CASCADE,
+    id               BIGSERIAL PRIMARY KEY,
+    transfer_id      BIGINT REFERENCES transfers(id) ON DELETE CASCADE,
     local_coleta     VARCHAR(100) NOT NULL,
     ordem_parada     INT,                          -- nullable: nem todo ponto tem ordem fixa
     horario_previsto TIME,
@@ -51,7 +51,7 @@ CREATE TABLE pontos_coleta (
 --  ASSOCIAÇÃO TRANSFER <-> PASSAGEIRO (N:N)
 -- ──────────────────────────────────────────────────────────────
 CREATE TABLE transfer_passageiros (
-    transfer_id   INT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,
-    passageiro_id INT NOT NULL REFERENCES passageiros(id) ON DELETE CASCADE,
+    transfer_id   BIGINT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,
+    passageiro_id BIGINT NOT NULL REFERENCES passageiros(id) ON DELETE CASCADE,
     PRIMARY KEY (transfer_id, passageiro_id)
 );

@@ -5,8 +5,8 @@
 -- ============================================================
 
 CREATE TABLE paradas_os (
-    id               SERIAL PRIMARY KEY,
-    os_id            INT NOT NULL REFERENCES ordens_servico(id) ON DELETE CASCADE,
+    id               BIGSERIAL PRIMARY KEY,
+    os_id            BIGINT NOT NULL REFERENCES ordens_servico(id) ON DELETE CASCADE,
     ordem_parada     INT NOT NULL,
     local_parada     VARCHAR(100) NOT NULL,
     latitude         DOUBLE PRECISION,
@@ -21,7 +21,7 @@ CREATE TABLE paradas_os (
 --  Quais transfers compõem cada parada.
 -- ──────────────────────────────────────────────────────────────
 CREATE TABLE parada_os_transfers (
-    parada_os_id INT NOT NULL REFERENCES paradas_os(id) ON DELETE CASCADE,
-    transfer_id  INT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,
+    parada_os_id BIGINT NOT NULL REFERENCES paradas_os(id) ON DELETE CASCADE,
+    transfer_id  BIGINT NOT NULL REFERENCES transfers(id) ON DELETE CASCADE,
     PRIMARY KEY (parada_os_id, transfer_id)
 );
