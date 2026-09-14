@@ -6,3 +6,7 @@ chmod +x *.sh
 ./test-veiculos.sh
 ./test-usuarios.sh
 ./test-auth.sh
+./test-transfers.sh
+./test-pontos-coleta.sh
+./test-ordens-servico.sh
+./test-paradas-os.sh
