@@ -13,6 +13,7 @@ import com.AJTBackend.repository.ParadaOsRepository;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
@@ -20,6 +21,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
+@Transactional
 public class ParadaOsService {
 
     private static final String STATUS_PADRAO = "PENDENTE";

@@ -6,12 +6,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // 404 - recurso não encontrado
     @ExceptionHandler(PassageiroNaoEncontradoException.class)
@@ -52,6 +56,7 @@ public class GlobalExceptionHandler {
     // 500 - fallback genérico, pra qualquer coisa não prevista
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErroResponseDTO> handleGenerico(Exception ex) {
+        log.error("Erro inesperado", ex);
 
         ErroResponseDTO erro = new ErroResponseDTO(
                 LocalDateTime.now(),
