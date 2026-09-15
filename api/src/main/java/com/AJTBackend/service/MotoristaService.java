@@ -38,7 +38,7 @@ public class MotoristaService {
 
     public MotoristaResponseDTO buscarPorCnh(String cnh) {
         Motorista motorista = motoristaRepository.findByCnh(cnh)
-                .orElseThrow(() -> new MotoristaNaoEncontradoException(0L));
+                .orElseThrow(() -> new MotoristaNaoEncontradoException(cnh));
         return toResponseDTO(motorista);
     }
 

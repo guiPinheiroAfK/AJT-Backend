@@ -20,23 +20,23 @@ public class PassageiroService {
 
     private static final Logger log = LoggerFactory.getLogger(PassageiroService.class);
 
-    private final PassageiroRepository repository;
+    private final PassageiroRepository passageiroRepository;
 
     public List<PassageiroResponseDTO> listarTodos() {
-        return repository.findAll()
+        return passageiroRepository.findAll()
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
     }
 
     public PassageiroResponseDTO buscarPorId(Long id) {
-        Passageiro passageiro = repository.findById(id)
+        Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
         return toResponseDTO(passageiro);
     }
 
     public List<PassageiroResponseDTO> buscarPorNacionalidade(String nacionalidade) {
-        return repository.findByNacionalidadeIgnoreCase(nacionalidade)
+        return passageiroRepository.findByNacionalidadeIgnoreCase(nacionalidade)
                 .stream()
                 .map(this::toResponseDTO)
                 .toList();
@@ -51,14 +51,14 @@ public class PassageiroService {
                 .nacionalidade(dto.nacionalidade())
                 .build();
 
-        Passageiro salvo = repository.save(passageiro);
+        Passageiro salvo = passageiroRepository.save(passageiro);
         log.info("Passageiro criado: id={}", salvo.getId());
         return toResponseDTO(salvo);
     }
 
     @Transactional
     public PassageiroResponseDTO atualizar(Long id, PassageiroRequestDTO dto) {
-        Passageiro passageiro = repository.findById(id)
+        Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
 
         passageiro.setNome(dto.nome());
@@ -66,13 +66,13 @@ public class PassageiroService {
         passageiro.setDocumento(dto.documento());
         passageiro.setNacionalidade(dto.nacionalidade());
 
-        Passageiro atualizado = repository.save(passageiro);
+        Passageiro atualizado = passageiroRepository.save(passageiro);
         return toResponseDTO(atualizado);
     }
 
     @Transactional
     public PassageiroResponseDTO atualizarParcial(Long id, PassageiroRequestDTO dto) {
-        Passageiro passageiro = repository.findById(id)
+        Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
 
         if (dto.nome() != null) {
@@ -88,16 +88,16 @@ public class PassageiroService {
             passageiro.setNacionalidade(dto.nacionalidade());
         }
 
-        Passageiro atualizado = repository.save(passageiro);
+        Passageiro atualizado = passageiroRepository.save(passageiro);
         return toResponseDTO(atualizado);
     }
 
     @Transactional
     public void deletar(Long id) {
-        if (!repository.existsById(id)) {
+        if (!passageiroRepository.existsById(id)) {
             throw new PassageiroNaoEncontradoException(id);
         }
-        repository.deleteById(id);
+        passageiroRepository.deleteById(id);
         log.info("Passageiro removido: id={}", id);
     }
 

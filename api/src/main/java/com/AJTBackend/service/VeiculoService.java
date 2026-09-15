@@ -38,7 +38,7 @@ public class VeiculoService {
 
     public VeiculoResponseDTO buscarPorPlaca(String placa) {
         Veiculo veiculo = veiculoRepository.findByPlaca(placa)
-                .orElseThrow(() -> new VeiculoNaoEncontradoException(0L));
+                .orElseThrow(() -> new VeiculoNaoEncontradoException(placa));
         return toResponseDTO(veiculo);
     }
 

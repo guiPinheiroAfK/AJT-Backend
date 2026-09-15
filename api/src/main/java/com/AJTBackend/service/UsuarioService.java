@@ -40,7 +40,7 @@ public class UsuarioService {
 
     public UsuarioResponseDTO buscarPorUsername(String username) {
         Usuario usuario = usuarioRepository.findByUsername(username)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException(0L));
+                .orElseThrow(() -> new UsuarioNaoEncontradoException(username));
         return toResponseDTO(usuario);
     }
 

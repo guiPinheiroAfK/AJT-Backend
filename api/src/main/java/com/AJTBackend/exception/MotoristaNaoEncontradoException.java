@@ -4,4 +4,8 @@ public class MotoristaNaoEncontradoException extends RecursoNaoEncontradoExcepti
     public MotoristaNaoEncontradoException(Long id) {
         super("Motorista não encontrado com id: " + id);
     }
+
+    public MotoristaNaoEncontradoException(String cnh) {
+        super("Motorista não encontrado com CNH: " + cnh);
+    }
 }
