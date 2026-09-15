@@ -38,20 +38,22 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 
 ```
 ajt-backend/
-├── src/main/java/br/com/ajt/
-│   ├── auth/            # autenticação e JWT
-│   ├── config/          # configurações (segurança, CORS, banco)
-│   ├── controller/       # controllers REST por domínio
-│   ├── dto/               # objetos de entrada/saída da API
-│   ├── model/             # entidades JPA
-│   ├── repository/        # repositórios Spring Data
-│   └── service/           # regras de negócio
-├── src/main/resources/
-│   ├── application.yml
-│   └── db/migration/      # migrações Flyway
-├── docker-compose.yml      # PostgreSQL para desenvolvimento
-├── .env.example
-└── pom.xml
+├── api/
+│   ├── src/main/java/com/AJTBackend/
+│   │   ├── config/         # segurança, JWT, CORS
+│   │   ├── controller/     # controllers REST por domínio
+│   │   ├── dto/            # objetos de entrada/saída da API
+│   │   ├── exception/      # exceções de domínio e tratamento global de erros
+│   │   ├── model/          # entidades JPA
+│   │   ├── repository/     # repositórios Spring Data
+│   │   └── service/        # regras de negócio
+│   ├── src/main/resources/
+│   │   ├── application.yml
+│   │   └── db/migration/   # migrações Flyway
+│   ├── src/tests/          # scripts de smoke test (bash)
+│   └── pom.xml
+├── docker-compose.yml       # PostgreSQL + API para desenvolvimento
+└── .env.example
 ```
 
 > Estrutura de referência — ajuste conforme o código for evoluindo.
