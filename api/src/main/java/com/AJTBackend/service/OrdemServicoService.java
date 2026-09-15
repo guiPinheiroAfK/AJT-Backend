@@ -13,11 +13,13 @@ import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class OrdemServicoService {
 
     private static final String STATUS_PADRAO = "ABERTA";
@@ -46,6 +48,7 @@ public class OrdemServicoService {
                 .toList();
     }
 
+    @Transactional
     public OrdemServicoResponseDTO criar(OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = OrdemServico.builder()
                 .dataServico(dto.dataServico())
@@ -57,6 +60,7 @@ public class OrdemServicoService {
         return toResponseDTO(ordemServicoRepository.save(ordemServico));
     }
 
+    @Transactional
     public OrdemServicoResponseDTO atualizar(Long id, OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
@@ -69,6 +73,7 @@ public class OrdemServicoService {
         return toResponseDTO(ordemServicoRepository.save(ordemServico));
     }
 
+    @Transactional
     public OrdemServicoResponseDTO atualizarParcial(Long id, OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
@@ -89,6 +94,7 @@ public class OrdemServicoService {
         return toResponseDTO(ordemServicoRepository.save(ordemServico));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!ordemServicoRepository.existsById(id)) {
             throw new OrdemServicoNaoEncontradoException(id);

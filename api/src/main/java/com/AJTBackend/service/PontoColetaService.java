@@ -10,11 +10,13 @@ import com.AJTBackend.repository.PontoColetaRepository;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class PontoColetaService {
 
     private final PontoColetaRepository pontoColetaRepository;
@@ -40,6 +42,7 @@ public class PontoColetaService {
                 .toList();
     }
 
+    @Transactional
     public PontoColetaResponseDTO criar(PontoColetaRequestDTO dto) {
         Transfer transfer = buscarTransfer(dto.transferId());
 
@@ -55,6 +58,7 @@ public class PontoColetaService {
         return toResponseDTO(pontoColetaRepository.save(pontoColeta));
     }
 
+    @Transactional
     public PontoColetaResponseDTO atualizar(Long id, PontoColetaRequestDTO dto) {
         PontoColeta pontoColeta = pontoColetaRepository.findById(id)
                 .orElseThrow(() -> new PontoColetaNaoEncontradoException(id));
@@ -69,6 +73,7 @@ public class PontoColetaService {
         return toResponseDTO(pontoColetaRepository.save(pontoColeta));
     }
 
+    @Transactional
     public PontoColetaResponseDTO atualizarParcial(Long id, PontoColetaRequestDTO dto) {
         PontoColeta pontoColeta = pontoColetaRepository.findById(id)
                 .orElseThrow(() -> new PontoColetaNaoEncontradoException(id));
@@ -95,6 +100,7 @@ public class PontoColetaService {
         return toResponseDTO(pontoColetaRepository.save(pontoColeta));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!pontoColetaRepository.existsById(id)) {
             throw new PontoColetaNaoEncontradoException(id);

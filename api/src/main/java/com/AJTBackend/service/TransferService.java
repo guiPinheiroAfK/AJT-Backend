@@ -7,11 +7,13 @@ import com.AJTBackend.model.Transfer;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class TransferService {
 
     private static final String STATUS_PADRAO = "AGUARDANDO_OS";
@@ -38,6 +40,7 @@ public class TransferService {
                 .toList();
     }
 
+    @Transactional
     public TransferResponseDTO criar(TransferRequestDTO dto) {
         Transfer transfer = Transfer.builder()
                 .dataTransfer(dto.dataTransfer())
@@ -54,6 +57,7 @@ public class TransferService {
         return toResponseDTO(transferRepository.save(transfer));
     }
 
+    @Transactional
     public TransferResponseDTO atualizar(Long id, TransferRequestDTO dto) {
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new TransferNaoEncontradoException(id));
@@ -71,6 +75,7 @@ public class TransferService {
         return toResponseDTO(transferRepository.save(transfer));
     }
 
+    @Transactional
     public TransferResponseDTO atualizarParcial(Long id, TransferRequestDTO dto) {
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new TransferNaoEncontradoException(id));
@@ -106,6 +111,7 @@ public class TransferService {
         return toResponseDTO(transferRepository.save(transfer));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!transferRepository.existsById(id)) {
             throw new TransferNaoEncontradoException(id);

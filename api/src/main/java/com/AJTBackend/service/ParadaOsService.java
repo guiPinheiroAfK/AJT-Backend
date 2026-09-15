@@ -21,7 +21,7 @@ import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
-@Transactional
+@Transactional(readOnly = true)
 public class ParadaOsService {
 
     private static final String STATUS_PADRAO = "PENDENTE";
@@ -50,6 +50,7 @@ public class ParadaOsService {
                 .toList();
     }
 
+    @Transactional
     public ParadaOsResponseDTO criar(ParadaOsRequestDTO dto) {
         ParadaOs paradaOs = ParadaOs.builder()
                 .ordemServico(buscarOrdemServico(dto.osId()))
@@ -66,6 +67,7 @@ public class ParadaOsService {
         return toResponseDTO(paradaOsRepository.save(paradaOs));
     }
 
+    @Transactional
     public ParadaOsResponseDTO atualizar(Long id, ParadaOsRequestDTO dto) {
         ParadaOs paradaOs = paradaOsRepository.findById(id)
                 .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
@@ -83,6 +85,7 @@ public class ParadaOsService {
         return toResponseDTO(paradaOsRepository.save(paradaOs));
     }
 
+    @Transactional
     public ParadaOsResponseDTO atualizarParcial(Long id, ParadaOsRequestDTO dto) {
         ParadaOs paradaOs = paradaOsRepository.findById(id)
                 .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
@@ -118,6 +121,7 @@ public class ParadaOsService {
         return toResponseDTO(paradaOsRepository.save(paradaOs));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!paradaOsRepository.existsById(id)) {
             throw new ParadaOsNaoEncontradaException(id);

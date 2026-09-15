@@ -8,11 +8,13 @@ import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.repository.VeiculoRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class VeiculoService {
 
     private final VeiculoRepository veiculoRepository;
@@ -36,6 +38,7 @@ public class VeiculoService {
         return toResponseDTO(veiculo);
     }
 
+    @Transactional
     public VeiculoResponseDTO criar(VeiculoRequestDTO dto) {
         if (veiculoRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException(dto.placa());
@@ -52,6 +55,7 @@ public class VeiculoService {
         return toResponseDTO(veiculoRepository.save(veiculo));
     }
 
+    @Transactional
     public VeiculoResponseDTO atualizar(Long id, VeiculoRequestDTO dto) {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
@@ -65,6 +69,7 @@ public class VeiculoService {
         return toResponseDTO(veiculoRepository.save(veiculo));
     }
 
+    @Transactional
     public VeiculoResponseDTO atualizarParcial(Long id, VeiculoRequestDTO dto) {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
@@ -91,6 +96,7 @@ public class VeiculoService {
         return toResponseDTO(veiculoRepository.save(veiculo));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!veiculoRepository.existsById(id)) {
             throw new VeiculoNaoEncontradoException(id);

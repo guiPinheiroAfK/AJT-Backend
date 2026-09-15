@@ -8,11 +8,13 @@ import com.AJTBackend.model.Motorista;
 import com.AJTBackend.repository.MotoristaRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class MotoristaService {
 
     private final MotoristaRepository motoristaRepository;
@@ -36,6 +38,7 @@ public class MotoristaService {
         return toResponseDTO(motorista);
     }
 
+    @Transactional
     public MotoristaResponseDTO criar(MotoristaRequestDTO dto) {
         if (motoristaRepository.existsByCnh(dto.cnh())) {
             throw new CnhJaCadastradaException(dto.cnh());
@@ -52,6 +55,7 @@ public class MotoristaService {
         return toResponseDTO(motoristaRepository.save(motorista));
     }
 
+    @Transactional
     public MotoristaResponseDTO atualizar(Long id, MotoristaRequestDTO dto) {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
@@ -65,6 +69,7 @@ public class MotoristaService {
         return toResponseDTO(motoristaRepository.save(motorista));
     }
 
+    @Transactional
     public MotoristaResponseDTO atualizarParcial(Long id, MotoristaRequestDTO dto) {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
@@ -91,6 +96,7 @@ public class MotoristaService {
         return toResponseDTO(motoristaRepository.save(motorista));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!motoristaRepository.existsById(id)) {
             throw new MotoristaNaoEncontradoException(id);

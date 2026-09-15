@@ -6,12 +6,14 @@ import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.repository.PassageiroRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class PassageiroService {
 
     private final PassageiroRepository repository;
@@ -36,6 +38,7 @@ public class PassageiroService {
                 .toList();
     }
 
+    @Transactional
     public PassageiroResponseDTO criar(PassageiroRequestDTO dto) {
         Passageiro passageiro = Passageiro.builder()
                 .nome(dto.nome())
@@ -48,6 +51,7 @@ public class PassageiroService {
         return toResponseDTO(salvo);
     }
 
+    @Transactional
     public PassageiroResponseDTO atualizar(Long id, PassageiroRequestDTO dto) {
         Passageiro passageiro = repository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
@@ -61,6 +65,7 @@ public class PassageiroService {
         return toResponseDTO(atualizado);
     }
 
+    @Transactional
     public PassageiroResponseDTO atualizarParcial(Long id, PassageiroRequestDTO dto) {
         Passageiro passageiro = repository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
@@ -82,6 +87,7 @@ public class PassageiroService {
         return toResponseDTO(atualizado);
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!repository.existsById(id)) {
             throw new PassageiroNaoEncontradoException(id);

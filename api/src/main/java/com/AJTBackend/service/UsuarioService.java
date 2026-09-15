@@ -9,11 +9,13 @@ import com.AJTBackend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
@@ -38,6 +40,7 @@ public class UsuarioService {
         return toResponseDTO(usuario);
     }
 
+    @Transactional
     public UsuarioResponseDTO criar(UsuarioRequestDTO dto) {
         if (usuarioRepository.existsByUsername(dto.username())) {
             throw new UsernameJaCadastradoException(dto.username());
@@ -53,6 +56,7 @@ public class UsuarioService {
         return toResponseDTO(usuarioRepository.save(usuario));
     }
 
+    @Transactional
     public UsuarioResponseDTO atualizar(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
@@ -68,6 +72,7 @@ public class UsuarioService {
         return toResponseDTO(usuarioRepository.save(usuario));
     }
 
+    @Transactional
     public UsuarioResponseDTO atualizarParcial(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
@@ -92,6 +97,7 @@ public class UsuarioService {
         return toResponseDTO(usuarioRepository.save(usuario));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!usuarioRepository.existsById(id)) {
             throw new UsuarioNaoEncontradoException(id);
