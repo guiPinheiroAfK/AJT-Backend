@@ -39,6 +39,7 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // login continua público
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll() // documentacao publica
                         .requestMatchers("/api/usuarios/**").hasRole("ADMIN") // só ADMIN gerencia usuários/perfis
                         .anyRequest().authenticated() // todo o resto exige token válido
                 )
