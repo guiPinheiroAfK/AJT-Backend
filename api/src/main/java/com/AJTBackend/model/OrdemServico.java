@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "ordens_servico")
@@ -32,4 +34,8 @@ public class OrdemServico {
     @Column(nullable = false, length = 20)
     @Builder.Default
     private String status = "ABERTA";
+
+    @OneToMany(mappedBy = "ordemServico", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<ParadaOs> paradas = new ArrayList<>();
 }
