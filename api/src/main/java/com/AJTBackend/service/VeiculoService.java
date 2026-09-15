@@ -7,6 +7,8 @@ import com.AJTBackend.exception.VeiculoNaoEncontradoException;
 import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.repository.VeiculoRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class VeiculoService {
+
+    private static final Logger log = LoggerFactory.getLogger(VeiculoService.class);
 
     private final VeiculoRepository veiculoRepository;
 
@@ -41,6 +45,7 @@ public class VeiculoService {
     @Transactional
     public VeiculoResponseDTO criar(VeiculoRequestDTO dto) {
         if (veiculoRepository.existsByPlaca(dto.placa())) {
+            log.warn("Tentativa de cadastro com placa ja existente: {}", dto.placa());
             throw new PlacaJaCadastradaException(dto.placa());
         }
 
@@ -52,7 +57,9 @@ public class VeiculoService {
                 .marca(dto.marca())
                 .build();
 
-        return toResponseDTO(veiculoRepository.save(veiculo));
+        Veiculo salvo = veiculoRepository.save(veiculo);
+        log.info("Veiculo criado: id={}, placa={}", salvo.getId(), salvo.getPlaca());
+        return toResponseDTO(salvo);
     }
 
     @Transactional
@@ -102,6 +109,7 @@ public class VeiculoService {
             throw new VeiculoNaoEncontradoException(id);
         }
         veiculoRepository.deleteById(id);
+        log.info("Veiculo removido: id={}", id);
     }
 
     private VeiculoResponseDTO toResponseDTO(Veiculo veiculo) {

@@ -7,6 +7,8 @@ import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.repository.MotoristaRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class MotoristaService {
+
+    private static final Logger log = LoggerFactory.getLogger(MotoristaService.class);
 
     private final MotoristaRepository motoristaRepository;
 
@@ -41,6 +45,7 @@ public class MotoristaService {
     @Transactional
     public MotoristaResponseDTO criar(MotoristaRequestDTO dto) {
         if (motoristaRepository.existsByCnh(dto.cnh())) {
+            log.warn("Tentativa de cadastro com CNH ja existente: {}", dto.cnh());
             throw new CnhJaCadastradaException(dto.cnh());
         }
 
@@ -52,7 +57,9 @@ public class MotoristaService {
                 .longitudeAtual(dto.longitudeAtual())
                 .build();
 
-        return toResponseDTO(motoristaRepository.save(motorista));
+        Motorista salvo = motoristaRepository.save(motorista);
+        log.info("Motorista criado: id={}, cnh={}", salvo.getId(), salvo.getCnh());
+        return toResponseDTO(salvo);
     }
 
     @Transactional
@@ -102,6 +109,7 @@ public class MotoristaService {
             throw new MotoristaNaoEncontradoException(id);
         }
         motoristaRepository.deleteById(id);
+        log.info("Motorista removido: id={}", id);
     }
 
     private MotoristaResponseDTO toResponseDTO(Motorista motorista) {

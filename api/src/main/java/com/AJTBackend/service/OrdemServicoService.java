@@ -12,6 +12,8 @@ import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class OrdemServicoService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrdemServicoService.class);
     private static final String STATUS_PADRAO = "ABERTA";
 
     private final OrdemServicoRepository ordemServicoRepository;
@@ -57,7 +60,9 @@ public class OrdemServicoService {
                 .status(dto.status() != null ? dto.status() : STATUS_PADRAO)
                 .build();
 
-        return toResponseDTO(ordemServicoRepository.save(ordemServico));
+        OrdemServico salva = ordemServicoRepository.save(ordemServico);
+        log.info("Ordem de servico criada: id={}", salva.getId());
+        return toResponseDTO(salva);
     }
 
     @Transactional
@@ -100,6 +105,7 @@ public class OrdemServicoService {
             throw new OrdemServicoNaoEncontradoException(id);
         }
         ordemServicoRepository.deleteById(id);
+        log.info("Ordem de servico removida: id={}", id);
     }
 
     private Motorista buscarMotorista(Long motoristaId) {

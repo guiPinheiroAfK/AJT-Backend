@@ -6,6 +6,8 @@ import com.AJTBackend.exception.TransferNaoEncontradoException;
 import com.AJTBackend.model.Transfer;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,7 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class TransferService {
 
+    private static final Logger log = LoggerFactory.getLogger(TransferService.class);
     private static final String STATUS_PADRAO = "AGUARDANDO_OS";
 
     private final TransferRepository transferRepository;
@@ -54,7 +57,9 @@ public class TransferService {
                 .osId(dto.osId())
                 .build();
 
-        return toResponseDTO(transferRepository.save(transfer));
+        Transfer salvo = transferRepository.save(transfer);
+        log.info("Transfer criado: id={}", salvo.getId());
+        return toResponseDTO(salvo);
     }
 
     @Transactional
@@ -117,6 +122,7 @@ public class TransferService {
             throw new TransferNaoEncontradoException(id);
         }
         transferRepository.deleteById(id);
+        log.info("Transfer removido: id={}", id);
     }
 
     private TransferResponseDTO toResponseDTO(Transfer transfer) {

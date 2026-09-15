@@ -12,6 +12,8 @@ import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.ParadaOsRepository;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +26,7 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class ParadaOsService {
 
+    private static final Logger log = LoggerFactory.getLogger(ParadaOsService.class);
     private static final String STATUS_PADRAO = "PENDENTE";
 
     private final ParadaOsRepository paradaOsRepository;
@@ -64,7 +67,9 @@ public class ParadaOsService {
                 .transfers(buscarTransfers(dto.transferIds()))
                 .build();
 
-        return toResponseDTO(paradaOsRepository.save(paradaOs));
+        ParadaOs salva = paradaOsRepository.save(paradaOs);
+        log.info("Parada de OS criada: id={}, osId={}", salva.getId(), dto.osId());
+        return toResponseDTO(salva);
     }
 
     @Transactional
@@ -127,6 +132,7 @@ public class ParadaOsService {
             throw new ParadaOsNaoEncontradaException(id);
         }
         paradaOsRepository.deleteById(id);
+        log.info("Parada de OS removida: id={}", id);
     }
 
     private OrdemServico buscarOrdemServico(Long osId) {

@@ -5,6 +5,8 @@ import com.AJTBackend.dto.PassageiroResponseDTO;
 import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.repository.PassageiroRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
@@ -15,6 +17,8 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class PassageiroService {
+
+    private static final Logger log = LoggerFactory.getLogger(PassageiroService.class);
 
     private final PassageiroRepository repository;
 
@@ -48,6 +52,7 @@ public class PassageiroService {
                 .build();
 
         Passageiro salvo = repository.save(passageiro);
+        log.info("Passageiro criado: id={}", salvo.getId());
         return toResponseDTO(salvo);
     }
 
@@ -93,6 +98,7 @@ public class PassageiroService {
             throw new PassageiroNaoEncontradoException(id);
         }
         repository.deleteById(id);
+        log.info("Passageiro removido: id={}", id);
     }
 
     private PassageiroResponseDTO toResponseDTO(Passageiro p) {
