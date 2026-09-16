@@ -28,3 +28,10 @@ server:
 jwt:
   secret: ${AJT_JWT_SECRET}
   expiration: ${AJT_JWT_EXPIRATION:86400000} # 24h em milissegundos
+
+feign:
+  client:
+    config:
+      default:
+        connect-timeout: 3000
+        read-timeout: 5000

@@ -136,6 +136,21 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(erro);
     }
 
+    // 502 - falha ao consumir a API externa de cotacao
+    @ExceptionHandler(CotacaoIndisponivelException.class)
+    public ResponseEntity<ErroResponseDTO> handleCotacaoIndisponivel(CotacaoIndisponivelException ex) {
+        log.warn("Falha ao consultar API de cotacao: {}", ex.getMessage());
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.BAD_GATEWAY.value(),
+                "Servico externo indisponível",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(erro);
+    }
+
     // 500 - fallback genérico, pra qualquer coisa não prevista
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErroResponseDTO> handleGenerico(Exception ex) {

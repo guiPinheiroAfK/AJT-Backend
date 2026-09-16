@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -20,8 +21,10 @@ public class TransferService {
 
     private static final Logger log = LoggerFactory.getLogger(TransferService.class);
     private static final String STATUS_PADRAO = "AGUARDANDO_OS";
+    private static final String MOEDA_PADRAO = "BRL";
 
     private final TransferRepository transferRepository;
+    private final CotacaoService cotacaoService;
 
     public List<TransferResponseDTO> listarTodos() {
         return transferRepository.findAll()
@@ -51,7 +54,7 @@ public class TransferService {
                 .origem(dto.origem())
                 .destino(dto.destino())
                 .status(dto.status() != null ? dto.status() : STATUS_PADRAO)
-                .valorBase(dto.valorBase())
+                .valorBase(calcularValorBase(dto.valorBase(), dto.valorOriginal(), dto.moedaOrigem()))
                 .valorOriginal(dto.valorOriginal())
                 .moedaOrigem(dto.moedaOrigem())
                 .osId(dto.osId())
@@ -72,7 +75,7 @@ public class TransferService {
         transfer.setOrigem(dto.origem());
         transfer.setDestino(dto.destino());
         transfer.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
-        transfer.setValorBase(dto.valorBase());
+        transfer.setValorBase(calcularValorBase(dto.valorBase(), dto.valorOriginal(), dto.moedaOrigem()));
         transfer.setValorOriginal(dto.valorOriginal());
         transfer.setMoedaOrigem(dto.moedaOrigem());
         transfer.setOsId(dto.osId());
@@ -100,14 +103,19 @@ public class TransferService {
         if (dto.status() != null) {
             transfer.setStatus(dto.status());
         }
-        if (dto.valorBase() != null) {
-            transfer.setValorBase(dto.valorBase());
-        }
         if (dto.valorOriginal() != null) {
             transfer.setValorOriginal(dto.valorOriginal());
         }
         if (dto.moedaOrigem() != null) {
             transfer.setMoedaOrigem(dto.moedaOrigem());
+        }
+        if (dto.valorBase() != null) {
+            transfer.setValorBase(dto.valorBase());
+        } else if (dto.valorOriginal() != null || dto.moedaOrigem() != null) {
+            BigDecimal recalculado = calcularValorBase(null, transfer.getValorOriginal(), transfer.getMoedaOrigem());
+            if (recalculado != null) {
+                transfer.setValorBase(recalculado);
+            }
         }
         if (dto.osId() != null) {
             transfer.setOsId(dto.osId());
@@ -123,6 +131,21 @@ public class TransferService {
         }
         transferRepository.deleteById(id);
         log.info("Transfer removido: id={}", id);
+    }
+
+    /**
+     * Se valorBase ja foi informado explicitamente, respeita ele. Caso
+     * contrario, se houver valorOriginal numa moeda estrangeira, converte
+     * pra BRL usando a cotacao atual (via Feign/Frankfurter API).
+     */
+    private BigDecimal calcularValorBase(BigDecimal valorBase, BigDecimal valorOriginal, String moedaOrigem) {
+        if (valorBase != null) {
+            return valorBase;
+        }
+        if (valorOriginal == null || moedaOrigem == null || moedaOrigem.equalsIgnoreCase(MOEDA_PADRAO)) {
+            return valorOriginal;
+        }
+        return cotacaoService.converterOuNulo(valorOriginal, moedaOrigem, MOEDA_PADRAO);
     }
 
     private TransferResponseDTO toResponseDTO(Transfer transfer) {
