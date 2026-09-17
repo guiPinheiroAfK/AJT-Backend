@@ -2,11 +2,17 @@ package com.AJTBackend.controller;
 
 import com.AJTBackend.dto.ParadaOsRequestDTO;
 import com.AJTBackend.dto.ParadaOsResponseDTO;
+import com.AJTBackend.dto.PaginaResponseDTO;
+import com.AJTBackend.dto.validacao.OnPatch;
 import com.AJTBackend.service.ParadaOsService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,8 +25,8 @@ public class ParadaOsController {
     private final ParadaOsService paradaOsService;
 
     @GetMapping
-    public ResponseEntity<List<ParadaOsResponseDTO>> listarTodos() {
-        return ResponseEntity.ok(paradaOsService.listarTodos());
+    public ResponseEntity<PaginaResponseDTO<ParadaOsResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(paradaOsService.listarTodos(pageable));
     }
 
     @GetMapping("/{id}")
@@ -47,7 +53,7 @@ public class ParadaOsController {
 
     @PatchMapping("/{id}")
     public ResponseEntity<ParadaOsResponseDTO> atualizarParcial(@PathVariable Long id,
-                                                                 @RequestBody ParadaOsRequestDTO dto) {
+                                                                 @Validated(OnPatch.class) @RequestBody ParadaOsRequestDTO dto) {
         return ResponseEntity.ok(paradaOsService.atualizarParcial(id, dto));
     }
 

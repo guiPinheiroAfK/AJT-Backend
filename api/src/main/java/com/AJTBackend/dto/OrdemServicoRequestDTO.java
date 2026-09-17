@@ -1,5 +1,6 @@
 package com.AJTBackend.dto;
 
+import com.AJTBackend.model.enums.StatusOrdemServico;
 import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
@@ -10,5 +11,5 @@ public record OrdemServicoRequestDTO(
 
         Long motoristaId,
         Long veiculoId,
-        String status
+        StatusOrdemServico status
 ) {}

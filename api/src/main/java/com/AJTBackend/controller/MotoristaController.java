@@ -2,14 +2,18 @@ package com.AJTBackend.controller;
 
 import com.AJTBackend.dto.MotoristaRequestDTO;
 import com.AJTBackend.dto.MotoristaResponseDTO;
+import com.AJTBackend.dto.PaginaResponseDTO;
+import com.AJTBackend.dto.validacao.OnPatch;
 import com.AJTBackend.service.MotoristaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/motoristas")
@@ -19,8 +23,8 @@ public class MotoristaController {
     private final MotoristaService motoristaService;
 
     @GetMapping
-    public ResponseEntity<List<MotoristaResponseDTO>> listarTodos() {
-        return ResponseEntity.ok(motoristaService.listarTodos());
+    public ResponseEntity<PaginaResponseDTO<MotoristaResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(motoristaService.listarTodos(pageable));
     }
 
     @GetMapping("/{id}")
@@ -47,7 +51,7 @@ public class MotoristaController {
 
     @PatchMapping("/{id}")
     public ResponseEntity<MotoristaResponseDTO> atualizarParcial(@PathVariable Long id,
-                                                                 @RequestBody MotoristaRequestDTO dto) {
+                                                                 @Validated(OnPatch.class) @RequestBody MotoristaRequestDTO dto) {
         return ResponseEntity.ok(motoristaService.atualizarParcial(id, dto));
     }
 

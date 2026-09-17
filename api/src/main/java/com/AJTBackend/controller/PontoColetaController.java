@@ -2,11 +2,17 @@ package com.AJTBackend.controller;
 
 import com.AJTBackend.dto.PontoColetaRequestDTO;
 import com.AJTBackend.dto.PontoColetaResponseDTO;
+import com.AJTBackend.dto.PaginaResponseDTO;
+import com.AJTBackend.dto.validacao.OnPatch;
 import com.AJTBackend.service.PontoColetaService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -19,8 +25,8 @@ public class PontoColetaController {
     private final PontoColetaService pontoColetaService;
 
     @GetMapping
-    public ResponseEntity<List<PontoColetaResponseDTO>> listarTodos() {
-        return ResponseEntity.ok(pontoColetaService.listarTodos());
+    public ResponseEntity<PaginaResponseDTO<PontoColetaResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(pontoColetaService.listarTodos(pageable));
     }
 
     @GetMapping("/{id}")
@@ -47,7 +53,7 @@ public class PontoColetaController {
 
     @PatchMapping("/{id}")
     public ResponseEntity<PontoColetaResponseDTO> atualizarParcial(@PathVariable Long id,
-                                                                    @RequestBody PontoColetaRequestDTO dto) {
+                                                                    @Validated(OnPatch.class) @RequestBody PontoColetaRequestDTO dto) {
         return ResponseEntity.ok(pontoColetaService.atualizarParcial(id, dto));
     }
 
