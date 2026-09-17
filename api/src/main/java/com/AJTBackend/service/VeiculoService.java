@@ -6,13 +6,14 @@ import com.AJTBackend.exception.PlacaJaCadastradaException;
 import com.AJTBackend.exception.VeiculoNaoEncontradoException;
 import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.repository.VeiculoRepository;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -23,11 +24,8 @@ public class VeiculoService {
 
     private final VeiculoRepository veiculoRepository;
 
-    public List<VeiculoResponseDTO> listarTodos() {
-        return veiculoRepository.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<VeiculoResponseDTO> listarTodos(Pageable pageable) {
+        return PaginaResponseDTO.de(veiculoRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public VeiculoResponseDTO buscarPorId(Long id) {
@@ -67,13 +65,17 @@ public class VeiculoService {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
 
+        if (!dto.placa().equals(veiculo.getPlaca()) && veiculoRepository.existsByPlaca(dto.placa())) {
+            throw new PlacaJaCadastradaException(dto.placa());
+        }
+
         veiculo.setLabel(dto.label());
         veiculo.setPlaca(dto.placa());
         veiculo.setCapacidade(dto.capacidade());
         veiculo.setTipo(dto.tipo());
         veiculo.setMarca(dto.marca());
 
-        return toResponseDTO(veiculoRepository.save(veiculo));
+        return toResponseDTO(veiculo);
     }
 
     @Transactional
@@ -100,7 +102,7 @@ public class VeiculoService {
             veiculo.setMarca(dto.marca());
         }
 
-        return toResponseDTO(veiculoRepository.save(veiculo));
+        return toResponseDTO(veiculo);
     }
 
     @Transactional

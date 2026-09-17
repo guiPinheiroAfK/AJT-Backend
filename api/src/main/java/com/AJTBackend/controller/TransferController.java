@@ -2,14 +2,19 @@ package com.AJTBackend.controller;
 
 import com.AJTBackend.dto.TransferRequestDTO;
 import com.AJTBackend.dto.TransferResponseDTO;
+import com.AJTBackend.dto.PaginaResponseDTO;
+import com.AJTBackend.dto.validacao.OnPatch;
+import com.AJTBackend.model.enums.StatusTransfer;
 import com.AJTBackend.service.TransferService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/transfers")
@@ -19,8 +24,8 @@ public class TransferController {
     private final TransferService transferService;
 
     @GetMapping
-    public ResponseEntity<List<TransferResponseDTO>> listarTodos() {
-        return ResponseEntity.ok(transferService.listarTodos());
+    public ResponseEntity<PaginaResponseDTO<TransferResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(transferService.listarTodos(pageable));
     }
 
     @GetMapping("/{id}")
@@ -29,8 +34,9 @@ public class TransferController {
     }
 
     @GetMapping("/buscar")
-    public ResponseEntity<List<TransferResponseDTO>> buscarPorStatus(@RequestParam String status) {
-        return ResponseEntity.ok(transferService.buscarPorStatus(status));
+    public ResponseEntity<PaginaResponseDTO<TransferResponseDTO>> buscarPorStatus(@RequestParam StatusTransfer status,
+                                                                    @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(transferService.buscarPorStatus(status, pageable));
     }
 
     @PostMapping
@@ -47,7 +53,7 @@ public class TransferController {
 
     @PatchMapping("/{id}")
     public ResponseEntity<TransferResponseDTO> atualizarParcial(@PathVariable Long id,
-                                                                 @RequestBody TransferRequestDTO dto) {
+                                                                 @Validated(OnPatch.class) @RequestBody TransferRequestDTO dto) {
         return ResponseEntity.ok(transferService.atualizarParcial(id, dto));
     }
 

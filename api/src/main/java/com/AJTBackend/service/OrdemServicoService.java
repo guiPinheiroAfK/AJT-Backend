@@ -11,13 +11,15 @@ import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
+import com.AJTBackend.dto.PaginaResponseDTO;
+import com.AJTBackend.model.enums.StatusOrdemServico;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -25,17 +27,14 @@ import java.util.List;
 public class OrdemServicoService {
 
     private static final Logger log = LoggerFactory.getLogger(OrdemServicoService.class);
-    private static final String STATUS_PADRAO = "ABERTA";
+    private static final StatusOrdemServico STATUS_PADRAO = StatusOrdemServico.ABERTA;
 
     private final OrdemServicoRepository ordemServicoRepository;
     private final MotoristaRepository motoristaRepository;
     private final VeiculoRepository veiculoRepository;
 
-    public List<OrdemServicoResponseDTO> listarTodos() {
-        return ordemServicoRepository.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<OrdemServicoResponseDTO> listarTodos(Pageable pageable) {
+        return PaginaResponseDTO.de(ordemServicoRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public OrdemServicoResponseDTO buscarPorId(Long id) {
@@ -44,11 +43,8 @@ public class OrdemServicoService {
         return toResponseDTO(ordemServico);
     }
 
-    public List<OrdemServicoResponseDTO> buscarPorStatus(String status) {
-        return ordemServicoRepository.findByStatus(status)
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<OrdemServicoResponseDTO> buscarPorStatus(StatusOrdemServico status, Pageable pageable) {
+        return PaginaResponseDTO.de(ordemServicoRepository.findByStatus(status, pageable), this::toResponseDTO);
     }
 
     @Transactional
@@ -75,7 +71,7 @@ public class OrdemServicoService {
         ordemServico.setVeiculo(buscarVeiculo(dto.veiculoId()));
         ordemServico.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
 
-        return toResponseDTO(ordemServicoRepository.save(ordemServico));
+        return toResponseDTO(ordemServico);
     }
 
     @Transactional
@@ -96,7 +92,7 @@ public class OrdemServicoService {
             ordemServico.setStatus(dto.status());
         }
 
-        return toResponseDTO(ordemServicoRepository.save(ordemServico));
+        return toResponseDTO(ordemServico);
     }
 
     @Transactional

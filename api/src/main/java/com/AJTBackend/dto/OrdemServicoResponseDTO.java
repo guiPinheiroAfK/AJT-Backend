@@ -1,5 +1,7 @@
 package com.AJTBackend.dto;
 
+import com.AJTBackend.model.enums.StatusOrdemServico;
+
 import java.time.LocalDate;
 
 public record OrdemServicoResponseDTO(
@@ -7,5 +9,5 @@ public record OrdemServicoResponseDTO(
         LocalDate dataServico,
         Long motoristaId,
         Long veiculoId,
-        String status
+        StatusOrdemServico status
 ) {}

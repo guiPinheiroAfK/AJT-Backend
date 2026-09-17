@@ -21,8 +21,14 @@ FROM eclipse-temurin:17-jre-alpine
 
 WORKDIR /app
 
-COPY --from=build /app/target/*.jar app.jar
+# Roda sem privilegios de root
+RUN addgroup -S ajt && adduser -S ajt -G ajt
+
+COPY --from=build --chown=ajt:ajt /app/target/*.jar app.jar
+
+USER ajt
 
 EXPOSE 8080
 
-ENTRYPOINT ["java", "-jar", "app.jar"]
+# Respeita o limite de memoria do container
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "app.jar"]

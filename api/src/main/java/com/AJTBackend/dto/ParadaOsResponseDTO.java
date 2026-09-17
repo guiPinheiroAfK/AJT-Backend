@@ -1,5 +1,8 @@
 package com.AJTBackend.dto;
 
+import com.AJTBackend.model.enums.AcaoParada;
+import com.AJTBackend.model.enums.StatusParada;
+
 import java.time.LocalTime;
 import java.util.Set;
 
@@ -11,7 +14,7 @@ public record ParadaOsResponseDTO(
         Double latitude,
         Double longitude,
         LocalTime horarioPrevisto,
-        String acao,
-        String statusParada,
+        AcaoParada acao,
+        StatusParada statusParada,
         Set<Long> transferIds
 ) {}

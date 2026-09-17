@@ -1,18 +1,27 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.TransferRequestDTO;
 import com.AJTBackend.dto.TransferResponseDTO;
+import com.AJTBackend.exception.CotacaoIndisponivelException;
+import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
 import com.AJTBackend.exception.TransferNaoEncontradoException;
 import com.AJTBackend.model.Transfer;
+import com.AJTBackend.model.enums.StatusTransfer;
+import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
-import java.util.List;
+import java.math.RoundingMode;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -20,17 +29,15 @@ import java.util.List;
 public class TransferService {
 
     private static final Logger log = LoggerFactory.getLogger(TransferService.class);
-    private static final String STATUS_PADRAO = "AGUARDANDO_OS";
     private static final String MOEDA_PADRAO = "BRL";
 
     private final TransferRepository transferRepository;
+    private final OrdemServicoRepository ordemServicoRepository;
     private final CotacaoService cotacaoService;
+    private final TransactionTemplate transactionTemplate;
 
-    public List<TransferResponseDTO> listarTodos() {
-        return transferRepository.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<TransferResponseDTO> listarTodos(Pageable pageable) {
+        return PaginaResponseDTO.de(transferRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public TransferResponseDTO buscarPorId(Long id) {
@@ -39,89 +46,117 @@ public class TransferService {
         return toResponseDTO(transfer);
     }
 
-    public List<TransferResponseDTO> buscarPorStatus(String status) {
-        return transferRepository.findByStatus(status)
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<TransferResponseDTO> buscarPorStatus(StatusTransfer status, Pageable pageable) {
+        return PaginaResponseDTO.de(transferRepository.findByStatus(status, pageable), this::toResponseDTO);
     }
 
-    @Transactional
+    /*
+     * os metodos de escrita abaixo nao rodam dentro de uma transacao unica:
+     * a cotacao (chamada HTTP de ate alguns segundos) e feita antes, e so a
+     * gravacao usa transacao (TransactionTemplate). Assim nao prendemos uma
+     * conexao do pool do banco esperando a API externa.
+     */
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TransferResponseDTO criar(TransferRequestDTO dto) {
-        Transfer transfer = Transfer.builder()
-                .dataTransfer(dto.dataTransfer())
-                .horaTransfer(dto.horaTransfer())
-                .origem(dto.origem())
-                .destino(dto.destino())
-                .status(dto.status() != null ? dto.status() : STATUS_PADRAO)
-                .valorBase(calcularValorBase(dto.valorBase(), dto.valorOriginal(), dto.moedaOrigem()))
-                .valorOriginal(dto.valorOriginal())
-                .moedaOrigem(dto.moedaOrigem())
-                .osId(dto.osId())
-                .build();
+        String moeda = normalizarMoeda(dto.moedaOrigem());
+        BigDecimal valorBase = calcularValorBase(dto.valorBase(), dto.valorOriginal(), moeda);
 
-        Transfer salvo = transferRepository.save(transfer);
-        log.info("Transfer criado: id={}", salvo.getId());
-        return toResponseDTO(salvo);
+        return transactionTemplate.execute(tx -> {
+            validarOrdemServico(dto.osId());
+
+            Transfer transfer = Transfer.builder()
+                    .dataTransfer(dto.dataTransfer())
+                    .horaTransfer(dto.horaTransfer())
+                    .origem(dto.origem())
+                    .destino(dto.destino())
+                    .status(dto.status() != null ? dto.status() : StatusTransfer.AGUARDANDO_OS)
+                    .valorBase(valorBase)
+                    .valorOriginal(dto.valorOriginal())
+                    .moedaOrigem(moeda)
+                    .osId(dto.osId())
+                    .build();
+
+            Transfer salvo = transferRepository.save(transfer);
+            log.info("Transfer criado: id={}", salvo.getId());
+            return toResponseDTO(salvo);
+        });
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TransferResponseDTO atualizar(Long id, TransferRequestDTO dto) {
-        Transfer transfer = transferRepository.findById(id)
-                .orElseThrow(() -> new TransferNaoEncontradoException(id));
+        String moeda = normalizarMoeda(dto.moedaOrigem());
+        BigDecimal valorBase = calcularValorBase(dto.valorBase(), dto.valorOriginal(), moeda);
 
-        transfer.setDataTransfer(dto.dataTransfer());
-        transfer.setHoraTransfer(dto.horaTransfer());
-        transfer.setOrigem(dto.origem());
-        transfer.setDestino(dto.destino());
-        transfer.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
-        transfer.setValorBase(calcularValorBase(dto.valorBase(), dto.valorOriginal(), dto.moedaOrigem()));
-        transfer.setValorOriginal(dto.valorOriginal());
-        transfer.setMoedaOrigem(dto.moedaOrigem());
-        transfer.setOsId(dto.osId());
+        return transactionTemplate.execute(tx -> {
+            Transfer transfer = transferRepository.findById(id)
+                    .orElseThrow(() -> new TransferNaoEncontradoException(id));
+            validarOrdemServico(dto.osId());
 
-        return toResponseDTO(transferRepository.save(transfer));
+            transfer.setDataTransfer(dto.dataTransfer());
+            transfer.setHoraTransfer(dto.horaTransfer());
+            transfer.setOrigem(dto.origem());
+            transfer.setDestino(dto.destino());
+            transfer.setStatus(dto.status() != null ? dto.status() : StatusTransfer.AGUARDANDO_OS);
+            transfer.setValorBase(valorBase);
+            transfer.setValorOriginal(dto.valorOriginal());
+            transfer.setMoedaOrigem(moeda);
+            transfer.setOsId(dto.osId());
+
+            return toResponseDTO(transfer);
+        });
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TransferResponseDTO atualizarParcial(Long id, TransferRequestDTO dto) {
-        Transfer transfer = transferRepository.findById(id)
-                .orElseThrow(() -> new TransferNaoEncontradoException(id));
+        String moedaDto = normalizarMoeda(dto.moedaOrigem());
 
-        if (dto.dataTransfer() != null) {
-            transfer.setDataTransfer(dto.dataTransfer());
+        // so consulta a cotacao se o valor em moeda estrangeira mudou e o valor base nao veio explicito
+        BigDecimal valorBaseRecalculado = null;
+        if (dto.valorBase() == null && (dto.valorOriginal() != null || moedaDto != null)) {
+            Transfer atual = transactionTemplate.execute(tx -> transferRepository.findById(id)
+                    .orElseThrow(() -> new TransferNaoEncontradoException(id)));
+            BigDecimal valorOriginal = dto.valorOriginal() != null ? dto.valorOriginal() : atual.getValorOriginal();
+            String moeda = moedaDto != null ? moedaDto : atual.getMoedaOrigem();
+            valorBaseRecalculado = calcularValorBase(null, valorOriginal, moeda);
         }
-        if (dto.horaTransfer() != null) {
-            transfer.setHoraTransfer(dto.horaTransfer());
-        }
-        if (dto.origem() != null) {
-            transfer.setOrigem(dto.origem());
-        }
-        if (dto.destino() != null) {
-            transfer.setDestino(dto.destino());
-        }
-        if (dto.status() != null) {
-            transfer.setStatus(dto.status());
-        }
-        if (dto.valorOriginal() != null) {
-            transfer.setValorOriginal(dto.valorOriginal());
-        }
-        if (dto.moedaOrigem() != null) {
-            transfer.setMoedaOrigem(dto.moedaOrigem());
-        }
-        if (dto.valorBase() != null) {
-            transfer.setValorBase(dto.valorBase());
-        } else if (dto.valorOriginal() != null || dto.moedaOrigem() != null) {
-            BigDecimal recalculado = calcularValorBase(null, transfer.getValorOriginal(), transfer.getMoedaOrigem());
-            if (recalculado != null) {
-                transfer.setValorBase(recalculado);
+        BigDecimal valorBaseFinal = dto.valorBase() != null ? dto.valorBase() : valorBaseRecalculado;
+
+        return transactionTemplate.execute(tx -> {
+            Transfer transfer = transferRepository.findById(id)
+                    .orElseThrow(() -> new TransferNaoEncontradoException(id));
+
+            if (dto.dataTransfer() != null) {
+                transfer.setDataTransfer(dto.dataTransfer());
             }
-        }
-        if (dto.osId() != null) {
-            transfer.setOsId(dto.osId());
-        }
+            if (dto.horaTransfer() != null) {
+                transfer.setHoraTransfer(dto.horaTransfer());
+            }
+            if (dto.origem() != null) {
+                transfer.setOrigem(dto.origem());
+            }
+            if (dto.destino() != null) {
+                transfer.setDestino(dto.destino());
+            }
+            if (dto.status() != null) {
+                transfer.setStatus(dto.status());
+            }
+            if (dto.valorOriginal() != null) {
+                transfer.setValorOriginal(dto.valorOriginal());
+            }
+            if (moedaDto != null) {
+                transfer.setMoedaOrigem(moedaDto);
+            }
+            if (valorBaseFinal != null) {
+                transfer.setValorBase(valorBaseFinal);
+            }
+            if (dto.osId() != null) {
+                validarOrdemServico(dto.osId());
+                transfer.setOsId(dto.osId());
+            }
 
-        return toResponseDTO(transferRepository.save(transfer));
+            return toResponseDTO(transfer);
+        });
     }
 
     @Transactional
@@ -133,19 +168,37 @@ public class TransferService {
         log.info("Transfer removido: id={}", id);
     }
 
+    private void validarOrdemServico(Long osId) {
+        if (osId != null && !ordemServicoRepository.existsById(osId)) {
+            throw new OrdemServicoNaoEncontradoException(osId);
+        }
+    }
+
     /**
      * Se valorBase ja foi informado explicitamente, respeita ele. Caso
      * contrario, se houver valorOriginal numa moeda estrangeira, converte
-     * pra BRL usando a cotacao atual (via Feign/Frankfurter API).
+     * pra BRL usando a cotacao atual (via Feign/Frankfurter API, com cache).
      */
     private BigDecimal calcularValorBase(BigDecimal valorBase, BigDecimal valorOriginal, String moedaOrigem) {
         if (valorBase != null) {
             return valorBase;
         }
-        if (valorOriginal == null || moedaOrigem == null || moedaOrigem.equalsIgnoreCase(MOEDA_PADRAO)) {
+        if (valorOriginal == null || moedaOrigem == null || moedaOrigem.equals(MOEDA_PADRAO)) {
             return valorOriginal;
         }
-        return cotacaoService.converterOuNulo(valorOriginal, moedaOrigem, MOEDA_PADRAO);
+        try {
+            BigDecimal taxa = cotacaoService.obterCotacao(moedaOrigem, MOEDA_PADRAO).taxa();
+            return valorOriginal.multiply(taxa).setScale(2, RoundingMode.HALF_UP);
+        } catch (CotacaoIndisponivelException e) {
+            // nao trava o cadastro por causa de uma dependencia externa fora do ar
+            log.warn("Cotacao indisponivel ({} -> {}), valor base nao convertido automaticamente: {}",
+                    moedaOrigem, MOEDA_PADRAO, e.getMessage());
+            return null;
+        }
+    }
+
+    private static String normalizarMoeda(String moeda) {
+        return moeda == null ? null : moeda.toUpperCase(Locale.ROOT);
     }
 
     private TransferResponseDTO toResponseDTO(Transfer transfer) {

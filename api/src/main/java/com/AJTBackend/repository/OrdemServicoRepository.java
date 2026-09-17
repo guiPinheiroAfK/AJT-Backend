@@ -1,11 +1,12 @@
 package com.AJTBackend.repository;
 
 import com.AJTBackend.model.OrdemServico;
+import com.AJTBackend.model.enums.StatusOrdemServico;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-
-import java.util.List;
 
 public interface OrdemServicoRepository extends JpaRepository<OrdemServico, Long> {
 
-    List<OrdemServico> findByStatus(String status);
+    Page<OrdemServico> findByStatus(StatusOrdemServico status, Pageable pageable);
 }

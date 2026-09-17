@@ -1,0 +1,29 @@
+jwt:
+  secret: chave-de-teste-com-mais-de-32-caracteres-0123456789
+  expiration: 3600000
+
+ajt:
+  crypto:
+    # Base64 de "0123456789abcdef0123456789abcdef" (32 bytes) — so para testes
+    key: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+  login:
+    max-tentativas: 3
+    bloqueio-minutos: 1
+
+spring:
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        generate_statistics: true
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connect-timeout: 500
+            read-timeout: 1000
+
+logging:
+  level:
+    org.hibernate.engine.internal.StatisticalLoggingSessionEventListener: WARN

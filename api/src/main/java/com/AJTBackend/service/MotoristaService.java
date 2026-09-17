@@ -6,13 +6,15 @@ import com.AJTBackend.exception.CnhJaCadastradaException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.repository.MotoristaRepository;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
+
 
 @Service
 @RequiredArgsConstructor
@@ -23,11 +25,8 @@ public class MotoristaService {
 
     private final MotoristaRepository motoristaRepository;
 
-    public List<MotoristaResponseDTO> listarTodos() {
-        return motoristaRepository.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<MotoristaResponseDTO> listarTodos(Pageable pageable) {
+        return PaginaResponseDTO.de(motoristaRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public MotoristaResponseDTO buscarPorId(Long id) {
@@ -67,13 +66,17 @@ public class MotoristaService {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
 
+        if (!dto.cnh().equals(motorista.getCnh()) && motoristaRepository.existsByCnh(dto.cnh())) {
+            throw new CnhJaCadastradaException(dto.cnh());
+        }
+
         motorista.setNome(dto.nome());
         motorista.setCnh(dto.cnh());
         motorista.setTelefone(dto.telefone());
         motorista.setLatitudeAtual(dto.latitudeAtual());
         motorista.setLongitudeAtual(dto.longitudeAtual());
 
-        return toResponseDTO(motoristaRepository.save(motorista));
+        return toResponseDTO(motorista);
     }
 
     @Transactional
@@ -100,7 +103,7 @@ public class MotoristaService {
             motorista.setLongitudeAtual(dto.longitudeAtual());
         }
 
-        return toResponseDTO(motoristaRepository.save(motorista));
+        return toResponseDTO(motorista);
     }
 
     @Transactional

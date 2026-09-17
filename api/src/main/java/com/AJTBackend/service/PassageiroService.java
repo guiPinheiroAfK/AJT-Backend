@@ -4,14 +4,15 @@ import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
 import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.repository.PassageiroRepository;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -22,11 +23,8 @@ public class PassageiroService {
 
     private final PassageiroRepository passageiroRepository;
 
-    public List<PassageiroResponseDTO> listarTodos() {
-        return passageiroRepository.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<PassageiroResponseDTO> listarTodos(Pageable pageable) {
+        return PaginaResponseDTO.de(passageiroRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public PassageiroResponseDTO buscarPorId(Long id) {
@@ -35,11 +33,9 @@ public class PassageiroService {
         return toResponseDTO(passageiro);
     }
 
-    public List<PassageiroResponseDTO> buscarPorNacionalidade(String nacionalidade) {
-        return passageiroRepository.findByNacionalidadeIgnoreCase(nacionalidade)
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<PassageiroResponseDTO> buscarPorNacionalidade(String nacionalidade, Pageable pageable) {
+        return PaginaResponseDTO.de(passageiroRepository.findByNacionalidadeIgnoreCase(nacionalidade, pageable),
+                this::toResponseDTO);
     }
 
     @Transactional
@@ -66,8 +62,7 @@ public class PassageiroService {
         passageiro.setDocumento(dto.documento());
         passageiro.setNacionalidade(dto.nacionalidade());
 
-        Passageiro atualizado = passageiroRepository.save(passageiro);
-        return toResponseDTO(atualizado);
+        return toResponseDTO(passageiro);
     }
 
     @Transactional
@@ -88,8 +83,7 @@ public class PassageiroService {
             passageiro.setNacionalidade(dto.nacionalidade());
         }
 
-        Passageiro atualizado = passageiroRepository.save(passageiro);
-        return toResponseDTO(atualizado);
+        return toResponseDTO(passageiro);
     }
 
     @Transactional

@@ -1,6 +1,7 @@
 package com.AJTBackend.model;
 
 import jakarta.persistence.*;
+import com.AJTBackend.model.enums.Role;
 import lombok.*;
 
 import java.time.LocalDateTime;
@@ -27,12 +28,22 @@ public class Usuario {
     @Column(nullable = false, length = 255)
     private String senha; // hash BCrypt, nunca em texto plano
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private String role; // ADMIN, GERENTE, MOTORISTA, ATENDENTE
+    private Role role;
 
     @Column(nullable = false)
     @Builder.Default
     private Boolean ativo = true;
+
+    // obriga o usuario a definir uma nova senha (seed do admin / senha criada por outro usuario)
+    @Column(name = "trocar_senha", nullable = false)
+    @Builder.Default
+    private Boolean trocarSenha = false;
+
+    // tokens emitidos antes deste instante deixam de valer
+    @Column(name = "senha_alterada_em")
+    private LocalDateTime senhaAlteradaEm;
 
     @Column(name = "ultimo_login")
     private LocalDateTime ultimoLogin;
