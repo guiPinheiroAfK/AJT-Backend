@@ -6,6 +6,8 @@ import lombok.*;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "transfers")
@@ -47,4 +49,8 @@ public class Transfer {
 
     @Column(name = "os_id")
     private Long osId;
+
+    @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<PontoColeta> pontosColeta = new ArrayList<>();
 }

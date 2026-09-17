@@ -3,6 +3,9 @@ package com.AJTBackend.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Entity
 @Table(name = "veiculos")
 @Getter
@@ -30,4 +33,8 @@ public class Veiculo {
 
     @Column(length = 50)
     private String marca;
+
+    @OneToMany(mappedBy = "veiculo", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<OrdemServico> ordensServico = new ArrayList<>();
 }

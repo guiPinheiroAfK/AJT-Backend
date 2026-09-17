@@ -19,6 +19,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JsonAuthErrorHandler jsonAuthErrorHandler;
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -38,7 +39,13 @@ public class SecurityConfig {
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/auth/**").permitAll() // login continua público
-                        .anyRequest().authenticated() // todo o resto agora exige token válido
+                        .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll() // documentacao publica
+                        .requestMatchers("/api/usuarios/**").hasRole("ADMIN") // só ADMIN gerencia usuários/perfis
+                        .anyRequest().authenticated() // todo o resto exige token válido
+                )
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(jsonAuthErrorHandler)
+                        .accessDeniedHandler(jsonAuthErrorHandler)
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

@@ -12,14 +12,19 @@ import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class OrdemServicoService {
 
+    private static final Logger log = LoggerFactory.getLogger(OrdemServicoService.class);
     private static final String STATUS_PADRAO = "ABERTA";
 
     private final OrdemServicoRepository ordemServicoRepository;
@@ -46,6 +51,7 @@ public class OrdemServicoService {
                 .toList();
     }
 
+    @Transactional
     public OrdemServicoResponseDTO criar(OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = OrdemServico.builder()
                 .dataServico(dto.dataServico())
@@ -54,9 +60,12 @@ public class OrdemServicoService {
                 .status(dto.status() != null ? dto.status() : STATUS_PADRAO)
                 .build();
 
-        return toResponseDTO(ordemServicoRepository.save(ordemServico));
+        OrdemServico salva = ordemServicoRepository.save(ordemServico);
+        log.info("Ordem de servico criada: id={}", salva.getId());
+        return toResponseDTO(salva);
     }
 
+    @Transactional
     public OrdemServicoResponseDTO atualizar(Long id, OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
@@ -69,6 +78,7 @@ public class OrdemServicoService {
         return toResponseDTO(ordemServicoRepository.save(ordemServico));
     }
 
+    @Transactional
     public OrdemServicoResponseDTO atualizarParcial(Long id, OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
@@ -89,11 +99,13 @@ public class OrdemServicoService {
         return toResponseDTO(ordemServicoRepository.save(ordemServico));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!ordemServicoRepository.existsById(id)) {
             throw new OrdemServicoNaoEncontradoException(id);
         }
         ordemServicoRepository.deleteById(id);
+        log.info("Ordem de servico removida: id={}", id);
     }
 
     private Motorista buscarMotorista(Long motoristaId) {

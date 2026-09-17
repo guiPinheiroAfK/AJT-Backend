@@ -9,13 +9,19 @@ import com.AJTBackend.model.Transfer;
 import com.AJTBackend.repository.PontoColetaRepository;
 import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class PontoColetaService {
+
+    private static final Logger log = LoggerFactory.getLogger(PontoColetaService.class);
 
     private final PontoColetaRepository pontoColetaRepository;
     private final TransferRepository transferRepository;
@@ -40,6 +46,7 @@ public class PontoColetaService {
                 .toList();
     }
 
+    @Transactional
     public PontoColetaResponseDTO criar(PontoColetaRequestDTO dto) {
         Transfer transfer = buscarTransfer(dto.transferId());
 
@@ -52,9 +59,12 @@ public class PontoColetaService {
                 .longitude(dto.longitude())
                 .build();
 
-        return toResponseDTO(pontoColetaRepository.save(pontoColeta));
+        PontoColeta salvo = pontoColetaRepository.save(pontoColeta);
+        log.info("Ponto de coleta criado: id={}, transferId={}", salvo.getId(), transfer.getId());
+        return toResponseDTO(salvo);
     }
 
+    @Transactional
     public PontoColetaResponseDTO atualizar(Long id, PontoColetaRequestDTO dto) {
         PontoColeta pontoColeta = pontoColetaRepository.findById(id)
                 .orElseThrow(() -> new PontoColetaNaoEncontradoException(id));
@@ -69,6 +79,7 @@ public class PontoColetaService {
         return toResponseDTO(pontoColetaRepository.save(pontoColeta));
     }
 
+    @Transactional
     public PontoColetaResponseDTO atualizarParcial(Long id, PontoColetaRequestDTO dto) {
         PontoColeta pontoColeta = pontoColetaRepository.findById(id)
                 .orElseThrow(() -> new PontoColetaNaoEncontradoException(id));
@@ -95,11 +106,13 @@ public class PontoColetaService {
         return toResponseDTO(pontoColetaRepository.save(pontoColeta));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!pontoColetaRepository.existsById(id)) {
             throw new PontoColetaNaoEncontradoException(id);
         }
         pontoColetaRepository.deleteById(id);
+        log.info("Ponto de coleta removido: id={}", id);
     }
 
     private Transfer buscarTransfer(Long transferId) {

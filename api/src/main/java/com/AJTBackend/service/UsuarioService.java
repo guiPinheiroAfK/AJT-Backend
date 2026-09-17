@@ -7,14 +7,20 @@ import com.AJTBackend.exception.UsuarioNaoEncontradoException;
 import com.AJTBackend.model.Usuario;
 import com.AJTBackend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class UsuarioService {
+
+    private static final Logger log = LoggerFactory.getLogger(UsuarioService.class);
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
@@ -34,12 +40,14 @@ public class UsuarioService {
 
     public UsuarioResponseDTO buscarPorUsername(String username) {
         Usuario usuario = usuarioRepository.findByUsername(username)
-                .orElseThrow(() -> new UsuarioNaoEncontradoException(0L));
+                .orElseThrow(() -> new UsuarioNaoEncontradoException(username));
         return toResponseDTO(usuario);
     }
 
+    @Transactional
     public UsuarioResponseDTO criar(UsuarioRequestDTO dto) {
         if (usuarioRepository.existsByUsername(dto.username())) {
+            log.warn("Tentativa de cadastro com username ja existente: {}", dto.username());
             throw new UsernameJaCadastradoException(dto.username());
         }
 
@@ -50,12 +58,19 @@ public class UsuarioService {
                 .role(dto.role())
                 .build();
 
-        return toResponseDTO(usuarioRepository.save(usuario));
+        Usuario salvo = usuarioRepository.save(usuario);
+        log.info("Usuario criado: id={}, username={}, role={}", salvo.getId(), salvo.getUsername(), salvo.getRole());
+        return toResponseDTO(salvo);
     }
 
+    @Transactional
     public UsuarioResponseDTO atualizar(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
+
+        if (!dto.role().equals(usuario.getRole())) {
+            log.info("Role do usuario {} alterada: {} -> {}", usuario.getUsername(), usuario.getRole(), dto.role());
+        }
 
         usuario.setNome(dto.nome());
         usuario.setUsername(dto.username());
@@ -68,6 +83,7 @@ public class UsuarioService {
         return toResponseDTO(usuarioRepository.save(usuario));
     }
 
+    @Transactional
     public UsuarioResponseDTO atualizarParcial(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
@@ -86,17 +102,22 @@ public class UsuarioService {
             usuario.setSenha(passwordEncoder.encode(dto.senha()));
         }
         if (dto.role() != null) {
+            if (!dto.role().equals(usuario.getRole())) {
+                log.info("Role do usuario {} alterada: {} -> {}", usuario.getUsername(), usuario.getRole(), dto.role());
+            }
             usuario.setRole(dto.role());
         }
 
         return toResponseDTO(usuarioRepository.save(usuario));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!usuarioRepository.existsById(id)) {
             throw new UsuarioNaoEncontradoException(id);
         }
         usuarioRepository.deleteById(id);
+        log.info("Usuario removido: id={}", id);
     }
 
     private UsuarioResponseDTO toResponseDTO(Usuario usuario) {

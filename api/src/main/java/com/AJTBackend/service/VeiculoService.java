@@ -7,13 +7,19 @@ import com.AJTBackend.exception.VeiculoNaoEncontradoException;
 import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.repository.VeiculoRepository;
 import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Transactional(readOnly = true)
 public class VeiculoService {
+
+    private static final Logger log = LoggerFactory.getLogger(VeiculoService.class);
 
     private final VeiculoRepository veiculoRepository;
 
@@ -32,12 +38,14 @@ public class VeiculoService {
 
     public VeiculoResponseDTO buscarPorPlaca(String placa) {
         Veiculo veiculo = veiculoRepository.findByPlaca(placa)
-                .orElseThrow(() -> new VeiculoNaoEncontradoException(0L));
+                .orElseThrow(() -> new VeiculoNaoEncontradoException(placa));
         return toResponseDTO(veiculo);
     }
 
+    @Transactional
     public VeiculoResponseDTO criar(VeiculoRequestDTO dto) {
         if (veiculoRepository.existsByPlaca(dto.placa())) {
+            log.warn("Tentativa de cadastro com placa ja existente: {}", dto.placa());
             throw new PlacaJaCadastradaException(dto.placa());
         }
 
@@ -49,9 +57,12 @@ public class VeiculoService {
                 .marca(dto.marca())
                 .build();
 
-        return toResponseDTO(veiculoRepository.save(veiculo));
+        Veiculo salvo = veiculoRepository.save(veiculo);
+        log.info("Veiculo criado: id={}, placa={}", salvo.getId(), salvo.getPlaca());
+        return toResponseDTO(salvo);
     }
 
+    @Transactional
     public VeiculoResponseDTO atualizar(Long id, VeiculoRequestDTO dto) {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
@@ -65,6 +76,7 @@ public class VeiculoService {
         return toResponseDTO(veiculoRepository.save(veiculo));
     }
 
+    @Transactional
     public VeiculoResponseDTO atualizarParcial(Long id, VeiculoRequestDTO dto) {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
@@ -91,11 +103,13 @@ public class VeiculoService {
         return toResponseDTO(veiculoRepository.save(veiculo));
     }
 
+    @Transactional
     public void deletar(Long id) {
         if (!veiculoRepository.existsById(id)) {
             throw new VeiculoNaoEncontradoException(id);
         }
         veiculoRepository.deleteById(id);
+        log.info("Veiculo removido: id={}", id);
     }
 
     private VeiculoResponseDTO toResponseDTO(Veiculo veiculo) {

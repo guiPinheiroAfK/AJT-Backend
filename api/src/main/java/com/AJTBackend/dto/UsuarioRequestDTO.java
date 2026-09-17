@@ -1,6 +1,7 @@
 package com.AJTBackend.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
 public record UsuarioRequestDTO(
         @NotBlank(message = "Nome é obrigatório")
@@ -12,5 +13,6 @@ public record UsuarioRequestDTO(
         String senha, // opcional no update (mantem senha atual se nao vier); obrigatorio no create fica a cargo do service
 
         @NotBlank(message = "Role é obrigatória")
+        @Pattern(regexp = "ADMIN|GERENTE|MOTORISTA|ATENDENTE", message = "Role deve ser ADMIN, GERENTE, MOTORISTA ou ATENDENTE")
         String role
 ) {}
