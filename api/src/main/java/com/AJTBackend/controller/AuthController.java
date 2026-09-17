@@ -2,15 +2,15 @@ package com.AJTBackend.controller;
 
 import com.AJTBackend.dto.LoginRequestDTO;
 import com.AJTBackend.dto.LoginResponseDTO;
-import com.AJTBackend.config.JwtService;
-import com.AJTBackend.exception.CredenciaisInvalidasException;
-import com.AJTBackend.model.Usuario;
-import com.AJTBackend.repository.UsuarioRepository;
+import com.AJTBackend.dto.TrocaSenhaRequestDTO;
+import com.AJTBackend.dto.UsuarioResponseDTO;
+import com.AJTBackend.service.AuthService;
+import com.AJTBackend.service.UsuarioService;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -18,37 +18,24 @@ import org.springframework.web.bind.annotation.*;
 @RequiredArgsConstructor
 public class AuthController {
 
-    private static final Logger log = LoggerFactory.getLogger(AuthController.class);
-
-    private final UsuarioRepository usuarioRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final JwtService jwtService;
+    private final AuthService authService;
+    private final UsuarioService usuarioService;
 
     @PostMapping("/login")
-    public ResponseEntity<LoginResponseDTO> login(@RequestBody LoginRequestDTO dto) {
-        Usuario usuario = usuarioRepository.findByUsername(dto.username())
-                .orElseThrow(() -> {
-                    log.warn("Tentativa de login com username inexistente: {}", dto.username());
-                    return new CredenciaisInvalidasException();
-                });
+    public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO dto,
+                                                  HttpServletRequest request) {
+        return ResponseEntity.ok(authService.login(dto, request.getRemoteAddr()));
+    }
 
-        if (!passwordEncoder.matches(dto.senha(), usuario.getSenha())) {
-            log.warn("Tentativa de login com senha incorreta para o usuario: {}", dto.username());
-            throw new CredenciaisInvalidasException();
-        }
+    // dados do usuario logado (o front usa pra restaurar a sessao ao recarregar a pagina)
+    @GetMapping("/me")
+    public ResponseEntity<UsuarioResponseDTO> me(Authentication authentication) {
+        return ResponseEntity.ok(usuarioService.buscarPorUsername(authentication.getName()));
+    }
 
-        if (!Boolean.TRUE.equals(usuario.getAtivo())) {
-            log.warn("Tentativa de login em usuario inativo: {}", dto.username());
-            throw new CredenciaisInvalidasException(); // ou uma exception própria de "usuário inativo", se preferir diferenciar
-        }
-
-        String token = jwtService.gerarToken(usuario.getUsername(), usuario.getRole());
-        log.info("Login bem-sucedido: usuario={}, role={}", usuario.getUsername(), usuario.getRole());
-
-        return ResponseEntity.ok(new LoginResponseDTO(
-                token,
-                usuario.getUsername(),
-                usuario.getRole()
-        ));
+    @PutMapping("/senha")
+    public ResponseEntity<LoginResponseDTO> trocarSenha(@Valid @RequestBody TrocaSenhaRequestDTO dto,
+                                                        Authentication authentication) {
+        return ResponseEntity.ok(authService.trocarSenha(authentication.getName(), dto));
     }
 }

@@ -1,5 +1,8 @@
 package com.AJTBackend.config;
 
+import com.AJTBackend.repository.UsuarioRepository;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,8 +26,10 @@ import java.util.List;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
+    private static final String PREFIXO = "Bearer ";
 
     private final JwtService jwtService;
+    private final UsuarioRepository usuarioRepository;
 
     @Override
     protected void doFilterInternal(
@@ -37,37 +42,33 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         // Sem header ou sem prefixo "Bearer " -> deixa passar sem autenticar
         // (a rota vai ser bloqueada depois pelo SecurityConfig se for protegida)
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        if (authHeader == null || !authHeader.startsWith(PREFIXO)
+                || SecurityContextHolder.getContext().getAuthentication() != null) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        String token = authHeader.substring(7); // remove "Bearer "
+        String token = authHeader.substring(PREFIXO.length());
 
         try {
-            String username = jwtService.extrairUsername(token);
+            Claims claims = jwtService.validarToken(token);
 
-            // Só autentica se ainda não houver autenticação no contexto
-            if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-
-                if (jwtService.tokenValido(token, username)) {
-                    String role = jwtService.extrairRole(token);
-
-                    var authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role));
-
-                    var authToken = new UsernamePasswordAuthenticationToken(
-                            username, null, authorities
-                    );
-                    authToken.setDetails(
-                            new WebAuthenticationDetailsSource().buildDetails(request)
-                    );
-
-                    SecurityContextHolder.getContext().setAuthentication(authToken);
-                }
-            }
-        } catch (Exception e) {
+            // perfil e status vem do banco (nao do token): usuario desativado,
+            // removido ou com role alterada perde o acesso na hora.
+            usuarioRepository.findByUsername(claims.getSubject())
+                    .filter(usuario -> Boolean.TRUE.equals(usuario.getAtivo()))
+                    .filter(usuario -> !jwtService.emitidoAntesDe(claims, usuario.getSenhaAlteradaEm()))
+                    .ifPresentOrElse(usuario -> {
+                        var authToken = new UsernamePasswordAuthenticationToken(
+                                usuario.getUsername(), null,
+                                List.of(new SimpleGrantedAuthority("ROLE_" + usuario.getRole().name()))
+                        );
+                        authToken.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authToken);
+                    }, () -> log.warn("Token recusado (usuario inexistente, inativo ou senha alterada) em {} {}",
+                            request.getMethod(), request.getRequestURI()));
+        } catch (JwtException | IllegalArgumentException e) {
             // Token inválido/expirado/malformado -> não autentica, segue sem contexto
-            // (o SecurityConfig vai barrar se a rota exigir autenticação)
             log.warn("Token JWT invalido ou expirado em {} {}: {}", request.getMethod(), request.getRequestURI(), e.getMessage());
         }
 
