@@ -7,10 +7,11 @@ import com.AJTBackend.exception.CotacaoIndisponivelException;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -20,42 +21,29 @@ public class CotacaoService {
 
     private final CotacaoClient cotacaoClient;
 
-    public CotacaoDTO obterCotacao(String moedaOrigem, String moedaDestino) {
-        BigDecimal taxa = buscarTaxa(moedaOrigem, moedaDestino);
-        return new CotacaoDTO(moedaOrigem, moedaDestino, taxa, null);
-    }
-
     /**
-     * Converte um valor de uma moeda pra outra usando a cotacao mais recente.
-     * Retorna null (em vez de lancar excecao) se o servico externo estiver
-     * indisponivel, pra nao travar operacoes internas por causa de uma
-     * dependencia externa fora do ar.
+     * cotacao mais recente, em cache por par de moedas (ttl em
+     * spring.cache.caffeine.spec). Excecoes nao entram no cache.
      */
-    public BigDecimal converterOuNulo(BigDecimal valor, String moedaOrigem, String moedaDestino) {
-        try {
-            BigDecimal taxa = buscarTaxa(moedaOrigem, moedaDestino);
-            return valor.multiply(taxa).setScale(2, RoundingMode.HALF_UP);
-        } catch (Exception e) {
-            log.warn("Cotacao indisponivel ({} -> {}), valor nao convertido automaticamente: {}",
-                    moedaOrigem, moedaDestino, e.getMessage());
-            return null;
-        }
-    }
+    @Cacheable(cacheNames = "cotacoes", key = "#moedaOrigem.toUpperCase() + '-' + #moedaDestino.toUpperCase()")
+    public CotacaoDTO obterCotacao(String moedaOrigem, String moedaDestino) {
+        String origem = moedaOrigem.toUpperCase(Locale.ROOT);
+        String destino = moedaDestino.toUpperCase(Locale.ROOT);
 
-    private BigDecimal buscarTaxa(String moedaOrigem, String moedaDestino) {
-        if (moedaOrigem.equalsIgnoreCase(moedaDestino)) {
-            return BigDecimal.ONE;
+        if (origem.equals(destino)) {
+            return new CotacaoDTO(origem, destino, BigDecimal.ONE, null);
         }
 
         try {
-            CotacaoResponseDTO resposta = cotacaoClient.obterCotacao(moedaOrigem, moedaDestino);
-            Double taxa = resposta.rates().get(moedaDestino.toUpperCase());
+            CotacaoResponseDTO resposta = cotacaoClient.obterCotacao(origem, destino);
+            BigDecimal taxa = resposta.rates() == null ? null : resposta.rates().get(destino);
             if (taxa == null) {
-                throw new IllegalStateException("Moeda de destino nao retornada pela API: " + moedaDestino);
+                throw new IllegalStateException("Moeda de destino nao retornada pela API: " + destino);
             }
-            return BigDecimal.valueOf(taxa);
+            log.info("Cotacao obtida da API externa: {} -> {} = {}", origem, destino, taxa);
+            return new CotacaoDTO(origem, destino, taxa, resposta.date());
         } catch (Exception e) {
-            throw new CotacaoIndisponivelException(moedaOrigem, moedaDestino, e);
+            throw new CotacaoIndisponivelException(origem, destino, e);
         }
     }
 }

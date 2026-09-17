@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
  * Client Feign para a Frankfurter API (cambio do Banco Central Europeu,
  * publica e sem necessidade de chave). https://frankfurter.dev
  */
-@FeignClient(name = "cotacaoClient", url = "https://api.frankfurter.dev/v1")
+@FeignClient(name = "cotacaoClient", url = "${ajt.cotacao.url}")
 public interface CotacaoClient {
 
     @GetMapping("/latest")
