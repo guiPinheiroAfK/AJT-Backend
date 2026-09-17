@@ -5,14 +5,15 @@ services:
     container_name: ajt-postgres
     environment:
       POSTGRES_DB: ajt_db
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${AJT_DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${AJT_DB_PASSWORD:-postgres}
     ports:
-      - "5454:5432"
+      # so acessivel pela propria maquina (nao expoe o banco na rede)
+      - "127.0.0.1:5454:5432"
     volumes:
       - ajt_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d ajt_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${AJT_DB_USER:-postgres} -d ajt_db"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -27,11 +28,14 @@ services:
     ports:
       - "9090:8080"
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ajt_db
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      AJT_JWT_SECRET: ${AJT_JWT_SECRET}
+      AJT_DB_URL: jdbc:postgresql://postgres:5432/ajt_db
+      AJT_DB_USER: ${AJT_DB_USER:-postgres}
+      AJT_DB_PASSWORD: ${AJT_DB_PASSWORD:-postgres}
+      AJT_JWT_SECRET: ${AJT_JWT_SECRET:?defina AJT_JWT_SECRET no .env}
       AJT_JWT_EXPIRATION: ${AJT_JWT_EXPIRATION:-86400000}
+      AJT_CRYPTO_KEY: ${AJT_CRYPTO_KEY:?defina AJT_CRYPTO_KEY no .env}
+      AJT_CORS_ORIGINS: ${AJT_CORS_ORIGINS:-http://localhost:4200}
+      AJT_PROFILE: ${AJT_PROFILE:-dev}
 
 volumes:
   ajt_data:
