@@ -1,6 +1,8 @@
 package com.AJTBackend.model;
 
 import jakarta.persistence.*;
+import com.AJTBackend.model.enums.AcaoParada;
+import com.AJTBackend.model.enums.StatusParada;
 import lombok.*;
 
 import java.time.LocalTime;
@@ -37,12 +39,14 @@ public class ParadaOs {
     @Column(name = "horario_previsto")
     private LocalTime horarioPrevisto;
 
+    @Enumerated(EnumType.STRING)
     @Column(length = 50)
-    private String acao;
+    private AcaoParada acao;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "status_parada", length = 20)
     @Builder.Default
-    private String statusParada = "PENDENTE";
+    private StatusParada statusParada = StatusParada.PENDENTE;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(

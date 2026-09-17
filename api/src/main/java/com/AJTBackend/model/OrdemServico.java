@@ -1,6 +1,7 @@
 package com.AJTBackend.model;
 
 import jakarta.persistence.*;
+import com.AJTBackend.model.enums.StatusOrdemServico;
 import lombok.*;
 
 import java.time.LocalDate;
@@ -31,9 +32,10 @@ public class OrdemServico {
     @JoinColumn(name = "veiculo_id")
     private Veiculo veiculo;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "ABERTA";
+    private StatusOrdemServico status = StatusOrdemServico.ABERTA;
 
     @OneToMany(mappedBy = "ordemServico", fetch = FetchType.LAZY)
     @Builder.Default

@@ -1,6 +1,7 @@
 package com.AJTBackend.model;
 
 import jakarta.persistence.*;
+import com.AJTBackend.model.enums.StatusTransfer;
 import lombok.*;
 
 import java.math.BigDecimal;
@@ -34,9 +35,10 @@ public class Transfer {
     @Column(nullable = false, length = 100)
     private String destino;
 
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "AGUARDANDO_OS";
+    private StatusTransfer status = StatusTransfer.AGUARDANDO_OS;
 
     @Column(name = "valor_base", precision = 10, scale = 2)
     private BigDecimal valorBase;
