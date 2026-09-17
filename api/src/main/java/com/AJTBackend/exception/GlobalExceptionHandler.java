@@ -6,12 +6,16 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     // 404 - recurso não encontrado
     @ExceptionHandler(PassageiroNaoEncontradoException.class)
@@ -52,6 +56,7 @@ public class GlobalExceptionHandler {
     // 500 - fallback genérico, pra qualquer coisa não prevista
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErroResponseDTO> handleGenerico(Exception ex) {
+        log.error("Erro inesperado", ex);
 
         ErroResponseDTO erro = new ErroResponseDTO(
                 LocalDateTime.now(),
@@ -145,6 +150,62 @@ public class GlobalExceptionHandler {
                 null
         );
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(erro);
+    }
+
+    @ExceptionHandler(TransferNaoEncontradoException.class)
+    public ResponseEntity<ErroResponseDTO> handleTransferNaoEncontrado(
+            TransferNaoEncontradoException ex) {
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Recurso não encontrado",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
+    }
+
+    @ExceptionHandler(PontoColetaNaoEncontradoException.class)
+    public ResponseEntity<ErroResponseDTO> handlePontoColetaNaoEncontrado(
+            PontoColetaNaoEncontradoException ex) {
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Recurso não encontrado",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
+    }
+
+    @ExceptionHandler(OrdemServicoNaoEncontradoException.class)
+    public ResponseEntity<ErroResponseDTO> handleOrdemServicoNaoEncontrado(
+            OrdemServicoNaoEncontradoException ex) {
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Recurso não encontrado",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
+    }
+
+    @ExceptionHandler(ParadaOsNaoEncontradaException.class)
+    public ResponseEntity<ErroResponseDTO> handleParadaOsNaoEncontrada(
+            ParadaOsNaoEncontradaException ex) {
+
+        ErroResponseDTO erro = new ErroResponseDTO(
+                LocalDateTime.now(),
+                HttpStatus.NOT_FOUND.value(),
+                "Recurso não encontrado",
+                ex.getMessage(),
+                null
+        );
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(erro);
     }
 
     @ExceptionHandler(CredenciaisInvalidasException.class)
