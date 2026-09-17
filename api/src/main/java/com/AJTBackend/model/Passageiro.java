@@ -1,6 +1,7 @@
 package com.AJTBackend.model;
 
 import jakarta.persistence.*;
+import com.AJTBackend.config.CriptografiaConverter;
 import lombok.*;
 
 @Entity
@@ -22,6 +23,8 @@ public class Passageiro {
     @Column(name = "tipo_documento", nullable = false, length = 20)
     private String tipoDocumento;
 
+    // cifrado com AES-256-GCM antes de ir pro banco (LGPD)
+    @Convert(converter = CriptografiaConverter.class)
     @Column(nullable = false, columnDefinition = "TEXT")
     private String documento;
 
