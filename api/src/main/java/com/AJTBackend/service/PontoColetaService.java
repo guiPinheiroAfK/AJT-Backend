@@ -8,9 +8,11 @@ import com.AJTBackend.model.PontoColeta;
 import com.AJTBackend.model.Transfer;
 import com.AJTBackend.repository.PontoColetaRepository;
 import com.AJTBackend.repository.TransferRepository;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,11 +28,8 @@ public class PontoColetaService {
     private final PontoColetaRepository pontoColetaRepository;
     private final TransferRepository transferRepository;
 
-    public List<PontoColetaResponseDTO> listarTodos() {
-        return pontoColetaRepository.findAll()
-                .stream()
-                .map(this::toResponseDTO)
-                .toList();
+    public PaginaResponseDTO<PontoColetaResponseDTO> listarTodos(Pageable pageable) {
+        return PaginaResponseDTO.de(pontoColetaRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public PontoColetaResponseDTO buscarPorId(Long id) {
@@ -76,7 +75,7 @@ public class PontoColetaService {
         pontoColeta.setLatitude(dto.latitude());
         pontoColeta.setLongitude(dto.longitude());
 
-        return toResponseDTO(pontoColetaRepository.save(pontoColeta));
+        return toResponseDTO(pontoColeta);
     }
 
     @Transactional
@@ -103,7 +102,7 @@ public class PontoColetaService {
             pontoColeta.setLongitude(dto.longitude());
         }
 
-        return toResponseDTO(pontoColetaRepository.save(pontoColeta));
+        return toResponseDTO(pontoColeta);
     }
 
     @Transactional

@@ -1,11 +1,12 @@
 package com.AJTBackend.repository;
 
 import com.AJTBackend.model.Transfer;
+import com.AJTBackend.model.enums.StatusTransfer;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
-
-import java.util.List;
 
 public interface TransferRepository extends JpaRepository<Transfer, Long> {
 
-    List<Transfer> findByStatus(String status);
+    Page<Transfer> findByStatus(StatusTransfer status, Pageable pageable);
 }
