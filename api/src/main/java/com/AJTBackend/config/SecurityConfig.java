@@ -30,6 +30,7 @@ import java.util.List;
  * | paradas-os                                 | todos         | ADMIN, GERENTE (+ MOTORISTA   | ADMIN, GERENTE  |
  * |                                            |               |   no PATCH, so statusParada)  |                 |
  * | passageiros, transfers, pontos-coleta      | todos         | ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
+ * | auditoria (so leitura)                     | ADMIN, GERENTE| -                             | -               |
  * | cotacao, auth/me, auth/senha               | todos         | todos                         | -               |
  */
 @Configuration
@@ -68,6 +69,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").authenticated()
 
                         .requestMatchers("/api/usuarios/**").hasRole(ADMIN)
+                        .requestMatchers("/api/auditoria/**").hasAnyRole(ADMIN, GERENTE)
                         .requestMatchers(HttpMethod.DELETE, "/api/**").hasAnyRole(ADMIN, GERENTE)
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
 

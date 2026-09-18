@@ -4,6 +4,7 @@ import com.AJTBackend.config.JsonAuthErrorHandler;
 import com.AJTBackend.config.JwtService;
 import com.AJTBackend.config.SecurityConfig;
 import com.AJTBackend.repository.UsuarioRepository;
+import com.AJTBackend.service.AuditoriaService;
 import com.AJTBackend.service.AuthService;
 import com.AJTBackend.service.CotacaoService;
 import com.AJTBackend.service.MotoristaService;
@@ -50,6 +51,7 @@ abstract class WebTestBase {
     @MockitoBean protected OrdemServicoService ordemServicoService;
     @MockitoBean protected ParadaOsService paradaOsService;
     @MockitoBean protected CotacaoService cotacaoService;
+    @MockitoBean protected AuditoriaService auditoriaService;
 
     protected static final String TRANSFER_VALIDO = """
             {"dataTransfer":"2026-09-20","horaTransfer":"14:30:00","origem":"Aeroporto GRU","destino":"Hotel"}
