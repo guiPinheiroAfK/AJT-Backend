@@ -1,17 +1,19 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
+import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.repository.PassageiroRepository;
-import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import com.AJTBackend.exception.PassageiroNaoEncontradoException;
+
+import java.util.List;
 
 
 @Service
@@ -36,6 +38,13 @@ public class PassageiroService {
     public PaginaResponseDTO<PassageiroResponseDTO> buscarPorNacionalidade(String nacionalidade, Pageable pageable) {
         return PaginaResponseDTO.de(passageiroRepository.findByNacionalidadeIgnoreCase(nacionalidade, pageable),
                 this::toResponseDTO);
+    }
+
+    public List<PassageiroResponseDTO> listarPorTransfer(Long transferId) {
+        return passageiroRepository.findByTransferId(transferId)
+                .stream()
+                .map(this::toResponseDTO)
+                .toList();
     }
 
     @Transactional

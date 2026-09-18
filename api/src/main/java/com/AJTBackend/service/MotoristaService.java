@@ -2,11 +2,11 @@ package com.AJTBackend.service;
 
 import com.AJTBackend.dto.MotoristaRequestDTO;
 import com.AJTBackend.dto.MotoristaResponseDTO;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.exception.CnhJaCadastradaException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.repository.MotoristaRepository;
-import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

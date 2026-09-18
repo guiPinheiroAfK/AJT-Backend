@@ -1,7 +1,7 @@
 package com.AJTBackend.model;
 
-import jakarta.persistence.*;
 import com.AJTBackend.config.CriptografiaConverter;
+import jakarta.persistence.*;
 import lombok.*;
 
 @Entity

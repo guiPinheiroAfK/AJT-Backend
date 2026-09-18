@@ -42,7 +42,8 @@ public class AuthService {
         hashFalso = passwordEncoder.encode(UUID.randomUUID().toString());
     }
 
-    @Transactional
+    // sem @Transactional de proposito: o BCrypt (~100ms) nao deve segurar uma conexao do pool.
+    // so o save() do ultimoLogin abre uma transacao curta.
     public LoginResponseDTO login(LoginRequestDTO dto, String ip) {
         if (loginAttemptService.bloqueado(ip, dto.username())) {
             log.warn("Login bloqueado por excesso de tentativas: usuario={}, ip={}", sanitizar(dto.username()), ip);
@@ -63,6 +64,7 @@ public class AuthService {
         Usuario usuario = encontrado.get();
         loginAttemptService.registrarSucesso(ip, dto.username());
         usuario.setUltimoLogin(LocalDateTime.now());
+        usuarioRepository.save(usuario);
 
         log.info("Login bem-sucedido: usuario={}, role={}", usuario.getUsername(), usuario.getRole());
         return gerarResposta(usuario);

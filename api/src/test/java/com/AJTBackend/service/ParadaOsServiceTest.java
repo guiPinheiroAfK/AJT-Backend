@@ -1,5 +1,6 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.ParadaOsRequestDTO;
 import com.AJTBackend.exception.TransferNaoEncontradoException;
 import com.AJTBackend.model.OrdemServico;
@@ -50,7 +51,7 @@ class ParadaOsServiceTest {
     private final ParadaOsRepository paradaOsRepository = mock(ParadaOsRepository.class);
     private final OrdemServicoRepository ordemServicoRepository = mock(OrdemServicoRepository.class);
     private final TransferRepository transferRepository = mock(TransferRepository.class);
-    private final ParadaOsService service = new ParadaOsService(paradaOsRepository, ordemServicoRepository, transferRepository);
+    private final ParadaOsService service = new ParadaOsService(paradaOsRepository, ordemServicoRepository, transferRepository, new UsuarioLogado());
 
     @AfterEach
     void limparContexto() {

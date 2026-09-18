@@ -1,5 +1,6 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.UsuarioRequestDTO;
 import com.AJTBackend.dto.UsuarioResponseDTO;
@@ -13,8 +14,6 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,6 +29,7 @@ public class UsuarioService {
 
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UsuarioLogado usuarioLogado;
 
     public PaginaResponseDTO<UsuarioResponseDTO> listarTodos(Pageable pageable) {
         return PaginaResponseDTO.de(usuarioRepository.findAll(pageable), this::toResponseDTO);
@@ -164,8 +164,7 @@ public class UsuarioService {
     }
 
     private boolean ehUsuarioLogado(Usuario usuario) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        return auth != null && usuario.getUsername().equals(auth.getName());
+        return usuarioLogado.ehUsuario(usuario.getUsername());
     }
 
     private UsuarioResponseDTO toResponseDTO(Usuario usuario) {

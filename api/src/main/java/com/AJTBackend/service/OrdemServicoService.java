@@ -2,17 +2,17 @@ package com.AJTBackend.service;
 
 import com.AJTBackend.dto.OrdemServicoRequestDTO;
 import com.AJTBackend.dto.OrdemServicoResponseDTO;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
 import com.AJTBackend.exception.VeiculoNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.OrdemServico;
 import com.AJTBackend.model.Veiculo;
+import com.AJTBackend.model.enums.StatusOrdemServico;
 import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
-import com.AJTBackend.dto.PaginaResponseDTO;
-import com.AJTBackend.model.enums.StatusOrdemServico;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,10 +28,12 @@ public class OrdemServicoService {
 
     private static final Logger log = LoggerFactory.getLogger(OrdemServicoService.class);
     private static final StatusOrdemServico STATUS_PADRAO = StatusOrdemServico.ABERTA;
+    private static final String TABELA = "ordens_servico";
 
     private final OrdemServicoRepository ordemServicoRepository;
     private final MotoristaRepository motoristaRepository;
     private final VeiculoRepository veiculoRepository;
+    private final AuditoriaService auditoriaService;
 
     public PaginaResponseDTO<OrdemServicoResponseDTO> listarTodos(Pageable pageable) {
         return PaginaResponseDTO.de(ordemServicoRepository.findAll(pageable), this::toResponseDTO);
@@ -57,6 +59,7 @@ public class OrdemServicoService {
                 .build();
 
         OrdemServico salva = ordemServicoRepository.save(ordemServico);
+        auditoriaService.registrar(TABELA, salva.getId(), "Ordem de servico criada");
         log.info("Ordem de servico criada: id={}", salva.getId());
         return toResponseDTO(salva);
     }
@@ -69,8 +72,10 @@ public class OrdemServicoService {
         ordemServico.setDataServico(dto.dataServico());
         ordemServico.setMotorista(buscarMotorista(dto.motoristaId()));
         ordemServico.setVeiculo(buscarVeiculo(dto.veiculoId()));
+        StatusOrdemServico statusAnterior = ordemServico.getStatus();
         ordemServico.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
 
+        auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de servico atualizada", statusAnterior, ordemServico.getStatus());
         return toResponseDTO(ordemServico);
     }
 
@@ -88,10 +93,12 @@ public class OrdemServicoService {
         if (dto.veiculoId() != null) {
             ordemServico.setVeiculo(buscarVeiculo(dto.veiculoId()));
         }
+        StatusOrdemServico statusAnterior = ordemServico.getStatus();
         if (dto.status() != null) {
             ordemServico.setStatus(dto.status());
         }
 
+        auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de servico atualizada", statusAnterior, ordemServico.getStatus());
         return toResponseDTO(ordemServico);
     }
 
@@ -101,6 +108,7 @@ public class OrdemServicoService {
             throw new OrdemServicoNaoEncontradoException(id);
         }
         ordemServicoRepository.deleteById(id);
+        auditoriaService.registrar(TABELA, id, "Ordem de servico removida");
         log.info("Ordem de servico removida: id={}", id);
     }
 

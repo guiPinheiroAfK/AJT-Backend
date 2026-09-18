@@ -1,5 +1,6 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.UsuarioRequestDTO;
 import com.AJTBackend.dto.UsuarioResponseDTO;
 import com.AJTBackend.exception.RegraNegocioException;
@@ -45,7 +46,7 @@ class UsuarioServiceTest {
 
     private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder(4);
-    private final UsuarioService service = new UsuarioService(usuarioRepository, passwordEncoder);
+    private final UsuarioService service = new UsuarioService(usuarioRepository, passwordEncoder, new UsuarioLogado());
 
     @AfterEach
     void limparContexto() {

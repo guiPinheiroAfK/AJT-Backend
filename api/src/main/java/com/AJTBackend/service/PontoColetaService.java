@@ -1,5 +1,6 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PontoColetaRequestDTO;
 import com.AJTBackend.dto.PontoColetaResponseDTO;
 import com.AJTBackend.exception.PontoColetaNaoEncontradoException;
@@ -8,7 +9,6 @@ import com.AJTBackend.model.PontoColeta;
 import com.AJTBackend.model.Transfer;
 import com.AJTBackend.repository.PontoColetaRepository;
 import com.AJTBackend.repository.TransferRepository;
-import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

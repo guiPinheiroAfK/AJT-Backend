@@ -5,6 +5,7 @@ import com.AJTBackend.model.enums.StatusTransfer;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.Set;
 
 public record TransferResponseDTO(
         Long id,
@@ -16,5 +17,6 @@ public record TransferResponseDTO(
         BigDecimal valorBase,
         BigDecimal valorOriginal,
         String moedaOrigem,
-        Long osId
+        Long osId,
+        Set<Long> passageiroIds
 ) {}
