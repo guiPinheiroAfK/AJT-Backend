@@ -1,8 +1,8 @@
 package com.AJTBackend.model;
 
-import jakarta.persistence.*;
 import com.AJTBackend.model.enums.AcaoParada;
 import com.AJTBackend.model.enums.StatusParada;
+import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalTime;

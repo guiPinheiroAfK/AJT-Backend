@@ -1,12 +1,12 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.VeiculoRequestDTO;
 import com.AJTBackend.dto.VeiculoResponseDTO;
 import com.AJTBackend.exception.PlacaJaCadastradaException;
 import com.AJTBackend.exception.VeiculoNaoEncontradoException;
 import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.repository.VeiculoRepository;
-import com.AJTBackend.dto.PaginaResponseDTO;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

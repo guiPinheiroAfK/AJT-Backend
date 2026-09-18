@@ -1,7 +1,7 @@
 package com.AJTBackend.model;
 
-import jakarta.persistence.*;
 import com.AJTBackend.model.enums.Role;
+import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDateTime;
