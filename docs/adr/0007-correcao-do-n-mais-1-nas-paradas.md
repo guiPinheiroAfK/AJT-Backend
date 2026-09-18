@@ -71,3 +71,9 @@ um loop — outro N+1, desta vez de escrita.
 - Teste de regressão de performance: `api/src/test/java/com/AJTBackend/integracao/PerformanceIntegrationTest.java`
 - Teste da busca em lote detectando ID inexistente: `api/src/test/java/com/AJTBackend/service/ParadaOsServiceTest.java`,
   método `buscaTransfersNumaUnicaConsultaEDetectaIdInexistente`
+
+## Atualizações posteriores
+
+- **2026-09-18 — [ADR-0010](0010-passageiros-no-transfer-e-os-como-relacionamento.md):** a coleção
+  `Transfer.passageiros` (lazy) também é carregada em lote pelo mesmo `default_batch_fetch_size: 50`, então
+  listar transfers com `passageiroIds` não gera uma query por transfer.
