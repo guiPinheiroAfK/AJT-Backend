@@ -1,0 +1,2037 @@
+{
+  "info": {
+    "name": "AJT-Backend",
+    "description": "Coleção da demonstração do AJT-Backend. Ordem: (1) ajuste as variáveis \"usuario\" e \"senha\" da coleção se o admin já trocou a senha; (2) rode \"Autenticação > Login\" (salva o token); (3) percorra as pastas na ordem — cada \"Criar\" salva o id retornado numa variável usada pelas requisições seguintes. Evite rodar \"Trocar senha\" no meio da demonstração: ela muda a senha do admin de verdade.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "usuario",
+      "value": "admin"
+    },
+    {
+      "key": "senha",
+      "value": "admin123"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "motoristaId",
+      "value": ""
+    },
+    {
+      "key": "veiculoId",
+      "value": ""
+    },
+    {
+      "key": "passageiroId",
+      "value": ""
+    },
+    {
+      "key": "transferId",
+      "value": ""
+    },
+    {
+      "key": "osId",
+      "value": ""
+    },
+    {
+      "key": "paradaId",
+      "value": ""
+    },
+    {
+      "key": "pontoColetaId",
+      "value": ""
+    },
+    {
+      "key": "usuarioId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "Autenticação",
+      "item": [
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.collectionVariables.set('token', body.token);",
+                  "pm.test('login retornou token', () => pm.expect(body.token).to.be.a('string'));",
+                  "pm.test('trocarSenha informado', () => pm.expect(body).to.have.property('trocarSenha'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{usuario}}\",\n  \"senha\": \"{{senha}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Rota pública. Devolve token, tipo, expiraEm (segundos), username, role e trocarSenha."
+          }
+        },
+        {
+          "name": "Eu (sessão atual)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Devolve os dados do usuário do token atual. Usado pelo front pra restaurar a sessão."
+          }
+        },
+        {
+          "name": "Trocar senha (admin do seed)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"senhaAtual\": \"admin123\",\n  \"novaSenha\": \"senhaNova123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/senha",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "senha"
+              ]
+            },
+            "description": "Devolve um token NOVO — o antigo passa a valer 401 depois dessa chamada (não roda em cadeia com o resto da demo sem atualizar o token de novo)."
+          }
+        },
+        {
+          "name": "Login sem token (401 esperado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "auth": {
+              "type": "noauth"
+            },
+            "description": "Demonstra o formato padrão de erro (ErroResponseDTO) e o 401 do Spring Security."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Usuários (ADMIN)",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios?page=0&size=10&sort=id,desc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                },
+                {
+                  "key": "sort",
+                  "value": "id,desc"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('usuarioId', body.id);",
+                  "pm.test('status 201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Maria Souza\",\n  \"username\": \"maria.souza\",\n  \"senha\": \"senha12345\",\n  \"role\": \"ATENDENTE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por username",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/buscar?username=maria.souza",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "username",
+                  "value": "maria.souza"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Maria Souza Lima\",\n  \"username\": \"maria.souza\",\n  \"role\": \"GERENTE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH) - desativar",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ativo\": false\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios/{{usuarioId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios",
+                "{{usuarioId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Motoristas",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('motoristaId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Carlos Andrade\",\n  \"cnh\": \"12345678901\",\n  \"telefone\": \"(11) 98888-7777\",\n  \"latitudeAtual\": -23.5505,\n  \"longitudeAtual\": -46.6333\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/{{motoristaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "{{motoristaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por CNH",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/buscar?cnh=12345678901",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "cnh",
+                  "value": "12345678901"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"Carlos Andrade Silva\",\n  \"cnh\": \"12345678901\",\n  \"telefone\": \"(11) 98888-0000\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/{{motoristaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "{{motoristaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitudeAtual\": -23.5,\n  \"longitudeAtual\": -46.6\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/{{motoristaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "{{motoristaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/{{motoristaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "{{motoristaId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Veículos",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('veiculoId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Van 01\",\n  \"placa\": \"ABC1D23\",\n  \"capacidade\": 15,\n  \"tipo\": \"VAN\",\n  \"marca\": \"Mercedes-Benz\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos/{{veiculoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos",
+                "{{veiculoId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por placa",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos/buscar?placa=ABC1D23",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "placa",
+                  "value": "ABC1D23"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Van 01 - Renovada\",\n  \"placa\": \"ABC1D23\",\n  \"capacidade\": 16,\n  \"tipo\": \"VAN\",\n  \"marca\": \"Mercedes-Benz\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos/{{veiculoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos",
+                "{{veiculoId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"capacidade\": 18\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos/{{veiculoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos",
+                "{{veiculoId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/veiculos/{{veiculoId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "veiculos",
+                "{{veiculoId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Passageiros",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('passageiroId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"John Doe\",\n  \"tipoDocumento\": \"PASSAPORTE\",\n  \"documento\": \"XP9988776\",\n  \"nacionalidade\": \"Americana\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros/{{passageiroId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros",
+                "{{passageiroId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por nacionalidade",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros/buscar?nacionalidade=Americana&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "nacionalidade",
+                  "value": "Americana"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"John Doe Jr\",\n  \"tipoDocumento\": \"PASSAPORTE\",\n  \"documento\": \"XP9988776\",\n  \"nacionalidade\": \"Americana\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros/{{passageiroId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros",
+                "{{passageiroId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nacionalidade\": \"Canadense\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros/{{passageiroId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros",
+                "{{passageiroId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/passageiros/{{passageiroId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "passageiros",
+                "{{passageiroId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transfers",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar (moeda estrangeira - Feign)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('transferId', body.id);",
+                  "pm.test('valorBase convertido pela API de cambio', () => pm.expect(body.valorBase).to.not.be.null);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTransfer\": \"2026-09-25\",\n  \"horaTransfer\": \"14:30:00\",\n  \"origem\": \"Aeroporto de Guarulhos (GRU)\",\n  \"destino\": \"Hotel Copacabana Palace\",\n  \"status\": \"CONFIRMADO\",\n  \"valorOriginal\": 100.00,\n  \"moedaOrigem\": \"USD\",\n  \"passageiroIds\": [{{passageiroId}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "description": "Sem valorBase de propósito: o backend consulta a API externa de câmbio (Feign) e converte USD -> BRL sozinho. passageiroIds vincula o passageiro criado na pasta Passageiros (relação N:N). Rode \"Passageiros > Criar\" antes."
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar passageiros do transfer",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}/passageiros",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}",
+                "passageiros"
+              ]
+            },
+            "description": "Devolve os dados completos dos passageiros vinculados (o transfer traz só os ids)."
+          }
+        },
+        {
+          "name": "Buscar por status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/buscar?status=CONFIRMADO&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "CONFIRMADO"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTransfer\": \"2026-09-25\",\n  \"horaTransfer\": \"15:00:00\",\n  \"origem\": \"Aeroporto de Guarulhos (GRU)\",\n  \"destino\": \"Hotel Fasano\",\n  \"status\": \"EM_ANDAMENTO\",\n  \"valorBase\": 350.00,\n  \"moedaOrigem\": \"BRL\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH) - concluir",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"CONCLUIDO\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Remover todos os passageiros (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"passageiroIds\": []\n}"
+            },
+            "description": "Lista vazia limpa os vínculos; campo ausente não altera."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Pontos de Coleta",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('pontoColetaId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transferId\": {{transferId}},\n  \"localColeta\": \"Portão 3 - Desembarque Internacional\",\n  \"ordemParada\": 1,\n  \"horarioPrevisto\": \"14:00:00\",\n  \"latitude\": -23.4356,\n  \"longitude\": -46.4731\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta/{{pontoColetaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta",
+                "{{pontoColetaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar por Transfer",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta/transfer/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta",
+                "transfer",
+                "{{transferId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transferId\": {{transferId}},\n  \"localColeta\": \"Portão 5\",\n  \"ordemParada\": 1,\n  \"horarioPrevisto\": \"14:10:00\",\n  \"latitude\": -23.4356,\n  \"longitude\": -46.4731\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta/{{pontoColetaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta",
+                "{{pontoColetaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"horarioPrevisto\": \"14:20:00\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta/{{pontoColetaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta",
+                "{{pontoColetaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/pontos-coleta/{{pontoColetaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "pontos-coleta",
+                "{{pontoColetaId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ordens de Serviço",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('osId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataServico\": \"2026-09-25\",\n  \"motoristaId\": {{motoristaId}},\n  \"veiculoId\": {{veiculoId}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico"
+              ]
+            },
+            "description": "Rode 'Motoristas > Criar' e 'Veículos > Criar' antes, pra ter os IDs preenchidos."
+          }
+        },
+        {
+          "name": "Ligar o transfer a esta OS (PATCH no transfer)",
+          "request": {
+            "method": "PATCH",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers/{{transferId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers",
+                "{{transferId}}"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"osId\": {{osId}}\n}"
+            },
+            "description": "Relação @ManyToOne Transfer -> OS. Rode \"Transfers > Criar\" antes."
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico/{{osId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico",
+                "{{osId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Buscar por status",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico/buscar?status=ABERTA&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico",
+                "buscar"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "ABERTA"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataServico\": \"2026-09-26\",\n  \"motoristaId\": {{motoristaId}},\n  \"veiculoId\": {{veiculoId}},\n  \"status\": \"EM_ANDAMENTO\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico/{{osId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico",
+                "{{osId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH) - finalizar",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FINALIZADA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico/{{osId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico",
+                "{{osId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/ordens-servico/{{osId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "ordens-servico",
+                "{{osId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Paradas de OS",
+      "item": [
+        {
+          "name": "Listar (paginado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os?page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Criar (embarque, com transfer vinculado)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "if (body.id) pm.collectionVariables.set('paradaId', body.id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"osId\": {{osId}},\n  \"ordemParada\": 1,\n  \"localParada\": \"Portão 3\",\n  \"latitude\": -23.4356,\n  \"longitude\": -46.4731,\n  \"horarioPrevisto\": \"14:00:00\",\n  \"acao\": \"EMBARQUE\",\n  \"transferIds\": [{{transferId}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os"
+              ]
+            },
+            "description": "Rode 'Ordens de Serviço > Criar' e 'Transfers > Criar' antes, pra ter os IDs preenchidos."
+          }
+        },
+        {
+          "name": "Buscar por ID",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os/{{paradaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os",
+                "{{paradaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Listar por Ordem de Serviço",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os/ordem-servico/{{osId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os",
+                "ordem-servico",
+                "{{osId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar (PUT)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"osId\": {{osId}},\n  \"ordemParada\": 1,\n  \"localParada\": \"Portão 7\",\n  \"latitude\": -23.4,\n  \"longitude\": -46.4,\n  \"acao\": \"DESEMBARQUE\",\n  \"statusParada\": \"EM_ANDAMENTO\",\n  \"transferIds\": [{{transferId}}]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os/{{paradaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os",
+                "{{paradaId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Atualizar parcial (PATCH) - MOTORISTA só troca status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"statusParada\": \"CONCLUIDA\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os/{{paradaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os",
+                "{{paradaId}}"
+              ]
+            },
+            "description": "Bom request pra mostrar a regra de negócio: logado como MOTORISTA, só este PATCH (mudar statusParada) é aceito — qualquer outro campo dá 403."
+          }
+        },
+        {
+          "name": "Excluir",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/paradas-os/{{paradaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "paradas-os",
+                "{{paradaId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Cotação (Feign - Frankfurter API)",
+      "item": [
+        {
+          "name": "Cotação USD -> BRL",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cotacao?de=USD&para=BRL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cotacao"
+              ],
+              "query": [
+                {
+                  "key": "de",
+                  "value": "USD"
+                },
+                {
+                  "key": "para",
+                  "value": "BRL"
+                }
+              ]
+            },
+            "description": "Chama a API externa Frankfurter via Feign Client. Segunda chamada com o mesmo par de moedas vem do cache (30 min) — bom pra explicar na apresentação."
+          }
+        },
+        {
+          "name": "Cotação EUR -> BRL",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cotacao?de=EUR&para=BRL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cotacao"
+              ],
+              "query": [
+                {
+                  "key": "de",
+                  "value": "EUR"
+                },
+                {
+                  "key": "para",
+                  "value": "BRL"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Código de moeda inválido (400 esperado)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/cotacao?de=US&para=BRL",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "cotacao"
+              ],
+              "query": [
+                {
+                  "key": "de",
+                  "value": "US"
+                },
+                {
+                  "key": "para",
+                  "value": "BRL"
+                }
+              ]
+            },
+            "description": "Demonstra a validação de @RequestParam com @Pattern."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auditoria (ADMIN/GERENTE)",
+      "item": [
+        {
+          "name": "Auditoria dos transfers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auditoria?tabela=transfers&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auditoria"
+              ],
+              "query": [
+                {
+                  "key": "tabela",
+                  "value": "transfers"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "Trilha de quem criou/alterou/removeu transfers, mais recente primeiro. Mudança de status aparece na mensagem."
+          }
+        },
+        {
+          "name": "Auditoria das ordens de serviço",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auditoria?tabela=ordens_servico&page=0&size=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auditoria"
+              ],
+              "query": [
+                {
+                  "key": "tabela",
+                  "value": "ordens_servico"
+                },
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "10"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Toda a auditoria",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/auditoria?page=0&size=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auditoria"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "0"
+                },
+                {
+                  "key": "size",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demonstração de erros (Bean Validation / 404 / 409)",
+      "item": [
+        {
+          "name": "Campo obrigatório ausente (400)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"nome\": \"\",\n  \"cnh\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas"
+              ]
+            }
+          }
+        },
+        {
+          "name": "ID inexistente (404)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/999999",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "999999"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Registro em uso - conflito (409)",
+          "request": {
+            "method": "DELETE",
+            "url": {
+              "raw": "{{baseUrl}}/api/motoristas/{{motoristaId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "motoristas",
+                "{{motoristaId}}"
+              ]
+            },
+            "description": "Excluir um motorista vinculado a uma Ordem de Serviço existente dá 409 (violação de FK tratada pelo GlobalExceptionHandler)."
+          }
+        },
+        {
+          "name": "Sem permissão para o recurso (403)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/usuarios",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "usuarios"
+              ]
+            },
+            "description": "Faça login com um usuário que não seja ADMIN e use o token dele aqui — /api/usuarios é restrito a ADMIN."
+          }
+        },
+        {
+          "name": "Passageiro inexistente no transfer (404)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTransfer\": \"2026-09-25\",\n  \"horaTransfer\": \"14:30:00\",\n  \"origem\": \"A\",\n  \"destino\": \"B\",\n  \"passageiroIds\": [999999]\n}"
+            }
+          }
+        },
+        {
+          "name": "Enum inválido (400)",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/transfers",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "transfers"
+              ]
+            },
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dataTransfer\": \"2026-09-25\",\n  \"horaTransfer\": \"14:30:00\",\n  \"origem\": \"A\",\n  \"destino\": \"B\",\n  \"status\": \"XPTO\"\n}"
+            },
+            "description": "A resposta lista os valores aceitos para o campo status."
+          }
+        }
+      ]
+    }
+  ]
+}
