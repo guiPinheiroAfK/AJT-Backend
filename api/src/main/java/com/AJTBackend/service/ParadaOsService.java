@@ -1,5 +1,7 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.config.UsuarioLogado;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.ParadaOsRequestDTO;
 import com.AJTBackend.dto.ParadaOsResponseDTO;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
@@ -8,19 +10,16 @@ import com.AJTBackend.exception.TransferNaoEncontradoException;
 import com.AJTBackend.model.OrdemServico;
 import com.AJTBackend.model.ParadaOs;
 import com.AJTBackend.model.Transfer;
+import com.AJTBackend.model.enums.Role;
+import com.AJTBackend.model.enums.StatusParada;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.ParadaOsRepository;
 import com.AJTBackend.repository.TransferRepository;
-import com.AJTBackend.dto.PaginaResponseDTO;
-import com.AJTBackend.model.enums.Role;
-import com.AJTBackend.model.enums.StatusParada;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -40,6 +39,7 @@ public class ParadaOsService {
     private final ParadaOsRepository paradaOsRepository;
     private final OrdemServicoRepository ordemServicoRepository;
     private final TransferRepository transferRepository;
+    private final UsuarioLogado usuarioLogado;
 
     public PaginaResponseDTO<ParadaOsResponseDTO> listarTodos(Pageable pageable) {
         // transfers de cada parada sao carregados em lote (hibernate.default_batch_fetch_size)
@@ -168,10 +168,7 @@ public class ParadaOsService {
      * o SecurityConfig libera o PATCH pra ele, e aqui restringimos os campos.
      */
     private void validarAlteracaoPorMotorista(ParadaOsRequestDTO dto) {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        boolean ehMotorista = auth != null && auth.getAuthorities().stream()
-                .anyMatch(a -> a.getAuthority().equals("ROLE_" + Role.MOTORISTA.name()));
-        if (!ehMotorista) {
+        if (!usuarioLogado.temPerfil(Role.MOTORISTA)) {
             return;
         }
 
