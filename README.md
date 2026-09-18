@@ -4,7 +4,7 @@
 
 API REST para gestão de receptivo turístico da AJT Viagens e Turismo (antiga SOS Viale): cadastros de passageiros, motoristas, veículos e pontos de coleta, agendamento de transfers, geração de ordens de serviço, controle de acesso por perfil e relatórios.
 
-Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Receptivo`, Java + Swing) para uma arquitetura web, com o front-end em repositório separado (Angular + Tailwind, a criar).
+Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Receptivo`, Java + Swing) para uma arquitetura web, com o front-end em repositório separado (`AJT-Frontend`, Angular + Tailwind).
 
 ---
 
@@ -16,7 +16,10 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 | Frontend | Angular + Tailwind CSS (repositório separado) |
 | Banco de dados | PostgreSQL |
 | Migrações | Flyway |
-| Autenticação | JWT |
+| Autenticação | JWT (jjwt) + senhas com BCrypt |
+| Integração externa | Spring Cloud OpenFeign (Frankfurter API, câmbio) + cache Caffeine |
+| Documentação da API | OpenAPI / Swagger UI (springdoc) |
+| Testes | JUnit 5, Mockito, MockMvc, Testcontainers, WireMock, JaCoCo |
 | Build | Maven |
 | Containerização | Docker / Docker Compose |
 
@@ -37,26 +40,27 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 ## Estrutura do repositório
 
 ```
-ajt-backend/
+AJT-Backend/
 ├── api/
 │   ├── src/main/java/com/AJTBackend/
-│   │   ├── config/         # segurança, JWT, CORS
+│   │   ├── client/         # Feign Client da API de câmbio
+│   │   ├── config/         # segurança, JWT, CORS, criptografia, OpenAPI
 │   │   ├── controller/     # controllers REST por domínio
-│   │   ├── dto/            # objetos de entrada/saída da API
-│   │   ├── exception/      # exceções de domínio e tratamento global de erros
-│   │   ├── model/          # entidades JPA
+│   │   ├── dto/            # requests/responses (isolam as entidades)
+│   │   ├── exception/      # exceções de domínio e GlobalExceptionHandler
+│   │   ├── model/          # entidades JPA (+ enums)
 │   │   ├── repository/     # repositórios Spring Data
-│   │   └── service/        # regras de negócio
+│   │   └── service/        # regras de negócio e transações
 │   ├── src/main/resources/
 │   │   ├── application.yml
-│   │   └── db/migration/   # migrações Flyway
-│   ├── src/tests/          # scripts de smoke test (bash)
+│   │   └── db/migration/   # migrações Flyway (V1 a V7)
+│   ├── src/test/           # testes unitários, de camada web e de integração
 │   └── pom.xml
-├── docker-compose.yml       # PostgreSQL + API para desenvolvimento
+├── scripts/smoke-test.sh    # dispara todas as requisições da API e confere os status
+├── postman/                 # coleção Postman/Insomnia pronta para a demonstração
+├── docker-compose.yml       # PostgreSQL + API
 └── .env.example
 ```
-
-> Estrutura de referência — ajuste conforme o código for evoluindo.
 
 ---
 
@@ -103,7 +107,24 @@ As migrações Flyway rodam automaticamente na subida da aplicação.
 mvn spring-boot:run
 ```
 
-A API sobe por padrão em `http://localhost:8080`. No profile `dev`, a documentação fica em `http://localhost:8080/swagger-ui.html`.
+O Maven **não lê o arquivo `.env`**: exporte as variáveis antes de subir (ou configure-as na Run Configuration da IDE).
+
+```bash
+# Git Bash / Linux / macOS
+set -a && source .env && set +a && cd api && mvn spring-boot:run
+```
+
+```powershell
+# PowerShell
+Get-Content .env | ForEach-Object { if ($_ -match '^([A-Z_]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2]) } }
+cd api; mvn spring-boot:run
+```
+
+A API sobe por padrão em `http://localhost:8080`. Para subir **tudo em containers** (banco + API): `docker compose up -d --build` (API em `http://localhost:9090`).
+
+### Documentação interativa (Swagger)
+
+Com o profile `dev` (padrão local): **http://localhost:8080/swagger-ui.html**. Faça `POST /api/auth/login`, copie o `token`, clique em **Authorize** e cole. Todos os endpoints têm resumo, exemplos de corpo e as respostas 400/401/403/404/409 documentadas.
 
 **Primeiro acesso:** usuário `admin` / senha `admin123`. O login retorna `trocarSenha: true` e a senha deve ser trocada em `PUT /api/auth/senha`.
 
@@ -118,6 +139,14 @@ mvn test
 - **Integração** (`integracao/*IntegrationTest`): sobem um PostgreSQL 16 real via Testcontainers e simulam a API de câmbio com WireMock. **Precisam do Docker rodando**; sem Docker são pulados.
 - Cobertura: `api/target/site/jacoco/index.html` após `mvn test`.
 
+**Teste ponta a ponta contra a API rodando** (usa o login do admin e apaga o que criar):
+
+```bash
+AJT_PASS=<senha do admin> bash scripts/smoke-test.sh
+```
+
+**Demonstração no Postman/Insomnia:** importe `postman/AJT-Backend.postman_collection.json`. Rode *Autenticação → Login* primeiro: o token e os ids criados ficam salvos em variáveis para as requisições seguintes.
+
 ---
 
 ## Segurança e controle de acesso
@@ -130,6 +159,7 @@ Autenticação via `Authorization: Bearer <token>`. Perfil e status do usuário 
 | `motoristas`, `veiculos`, `ordens-servico` | todos | ADMIN, GERENTE | ADMIN, GERENTE |
 | `paradas-os` | todos | ADMIN, GERENTE (MOTORISTA: só `PATCH` de `statusParada`) | ADMIN, GERENTE |
 | `passageiros`, `transfers`, `pontos-coleta` | todos | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
+| `auditoria` (somente leitura) | ADMIN, GERENTE | — | — |
 | `cotacao`, `auth/me`, `auth/senha` | todos | todos | — |
 
 Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), documento do passageiro cifrado com AES-256-GCM, CORS restrito às origens configuradas, container rodando sem root.
@@ -146,6 +176,8 @@ Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), docum
   { "conteudo": [], "pagina": 0, "tamanho": 20, "totalElementos": 0, "totalPaginas": 0, "primeira": true, "ultima": true }
   ```
   Vale para `GET /api/{recurso}`, `GET /api/transfers/buscar`, `GET /api/ordens-servico/buscar` e `GET /api/passageiros/buscar`. Listas "filhas" (`/paradas-os/ordem-servico/{id}`, `/pontos-coleta/transfer/{id}`) continuam como array simples.
+- **Passageiros do transfer:** `passageiroIds` no corpo do transfer (POST/PUT/PATCH) e na resposta. Ausente = não altera; `[]` = remove todos. Dados completos em `GET /api/transfers/{id}/passageiros`.
+- **Auditoria:** `GET /api/auditoria?tabela=transfers|ordens_servico` (paginado, mais recente primeiro; ADMIN e GERENTE).
 - **Enums:**
   - `role`: `ADMIN`, `GERENTE`, `ATENDENTE`, `MOTORISTA`
   - `status` do transfer: `AGUARDANDO_OS`, `CONFIRMADO`, `EM_ANDAMENTO`, `CONCLUIDO`, `CANCELADO`
@@ -160,21 +192,36 @@ Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), docum
 ## Domínio principal
 
 - **Usuários e perfis** — `ADMIN`, `GERENTE`, `ATENDENTE`, `MOTORISTA`, com controle de acesso por perfil.
-- **Passageiros** — cadastro com documento (CPF, RG, CNH, Passaporte) e nacionalidade.
+- **Passageiros** — cadastro com documento (cifrado no banco) e nacionalidade.
 - **Motoristas e veículos** — frota disponível para atendimento.
-- **Pontos de coleta** — locais de embarque/desembarque.
-- **Transfers** — agendamento de deslocamentos, com origem, destino, horário e valor.
-- **Ordens de serviço (OS)** — agrupam transfers de um motorista/veículo em um dia, com paradas.
+- **Transfers** — deslocamentos com origem, destino, horário, valor (convertido automaticamente de moeda estrangeira) e **passageiros**.
+- **Pontos de coleta** — locais de embarque ordenados dentro de um transfer.
+- **Ordens de serviço (OS)** — agrupam transfers de um motorista/veículo em um dia, com **paradas** que atendem vários transfers.
+- **Auditoria** — trilha de quem criou, alterou (inclusive mudança de status) ou removeu transfers e OS.
+
+### Relacionamentos do modelo
+
+| Relação | Tipo | Onde |
+|---|---|---|
+| OS → Motorista, OS → Veículo | `@ManyToOne` | `OrdemServico` |
+| Transfer → OS | `@ManyToOne` (opcional: "aguardando OS") | `Transfer` |
+| Transfer ↔ Passageiro | `@ManyToMany` (`transfer_passageiros`) | `Transfer` |
+| Ponto de coleta → Transfer | `@ManyToOne` | `PontoColeta` |
+| Parada → OS | `@ManyToOne` | `ParadaOs` |
+| Parada ↔ Transfer | `@ManyToMany` (`parada_os_transfers`) | `ParadaOs` |
+| Motorista/Veículo/OS → coleções | `@OneToMany` (lado inverso) | entidades |
 
 ---
 
 ## Repositórios relacionados
 
-- **Frontend** (Angular + Tailwind): `AJT-Frontend` (link a definir)
+- **Frontend** (Angular 18 + Tailwind): `AJT-Frontend`
 - **Sistema legado** (Java Swing): `SOSViale---Sistema-Receptivo`
 
 ---
 
 ## Status
 
-🚧 **Em desenvolvimento** — reescrita do sistema receptivo original para arquitetura web.
+Entrega final da disciplina de Back-end (Spring Boot). Decisões de arquitetura e o "porquê" de cada uma ficam na branch `documentacao` (`docs/adr`).
+
+**Limitações conhecidas:** o backend apenas *sinaliza* `trocarSenha: true` (quem força a tela de troca é o front); o contador de tentativas de login fica em memória (com várias instâncias, migrar para Redis).
