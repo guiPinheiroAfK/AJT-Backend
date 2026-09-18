@@ -80,3 +80,8 @@ não milhares), então paginar ali seria complexidade sem benefício real.
   `paginacaoTemPadraoETamanhoMaximo`, e contra banco real
   `api/src/test/java/com/AJTBackend/integracao/PersistenciaIntegrationTest.java`,
   métodos `paginacaoRealComTotais` e `ordenarPorCampoInexistenteRetorna400`
+
+## Atualizações posteriores
+
+- **2026-09-18 — [ADR-0011](0011-auditoria-de-escritas.md):** `GET /api/auditoria` também devolve
+  `PaginaResponseDTO`, com ordenação padrão `dataHora` decrescente (a trilha mais recente primeiro).
