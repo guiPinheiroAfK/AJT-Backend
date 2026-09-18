@@ -1,7 +1,7 @@
 package com.AJTBackend.model;
 
-import jakarta.persistence.*;
 import com.AJTBackend.model.enums.StatusOrdemServico;
+import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
@@ -40,4 +40,8 @@ public class OrdemServico {
     @OneToMany(mappedBy = "ordemServico", fetch = FetchType.LAZY)
     @Builder.Default
     private List<ParadaOs> paradas = new ArrayList<>();
+
+    @OneToMany(mappedBy = "ordemServico", fetch = FetchType.LAZY)
+    @Builder.Default
+    private List<Transfer> transfers = new ArrayList<>();
 }

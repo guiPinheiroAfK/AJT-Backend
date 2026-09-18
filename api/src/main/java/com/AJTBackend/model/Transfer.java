@@ -1,14 +1,16 @@
 package com.AJTBackend.model;
 
-import jakarta.persistence.*;
 import com.AJTBackend.model.enums.StatusTransfer;
+import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "transfers")
@@ -49,8 +51,20 @@ public class Transfer {
     @Column(name = "moeda_origem", length = 10)
     private String moedaOrigem;
 
-    @Column(name = "os_id")
-    private Long osId;
+    // ordem de servico que agrupa este transfer (null enquanto aguarda OS)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "os_id")
+    private OrdemServico ordemServico;
+
+    // passageiros deste transfer (tabela de juncao transfer_passageiros)
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "transfer_passageiros",
+            joinColumns = @JoinColumn(name = "transfer_id"),
+            inverseJoinColumns = @JoinColumn(name = "passageiro_id")
+    )
+    @Builder.Default
+    private Set<Passageiro> passageiros = new HashSet<>();
 
     @OneToMany(mappedBy = "transfer", fetch = FetchType.LAZY)
     @Builder.Default
