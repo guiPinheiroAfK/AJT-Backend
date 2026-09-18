@@ -92,3 +92,15 @@ O login original tinha três problemas de segurança:
   `api/src/test/java/com/AJTBackend/service/LoginAttemptServiceTest.java`,
   `api/src/test/java/com/AJTBackend/config/JwtAuthenticationFilterTest.java` e,
   contra banco real, `api/src/test/java/com/AJTBackend/integracao/AutenticacaoIntegrationTest.java`
+
+## Atualizações posteriores
+
+- **2026-09-18 — [ADR-0013](0013-organizacao-do-codigo-e-tamanho-das-classes.md):** `AuthService.login`
+  **deixou de ser `@Transactional`**. O BCrypt (~100 ms) rodava dentro de uma transação e segurava uma
+  conexão do pool sem necessidade; agora só o `save` do `ultimoLogin` abre uma transação curta. O
+  comportamento (bloqueio, hash falso, mensagens) não mudou.
+- **Limitação conhecida (registrada de propósito):** o backend apenas **sinaliza** `trocarSenha: true`; ele
+  não bloqueia as demais rotas enquanto a senha não é trocada. Quem obriga a tela de troca é o front.
+  Bloquear no backend foi avaliado e adiado: em um banco novo o admin nasce com `trocarSenha = true`, e
+  bloquear tudo quebraria fluxos automatizados (coleção Postman, smoke test) que fazem login e usam a API.
+  Próximo passo natural: permitir apenas `/api/auth/**` enquanto `trocarSenha` for verdadeiro.

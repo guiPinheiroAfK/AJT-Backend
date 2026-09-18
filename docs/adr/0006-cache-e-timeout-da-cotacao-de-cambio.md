@@ -84,3 +84,12 @@ gravava o transfer no banco. Dois problemas:
   `api/src/test/java/com/AJTBackend/integracao/CotacaoIntegrationTest.java`
   (métodos `consultaApiExternaUmaVezEUsaCacheNasSeguintes` e
   `apiLentaRespeitaTimeoutERetorna502` provam o cache e o timeout de verdade)
+
+## Atualizações posteriores
+
+- **2026-09-18 — [ADR-0013](0013-organizacao-do-codigo-e-tamanho-das-classes.md):** a regra que decide o
+  `valorBase` (respeitar o informado, BRL, converter, devolver `null` se a API cair) foi **extraída** de
+  `TransferService` para `service/ValorTransferService`. O comportamento descrito nesta ADR (chamada fora
+  da transação, cache de 30 min, cadastro não trava) é o mesmo. Na seção "Onde encontrar no código", leia
+  `ValorTransferService.calcularValorBase` onde se lê o cálculo dentro de `TransferService`; este último
+  agora só orquestra (calcula antes, grava dentro do `TransactionTemplate`). Testes: `ValorTransferServiceTest`.

@@ -72,3 +72,16 @@ campo (regra de negócio no service).
 - Teste da matriz inteira: `api/src/test/java/com/AJTBackend/web/AutorizacaoWebTest.java`,
   método `matrizDePermissoes`
 - Teste da restrição de campo do motorista: `api/src/test/java/com/AJTBackend/service/ParadaOsServiceTest.java`
+
+## Atualizações posteriores
+
+Registro append-only: a decisão original acima continua valendo; abaixo, o que a estendeu depois.
+
+- **2026-09-18 — [ADR-0011](0011-auditoria-de-escritas.md):** novo recurso `/api/auditoria`, somente leitura,
+  permitido **apenas a ADMIN e GERENTE**. A regra `/api/auditoria/**` fica antes da regra genérica de GET
+  (a primeira que casa vale). Linha nova da matriz: `auditoria | ADMIN, GERENTE | — | —`.
+- **2026-09-18 — [ADR-0013](0013-organizacao-do-codigo-e-tamanho-das-classes.md):** a regra de campo do
+  MOTORISTA (`ParadaOsService.validarAlteracaoPorMotorista`) agora pergunta a `UsuarioLogado.temPerfil(...)`
+  em vez de ler o `SecurityContextHolder` diretamente. Comportamento idêntico.
+- `GET /api/transfers/{id}/passageiros` ([ADR-0010](0010-passageiros-no-transfer-e-os-como-relacionamento.md))
+  é leitura e segue a regra geral de GET (qualquer perfil autenticado).
