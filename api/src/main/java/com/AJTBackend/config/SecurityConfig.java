@@ -31,6 +31,7 @@ import java.util.List;
  * |                                            |               |   no PATCH, so statusParada)  |                 |
  * | passageiros, transfers, pontos-coleta      | todos         | ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
  * | auditoria (so leitura)                     | ADMIN, GERENTE| -                             | -               |
+ * | painel/resumo (faturamento so ADMIN/GERENTE)| todos        | -                             | -               |
  * | cotacao, auth/me, auth/senha               | todos         | todos                         | -               |
  */
 @Configuration
