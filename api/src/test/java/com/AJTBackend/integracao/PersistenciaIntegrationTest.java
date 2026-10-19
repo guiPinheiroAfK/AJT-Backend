@@ -60,9 +60,13 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
         String noBanco = jdbcTemplate.queryForObject("SELECT documento FROM passageiros WHERE id = ?", String.class, id);
         assertThat(noBanco).startsWith("v1:").doesNotContain("XP9988776");
 
-        mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.MOTORISTA)))
+        mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.ATENDENTE)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.documento").value("XP9988776"));
+
+        // motorista nao le o cadastro de passageiros (LGPD)
+        mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.MOTORISTA)))
+                .andExpect(status().isForbidden());
     }
 
     @Test

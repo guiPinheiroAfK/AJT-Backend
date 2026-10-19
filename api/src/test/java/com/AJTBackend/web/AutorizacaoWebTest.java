@@ -100,6 +100,9 @@ class AutorizacaoWebTest extends WebTestBase {
             "ATENDENTE, POST,   /api/transfers,         201",
             "MOTORISTA, POST,   /api/transfers,         403",
             "MOTORISTA, PATCH,  /api/passageiros/1,     403",
+            "MOTORISTA, GET,    /api/passageiros,       403",
+            "MOTORISTA, GET,    /api/passageiros/1,     403",
+            "ATENDENTE, GET,    /api/passageiros,       200",
 
             // paradas: MOTORISTA so PATCH (campos restritos no service)
             "MOTORISTA, PATCH,  /api/paradas-os/1,      200",
