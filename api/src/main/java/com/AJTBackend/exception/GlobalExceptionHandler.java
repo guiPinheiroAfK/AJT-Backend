@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.data.mapping.PropertyReferenceException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -101,6 +102,20 @@ public class GlobalExceptionHandler {
     }
 
     // 400 - parâmetro de URL com tipo incompatível (ex: /api/motoristas/abc)
+    // 409 - edicao simultanea (RNF008): o cliente mandou uma versao velha do registro
+    @ExceptionHandler(ConflitoDeVersaoException.class)
+    public ResponseEntity<ErroResponseDTO> handleConflitoDeVersao(ConflitoDeVersaoException ex) {
+        return resposta(HttpStatus.CONFLICT, "Conflito de edição", ex.getMessage(), null);
+    }
+
+    // 409 - duas transacoes salvaram o mesmo registro ao mesmo tempo; o @Version barrou a segunda
+    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
+    public ResponseEntity<ErroResponseDTO> handleLockOtimista(ObjectOptimisticLockingFailureException ex) {
+        log.info("Conflito de versao: {}", ex.getMessage());
+        return resposta(HttpStatus.CONFLICT, "Conflito de edição",
+                "O registro foi alterado por outro usuário ao mesmo tempo. Recarregue os dados e tente de novo.", null);
+    }
+
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErroResponseDTO> handleTipoInvalido(MethodArgumentTypeMismatchException ex) {
         return resposta(HttpStatus.BAD_REQUEST, "Parâmetro inválido",
