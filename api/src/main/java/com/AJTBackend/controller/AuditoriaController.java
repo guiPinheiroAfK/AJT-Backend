@@ -25,12 +25,14 @@ public class AuditoriaController {
     private final AuditoriaService auditoriaService;
 
     @Operation(summary = "Lista a trilha de auditoria (paginado, mais recente primeiro)",
-            description = "Filtre por recurso com ?tabela=transfers ou ?tabela=ordens_servico.")
-    // ?tabela=transfers filtra por recurso; sem filtro devolve tudo, do mais recente pro mais antigo
+            description = "Filtre por recurso com ?tabela=transfers ou ?tabela=ordens_servico. "
+                    + "Com ?tabela=transfers&registroId=7 devolve o histórico de um transfer só.")
+    // ?tabela=transfers filtra por recurso; + registroId filtra um registro; sem filtro devolve tudo, do mais recente pro mais antigo
     @GetMapping
     public ResponseEntity<PaginaResponseDTO<AuditoriaResponseDTO>> listar(
             @RequestParam(required = false) String tabela,
+            @RequestParam(required = false) Long registroId,
             @ParameterObject @PageableDefault(size = 20, sort = "dataHora", direction = Sort.Direction.DESC) Pageable pageable) {
-        return ResponseEntity.ok(auditoriaService.listar(tabela, pageable));
+        return ResponseEntity.ok(auditoriaService.listar(tabela, registroId, pageable));
     }
 }

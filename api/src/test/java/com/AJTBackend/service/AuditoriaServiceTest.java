@@ -14,6 +14,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,7 +30,8 @@ import static org.mockito.Mockito.when;
  * id do registro, mensagem com o usuario logado e a data, cai em "sistema"
  * quando nao ha usuario autenticado, e escolhe a consulta certa ao listar
  * (com ou sem filtro por tabela), alem da mensagem de mudanca de status
- * ("status A -> B") usada por transfers e ordens de servico.
+ * ("status A -> B") usada por transfers e ordens de servico e a de mudanca
+ * de valor ("valor X -> Y", RF014), e o filtro pelo historico de um registro.
  *
  * como rodar: teste unitario com o repositorio mockado. o usuario logado e
  * simulado no SecurityContextHolder. sem spring, sem banco, sem docker.
@@ -96,13 +98,58 @@ class AuditoriaServiceTest {
     }
 
     @Test
+    void atualizacaoComMudancaDeValorDizDeQualParaQual() {
+        service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
+                StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO,
+                new BigDecimal("150.00"), new BigDecimal("180.5"));
+
+        ArgumentCaptor<LogAuditoria> captor = ArgumentCaptor.forClass(LogAuditoria.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getMensagem())
+                .isEqualTo("Transfer atualizado: valor 150.00 -> 180.50 (por sistema)");
+    }
+
+    @Test
+    void atualizacaoComStatusEValorMencionaOsDois() {
+        service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
+                StatusTransfer.AGUARDANDO_OS, StatusTransfer.CONFIRMADO, null, new BigDecimal("90"));
+
+        ArgumentCaptor<LogAuditoria> captor = ArgumentCaptor.forClass(LogAuditoria.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getMensagem())
+                .isEqualTo("Transfer atualizado: status AGUARDANDO_OS -> CONFIRMADO; valor sem valor -> 90.00 (por sistema)");
+    }
+
+    @Test
+    void mesmoValorComEscalaDiferenteNaoContaComoMudanca() {
+        service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
+                StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO,
+                new BigDecimal("150.0"), new BigDecimal("150.00"));
+
+        ArgumentCaptor<LogAuditoria> captor = ArgumentCaptor.forClass(LogAuditoria.class);
+        verify(repository).save(captor.capture());
+        assertThat(captor.getValue().getMensagem()).isEqualTo("Transfer atualizado (por sistema)");
+    }
+
+    @Test
+    void listaComTabelaERegistroIdDevolveOHistoricoDeUmRegistro() {
+        var pageable = PageRequest.of(0, 10);
+        when(repository.findByTabelaAfetadaAndRegistroId(eq("transfers"), eq(7L), any()))
+                .thenReturn(new PageImpl<>(List.of(), pageable, 0));
+
+        service.listar("transfers", 7L, pageable);
+
+        verify(repository).findByTabelaAfetadaAndRegistroId("transfers", 7L, pageable);
+    }
+
+    @Test
     void listaComFiltroDeTabelaUsaAConsultaFiltrada() {
         var pageable = PageRequest.of(0, 10);
         LogAuditoria log = LogAuditoria.builder().id(1L).tabelaAfetada("transfers").registroId(7L)
                 .mensagem("x").dataHora(LocalDateTime.now()).build();
         when(repository.findByTabelaAfetada(eq("transfers"), any())).thenReturn(new PageImpl<>(List.of(log), pageable, 1));
 
-        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("transfers", pageable);
+        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("transfers", null, pageable);
 
         assertThat(pagina.conteudo()).hasSize(1);
         assertThat(pagina.conteudo().get(0).registroId()).isEqualTo(7L);
@@ -114,7 +161,7 @@ class AuditoriaServiceTest {
         var pageable = PageRequest.of(0, 10);
         when(repository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(), pageable, 0));
 
-        assertThat(service.listar(null, pageable).conteudo()).isEmpty();
-        assertThat(service.listar("  ", pageable).conteudo()).isEmpty();
+        assertThat(service.listar(null, null, pageable).conteudo()).isEmpty();
+        assertThat(service.listar("  ", 7L, pageable).conteudo()).isEmpty();
     }
 }
