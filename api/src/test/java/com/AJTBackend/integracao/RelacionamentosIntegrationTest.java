@@ -84,7 +84,11 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
                 .andExpect(jsonPath("$", hasSize(2)))
                 .andExpect(jsonPath("$[0].nome").value("Ana"))   // ordenado por nome
                 .andExpect(jsonPath("$[1].nome").value("Bia"))
-                .andExpect(jsonPath("$[0].documento").value("AA111")); // volta decifrado
+                .andExpect(jsonPath("$[0].documento").value("***11")); // motorista ve so o final
+
+        mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
+                        .header("Authorization", bearer(Role.ATENDENTE)))
+                .andExpect(jsonPath("$[0].documento").value("AA111")); // atendente ve decifrado
     }
 
     @Test
@@ -136,10 +140,48 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         long transferId = criarTransfer(",\"osId\":" + osId);
 
         mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(jsonPath("$.osId").value(osId));
+                .andExpect(jsonPath("$.osId").value(osId))
+                .andExpect(jsonPath("$.status").value("CONFIRMADO")); // com OS nao fica "aguardando OS"
 
         Long fk = jdbcTemplate.queryForObject("SELECT os_id FROM transfers WHERE id = ?", Long.class, transferId);
         assertThat(fk).isEqualTo(osId);
+
+        // com transfer dentro, a OS nao muda de dia (os dois sairiam de sincronia)
+        mockMvc.perform(patch("/api/ordens-servico/" + osId).header("Authorization", bearer(Role.GERENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-26\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem", containsString("Desvincule")));
+    }
+
+    @Test
+    void transferNaoEntraEmOsDeOutroDiaNemEmOsCancelada() throws Exception {
+        String os = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-26\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long osOutroDia = objectMapper.readTree(os).get("id").asLong();
+        long transferId = criarTransfer(""); // dia 25
+
+        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"osId\":" + osOutroDia + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem", containsString("mesmo dia")));
+
+        String cancelada = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dataServico\":\"2026-09-25\",\"status\":\"CANCELADA\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long osCancelada = objectMapper.readTree(cancelada).get("id").asLong();
+
+        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"osId\":" + osCancelada + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem", containsString("CANCELADA")));
+
+        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
+                .andExpect(jsonPath("$.osId").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.status").value("AGUARDANDO_OS"));
     }
 
     @Test

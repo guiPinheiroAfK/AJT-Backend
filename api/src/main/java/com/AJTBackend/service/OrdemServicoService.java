@@ -6,6 +6,7 @@ import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
+import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.exception.VeiculoNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.OrdemServico;
@@ -20,6 +21,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
 
 
 @Service
@@ -70,6 +73,7 @@ public class OrdemServicoService {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
         conferirVersao(ordemServico, dto.versao());
+        conferirMudancaDeData(ordemServico, dto.dataServico());
 
         ordemServico.setDataServico(dto.dataServico());
         ordemServico.setMotorista(buscarMotorista(dto.motoristaId()));
@@ -89,6 +93,7 @@ public class OrdemServicoService {
         conferirVersao(ordemServico, dto.versao());
 
         if (dto.dataServico() != null) {
+            conferirMudancaDeData(ordemServico, dto.dataServico());
             ordemServico.setDataServico(dto.dataServico());
         }
         if (dto.motoristaId() != null) {
@@ -121,6 +126,14 @@ public class OrdemServicoService {
     private static void conferirVersao(OrdemServico ordemServico, Long versaoDoCliente) {
         if (versaoDoCliente != null && !versaoDoCliente.equals(ordemServico.getVersao())) {
             throw new ConflitoDeVersaoException("Ordem de serviço", ordemServico.getId());
+        }
+    }
+
+    // a OS agrupa os transfers de um dia (RF009): com transfers dentro, mudar a data deixaria os dois fora de sincronia
+    private static void conferirMudancaDeData(OrdemServico ordemServico, LocalDate novaData) {
+        if (novaData != null && !novaData.equals(ordemServico.getDataServico()) && !ordemServico.getTransfers().isEmpty()) {
+            throw new RegraNegocioException("A ordem de serviço #" + ordemServico.getId() + " tem "
+                    + ordemServico.getTransfers().size() + " transfer(s) do dia dela. Desvincule-os antes de mudar a data.");
         }
     }
 
