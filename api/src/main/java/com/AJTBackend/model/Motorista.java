@@ -19,6 +19,10 @@ public class Motorista {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // lock otimista (RNF008, V9): o UPDATE so passa se ninguem salvou o registro antes
+    @Version
+    private Long versao;
+
     @Column(nullable = false, length = 100)
     private String nome;
 

@@ -22,6 +22,10 @@ public class ParadaOs {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // lock otimista (RNF008, V9): o UPDATE so passa se ninguem salvou o registro antes
+    @Version
+    private Long versao;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "os_id", nullable = false)
     private OrdemServico ordemServico;
