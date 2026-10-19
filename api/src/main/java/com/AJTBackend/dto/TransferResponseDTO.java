@@ -18,5 +18,6 @@ public record TransferResponseDTO(
         BigDecimal valorOriginal,
         String moedaOrigem,
         Long osId,
-        Set<Long> passageiroIds
+        Set<Long> passageiroIds,
+        Long versao
 ) {}

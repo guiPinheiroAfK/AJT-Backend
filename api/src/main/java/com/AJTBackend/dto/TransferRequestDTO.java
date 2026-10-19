@@ -58,5 +58,10 @@ public record TransferRequestDTO(
         // ids dos passageiros do transfer; ausente = nao altera (PUT/PATCH), [] = remove todos
         @Size(max = 50, message = "Um transfer pode ter no máximo 50 passageiros", groups = {Default.class, OnPatch.class})
         @Schema(example = "[1, 2]")
-        Set<Long> passageiroIds
+        Set<Long> passageiroIds,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409.
+        // opcional: sem ela o lock otimista ainda barra duas gravacoes simultaneas
+        @Schema(example = "3")
+        Long versao
 ) {}
