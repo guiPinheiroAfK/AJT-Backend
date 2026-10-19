@@ -3,6 +3,7 @@ package com.AJTBackend.service;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.TransferRequestDTO;
 import com.AJTBackend.dto.TransferResponseDTO;
+import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.TransferNaoEncontradoException;
@@ -99,7 +100,9 @@ public class TransferService {
         return transactionTemplate.execute(tx -> {
             Transfer transfer = transferRepository.findById(id)
                     .orElseThrow(() -> new TransferNaoEncontradoException(id));
+            conferirVersao(transfer, dto.versao());
             StatusTransfer statusAnterior = transfer.getStatus();
+            BigDecimal valorAnterior = transfer.getValorBase();
 
             transfer.setDataTransfer(dto.dataTransfer());
             transfer.setHoraTransfer(dto.horaTransfer());
@@ -115,7 +118,9 @@ public class TransferService {
                 transfer.setPassageiros(buscarPassageiros(dto.passageiroIds()));
             }
 
-            auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado", statusAnterior, transfer.getStatus());
+            auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado",
+                    statusAnterior, transfer.getStatus(), valorAnterior, transfer.getValorBase());
+            transferRepository.flush(); // grava agora pra resposta ja levar a versao nova
             return toResponseDTO(transfer);
         });
     }
@@ -138,7 +143,9 @@ public class TransferService {
         return transactionTemplate.execute(tx -> {
             Transfer transfer = transferRepository.findById(id)
                     .orElseThrow(() -> new TransferNaoEncontradoException(id));
+            conferirVersao(transfer, dto.versao());
             StatusTransfer statusAnterior = transfer.getStatus();
+            BigDecimal valorAnterior = transfer.getValorBase();
 
             if (dto.dataTransfer() != null) {
                 transfer.setDataTransfer(dto.dataTransfer());
@@ -171,7 +178,9 @@ public class TransferService {
                 transfer.setPassageiros(buscarPassageiros(dto.passageiroIds()));
             }
 
-            auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado", statusAnterior, transfer.getStatus());
+            auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado",
+                    statusAnterior, transfer.getStatus(), valorAnterior, transfer.getValorBase());
+            transferRepository.flush(); // grava agora pra resposta ja levar a versao nova
             return toResponseDTO(transfer);
         });
     }
@@ -184,6 +193,13 @@ public class TransferService {
         transferRepository.deleteById(id);
         auditoriaService.registrar(TABELA, id, "Transfer removido");
         log.info("Transfer removido: id={}", id);
+    }
+
+    // RNF008: o cliente editou em cima de uma versao velha (outra pessoa salvou no meio tempo)
+    private static void conferirVersao(Transfer transfer, Long versaoDoCliente) {
+        if (versaoDoCliente != null && !versaoDoCliente.equals(transfer.getVersao())) {
+            throw new ConflitoDeVersaoException("Transfer", transfer.getId());
+        }
     }
 
     // sem osId o transfer fica "aguardando OS"; com osId, a OS precisa existir
@@ -221,7 +237,8 @@ public class TransferService {
                 transfer.getValorOriginal(),
                 transfer.getMoedaOrigem(),
                 transfer.getOrdemServico() != null ? transfer.getOrdemServico().getId() : null,
-                transfer.getPassageiros().stream().map(Passageiro::getId).collect(Collectors.toSet())
+                transfer.getPassageiros().stream().map(Passageiro::getId).collect(Collectors.toSet()),
+                transfer.getVersao()
         );
     }
 }
