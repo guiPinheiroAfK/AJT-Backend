@@ -6,7 +6,9 @@ import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.validacao.OnPatch;
 import com.AJTBackend.model.enums.StatusOrdemServico;
 import com.AJTBackend.service.OrdemServicoService;
+import com.AJTBackend.service.RelatorioOrdemServicoService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -15,7 +17,10 @@ import lombok.RequiredArgsConstructor;
 import org.springdoc.core.annotations.ParameterObject;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ContentDisposition;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +32,7 @@ import org.springframework.web.bind.annotation.*;
 public class OrdemServicoController {
 
     private final OrdemServicoService ordemServicoService;
+    private final RelatorioOrdemServicoService relatorioOrdemServicoService;
 
     @Operation(summary = "Lista ordens de serviço (paginado)")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida")})
@@ -48,6 +54,20 @@ public class OrdemServicoController {
     public ResponseEntity<PaginaResponseDTO<OrdemServicoResponseDTO>> buscarPorStatus(@RequestParam StatusOrdemServico status,
                                                                     @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
         return ResponseEntity.ok(ordemServicoService.buscarPorStatus(status, pageable));
+    }
+
+    @Operation(summary = "Relatório em PDF da ordem de serviço (para imprimir e entregar ao motorista)",
+            description = "Traz motorista, veículo, roteiro de paradas e transfers com passageiros. Não traz valores nem documentos.")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "PDF gerado", content = @Content(mediaType = "application/pdf")), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @GetMapping(value = "/{id}/pdf", produces = MediaType.APPLICATION_PDF_VALUE)
+    public ResponseEntity<byte[]> relatorioPdf(@PathVariable Long id) {
+        byte[] pdf = relatorioOrdemServicoService.gerar(id);
+        return ResponseEntity.ok()
+                .contentType(MediaType.APPLICATION_PDF)
+                // inline: o navegador abre o PDF numa aba (dali da pra imprimir ou baixar)
+                .header(HttpHeaders.CONTENT_DISPOSITION,
+                        ContentDisposition.inline().filename("ordem-servico-" + id + ".pdf").build().toString())
+                .body(pdf);
     }
 
     @Operation(summary = "Cria ordem de serviço")
