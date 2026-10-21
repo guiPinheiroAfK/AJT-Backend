@@ -5,5 +5,6 @@ public record PassageiroResponseDTO(
         String nome,
         String tipoDocumento,
         String documento,
-        String nacionalidade
+        String nacionalidade,
+        Long versao
 ) {}

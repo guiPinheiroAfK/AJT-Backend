@@ -77,6 +77,7 @@ public class PassageiroService {
     public PassageiroResponseDTO atualizar(Long id, PassageiroRequestDTO dto) {
         Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
+        Versoes.conferir(passageiro.getVersao(), dto.versao(), "Passageiro", id);
 
         validarDocumento(dto.tipoDocumento(), dto.documento());
         passageiro.setNome(dto.nome());
@@ -84,6 +85,7 @@ public class PassageiroService {
         passageiro.setDocumento(dto.documento());
         passageiro.setNacionalidade(dto.nacionalidade());
 
+        passageiroRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(passageiro);
     }
 
@@ -91,6 +93,7 @@ public class PassageiroService {
     public PassageiroResponseDTO atualizarParcial(Long id, PassageiroRequestDTO dto) {
         Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
+        Versoes.conferir(passageiro.getVersao(), dto.versao(), "Passageiro", id);
 
         if (dto.nome() != null) {
             passageiro.setNome(dto.nome());
@@ -109,6 +112,7 @@ public class PassageiroService {
             validarDocumento(passageiro.getTipoDocumento(), passageiro.getDocumento());
         }
 
+        passageiroRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(passageiro);
     }
 
@@ -129,7 +133,8 @@ public class PassageiroService {
                 p.getNome(),
                 p.getTipoDocumento(),
                 documento,
-                p.getNacionalidade()
+                p.getNacionalidade(),
+                p.getVersao()
         );
     }
 

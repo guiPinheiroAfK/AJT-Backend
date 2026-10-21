@@ -64,7 +64,7 @@ class PassageiroServiceTest {
 
     @Test
     void cadastroComCpfInvalidoRetorna400SemGravar() {
-        PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", "123", "Brasileira");
+        PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", "123", "Brasileira", null);
 
         assertThatThrownBy(() -> service.criar(dto))
                 .isInstanceOf(RegraNegocioException.class)
@@ -74,7 +74,7 @@ class PassageiroServiceTest {
 
     @Test
     void passaporteNaoPassaPelaRegraDoCpf() {
-        PassageiroRequestDTO dto = new PassageiroRequestDTO("John", "PASSAPORTE", "XP9988776", "Americana");
+        PassageiroRequestDTO dto = new PassageiroRequestDTO("John", "PASSAPORTE", "XP9988776", "Americana", null);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
         assertThat(service.criar(dto).documento()).isEqualTo("XP9988776");
@@ -85,7 +85,7 @@ class PassageiroServiceTest {
         Passageiro existente = Passageiro.builder().id(1L).nome("Ana").tipoDocumento("RG").documento("123").build();
         when(repository.findById(1L)).thenReturn(Optional.of(existente));
 
-        assertThatThrownBy(() -> service.atualizarParcial(1L, new PassageiroRequestDTO(null, "CPF", null, null)))
+        assertThatThrownBy(() -> service.atualizarParcial(1L, new PassageiroRequestDTO(null, "CPF", null, null, null)))
                 .isInstanceOf(RegraNegocioException.class);
     }
 
