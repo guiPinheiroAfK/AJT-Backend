@@ -1,5 +1,6 @@
 package com.AJTBackend.controller;
 
+import com.AJTBackend.dto.FiltroTransferDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
 import com.AJTBackend.dto.TransferRequestDTO;
@@ -33,11 +34,14 @@ public class TransferController {
     private final TransferService transferService;
     private final PassageiroService passageiroService;
 
-    @Operation(summary = "Lista transfers (paginado)")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida")})
+    @Operation(summary = "Lista transfers (paginado, com filtros opcionais)",
+            description = "Filtros somados (E): ?status=, ?dataInicio= e ?dataFim= (AAAA-MM-DD), ?busca= (parte da origem ou do destino), "
+                    + "?osId= e ?semOs=true. Sem filtro, lista todos.")
+    @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida"), @ApiResponse(responseCode = "400", description = "Período inválido (início depois do fim)")})
     @GetMapping
-    public ResponseEntity<PaginaResponseDTO<TransferResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(transferService.listarTodos(pageable));
+    public ResponseEntity<PaginaResponseDTO<TransferResponseDTO>> listar(@ParameterObject FiltroTransferDTO filtro,
+                                                                         @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(transferService.listar(filtro, pageable));
     }
 
     @Operation(summary = "Busca transfer por ID")

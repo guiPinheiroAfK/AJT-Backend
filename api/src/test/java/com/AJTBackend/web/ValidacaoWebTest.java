@@ -150,7 +150,7 @@ class ValidacaoWebTest extends WebTestBase {
                         .with(user("t").roles("ADMIN")))
                 .andExpect(status().isOk());
 
-        verify(transferService, org.mockito.Mockito.times(2)).listarTodos(captor.capture());
+        verify(transferService, org.mockito.Mockito.times(2)).listar(org.mockito.ArgumentMatchers.any(), captor.capture());
         Pageable padrao = captor.getAllValues().get(0);
         Pageable grande = captor.getAllValues().get(1);
 
