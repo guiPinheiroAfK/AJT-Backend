@@ -101,7 +101,6 @@ public class GlobalExceptionHandler {
                 "Não foi possível concluir a operação: o registro está em uso ou viola uma restrição do banco", null);
     }
 
-    // 400 - parâmetro de URL com tipo incompatível (ex: /api/motoristas/abc)
     // 409 - edicao simultanea (RNF008): o cliente mandou uma versao velha do registro
     @ExceptionHandler(ConflitoDeVersaoException.class)
     public ResponseEntity<ErroResponseDTO> handleConflitoDeVersao(ConflitoDeVersaoException ex) {
@@ -116,6 +115,7 @@ public class GlobalExceptionHandler {
                 "O registro foi alterado por outro usuário ao mesmo tempo. Recarregue os dados e tente de novo.", null);
     }
 
+    // 400 - parâmetro de URL com tipo incompatível (ex: /api/motoristas/abc)
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErroResponseDTO> handleTipoInvalido(MethodArgumentTypeMismatchException ex) {
         return resposta(HttpStatus.BAD_REQUEST, "Parâmetro inválido",
