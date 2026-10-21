@@ -94,6 +94,7 @@ public class ParadaOsService {
     public ParadaOsResponseDTO atualizar(Long id, ParadaOsRequestDTO dto) {
         ParadaOs paradaOs = paradaOsRepository.findById(id)
                 .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
+        Versoes.conferir(paradaOs.getVersao(), dto.versao(), "Parada", id);
 
         paradaOs.setOrdemServico(buscarOrdemServico(dto.osId()));
         paradaOs.setOrdemParada(dto.ordemParada());
@@ -105,6 +106,7 @@ public class ParadaOsService {
         paradaOs.setStatusParada(dto.statusParada() != null ? dto.statusParada() : STATUS_PADRAO);
         paradaOs.setTransfers(buscarTransfers(dto.transferIds()));
 
+        paradaOsRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(paradaOs);
     }
 
@@ -113,6 +115,7 @@ public class ParadaOsService {
         validarAlteracaoPorMotorista(dto);
 
         ParadaOs paradaOs = buscarVisivel(id);
+        Versoes.conferir(paradaOs.getVersao(), dto.versao(), "Parada", id);
 
         if (dto.osId() != null) {
             paradaOs.setOrdemServico(buscarOrdemServico(dto.osId()));
@@ -142,6 +145,7 @@ public class ParadaOsService {
             paradaOs.setTransfers(buscarTransfers(dto.transferIds()));
         }
 
+        paradaOsRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(paradaOs);
     }
 
@@ -216,7 +220,8 @@ public class ParadaOsService {
                 paradaOs.getHorarioPrevisto(),
                 paradaOs.getAcao(),
                 paradaOs.getStatusParada(),
-                transferIds
+                transferIds,
+                paradaOs.getVersao()
         );
     }
 }

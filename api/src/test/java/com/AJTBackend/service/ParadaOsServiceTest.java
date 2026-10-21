@@ -132,7 +132,7 @@ class ParadaOsServiceTest {
     }
 
     private static ParadaOsRequestDTO patch(String local, StatusParada status, Set<Long> transferIds) {
-        return new ParadaOsRequestDTO(null, null, local, null, null, null, null, status, transferIds);
+        return new ParadaOsRequestDTO(null, null, local, null, null, null, null, status, transferIds, null);
     }
 
     private static ParadaOs parada() {
