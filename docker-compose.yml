@@ -37,5 +37,19 @@ services:
       AJT_CORS_ORIGINS: ${AJT_CORS_ORIGINS:-http://localhost:4200}
       AJT_PROFILE: ${AJT_PROFILE:-dev}
 
+  # front (Angular servido por nginx). O nginx repassa /api pro servico "app", entao
+  # navegador, front e API ficam na mesma origem (sem CORS). Precisa do repositorio
+  # AJT-Frontend clonado ao lado deste (ou AJT_FRONT_DIR apontando pra ele).
+  front:
+    build:
+      context: ${AJT_FRONT_DIR:-../AJT-Frontend}
+    container_name: ajt-frontend
+    depends_on:
+      - app
+    ports:
+      - "${AJT_FRONT_PORT:-8081}:80"
+    environment:
+      AJT_API_UPSTREAM: http://app:8080
+
 volumes:
   ajt_data:
