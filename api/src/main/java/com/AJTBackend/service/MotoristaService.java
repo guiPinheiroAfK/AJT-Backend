@@ -72,6 +72,7 @@ public class MotoristaService {
     public MotoristaResponseDTO atualizar(Long id, MotoristaRequestDTO dto) {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
+        Versoes.conferir(motorista.getVersao(), dto.versao(), "Motorista", id);
 
         if (!dto.cnh().equals(motorista.getCnh()) && motoristaRepository.existsByCnh(dto.cnh())) {
             throw new CnhJaCadastradaException(dto.cnh());
@@ -83,6 +84,7 @@ public class MotoristaService {
         motorista.setLatitudeAtual(dto.latitudeAtual());
         motorista.setLongitudeAtual(dto.longitudeAtual());
 
+        motoristaRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(motorista);
     }
 
@@ -90,6 +92,7 @@ public class MotoristaService {
     public MotoristaResponseDTO atualizarParcial(Long id, MotoristaRequestDTO dto) {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
+        Versoes.conferir(motorista.getVersao(), dto.versao(), "Motorista", id);
 
         if (dto.nome() != null) {
             motorista.setNome(dto.nome());
@@ -110,6 +113,7 @@ public class MotoristaService {
             motorista.setLongitudeAtual(dto.longitudeAtual());
         }
 
+        motoristaRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(motorista);
     }
 
@@ -129,7 +133,8 @@ public class MotoristaService {
                 motorista.getCnh(),
                 motorista.getTelefone(),
                 motorista.getLatitudeAtual(),
-                motorista.getLongitudeAtual()
+                motorista.getLongitudeAtual(),
+                motorista.getVersao()
         );
     }
 }

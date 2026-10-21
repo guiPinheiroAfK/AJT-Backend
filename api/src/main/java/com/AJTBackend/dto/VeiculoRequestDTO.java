@@ -33,5 +33,9 @@ public record VeiculoRequestDTO(
 
         @Size(max = 50, message = "Marca deve ter no máximo 50 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Mercedes-Benz")
-        String marca
+        String marca,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409
+        @Schema(example = "3")
+        Long versao
 ) {}

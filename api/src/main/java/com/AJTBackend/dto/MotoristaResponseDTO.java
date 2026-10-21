@@ -6,5 +6,6 @@ public record MotoristaResponseDTO(
         String cnh,
         String telefone,
         Double latitudeAtual,
-        Double longitudeAtual
+        Double longitudeAtual,
+        Long versao
 ) {}
