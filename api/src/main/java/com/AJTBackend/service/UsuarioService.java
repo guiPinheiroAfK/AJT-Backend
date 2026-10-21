@@ -80,6 +80,7 @@ public class UsuarioService {
     public UsuarioResponseDTO atualizar(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
+        Versoes.conferir(usuario.getVersao(), dto.versao(), "Usuário", id);
 
         validarUsernameDisponivel(usuario, dto.username());
         aplicarRole(usuario, dto.role());
@@ -92,6 +93,7 @@ public class UsuarioService {
         redefinirSenhaSeInformada(usuario, dto.senha());
         usuario.setMotorista(resolverMotorista(usuario.getRole(), dto.motoristaId(), usuario.getId()));
 
+        usuarioRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(usuario);
     }
 
@@ -99,6 +101,7 @@ public class UsuarioService {
     public UsuarioResponseDTO atualizarParcial(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
+        Versoes.conferir(usuario.getVersao(), dto.versao(), "Usuário", id);
 
         if (dto.nome() != null) {
             usuario.setNome(dto.nome());
@@ -120,6 +123,7 @@ public class UsuarioService {
             usuario.setMotorista(null); // deixou de ser motorista: o vinculo nao faz mais sentido
         }
 
+        usuarioRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(usuario);
     }
 
@@ -210,7 +214,8 @@ public class UsuarioService {
                 usuario.getTrocarSenha(),
                 usuario.getUltimoLogin(),
                 usuario.getCriadoEm(),
-                usuario.getMotorista() != null ? usuario.getMotorista().getId() : null
+                usuario.getMotorista() != null ? usuario.getMotorista().getId() : null,
+                usuario.getVersao()
         );
     }
 }

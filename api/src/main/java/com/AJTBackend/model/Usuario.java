@@ -3,6 +3,7 @@ package com.AJTBackend.model;
 import com.AJTBackend.model.enums.Role;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.OptimisticLock;
 
 import java.time.LocalDateTime;
 
@@ -49,6 +50,9 @@ public class Usuario {
     @Column(name = "senha_alterada_em")
     private LocalDateTime senhaAlteradaEm;
 
+    // gravado a cada login: nao conta como edicao do cadastro (senao o admin que estivesse
+    // editando o usuario levaria 409 so porque a pessoa entrou no sistema)
+    @OptimisticLock(excluded = true)
     @Column(name = "ultimo_login")
     private LocalDateTime ultimoLogin;
 

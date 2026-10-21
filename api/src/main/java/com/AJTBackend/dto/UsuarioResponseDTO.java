@@ -13,5 +13,6 @@ public record UsuarioResponseDTO(
         Boolean trocarSenha,
         LocalDateTime ultimoLogin,
         LocalDateTime criadoEm,
-        Long motoristaId
+        Long motoristaId,
+        Long versao
 ) {}
