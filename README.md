@@ -58,7 +58,7 @@ AJT-Backend/
 │   └── pom.xml
 ├── scripts/smoke-test.sh    # dispara todas as requisições da API e confere os status
 ├── postman/                 # coleção Postman/Insomnia pronta para a demonstração
-├── docker-compose.yml       # PostgreSQL + API
+├── docker-compose.yml       # PostgreSQL + API + front (nginx)
 └── .env.example
 ```
 
@@ -96,7 +96,7 @@ Opcionais: `AJT_PROFILE` (`dev` liga Swagger e SQL no log; use `prod` em produç
 ### 2. Banco de dados
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 As migrações Flyway rodam automaticamente na subida da aplicação.
@@ -120,7 +120,23 @@ Get-Content .env | ForEach-Object { if ($_ -match '^([A-Z_]+)=(.*)$') { [Environ
 cd api; mvn spring-boot:run
 ```
 
-A API sobe por padrão em `http://localhost:8080`. Para subir **tudo em containers** (banco + API): `docker compose up -d --build` (API em `http://localhost:9090`).
+A API sobe por padrão em `http://localhost:8080`.
+
+### Tudo em containers (banco + API + front)
+
+Com o repositório **AJT-Frontend** clonado ao lado deste (`../AJT-Frontend`; outro caminho: `AJT_FRONT_DIR` no `.env`):
+
+```bash
+docker compose up -d --build
+```
+
+| Serviço | Endereço |
+|---|---|
+| Front (nginx) | `http://localhost:8081` (`AJT_FRONT_PORT` muda a porta) |
+| API | `http://localhost:9090` |
+| PostgreSQL | `localhost:5454` (só na própria máquina) |
+
+O nginx do front repassa `/api` para a API dentro da rede do compose, então o navegador fala com uma origem só e o CORS não entra em jogo. Para subir só banco + API (sem o front): `docker compose up -d --build postgres app`.
 
 ### Documentação interativa (Swagger)
 
