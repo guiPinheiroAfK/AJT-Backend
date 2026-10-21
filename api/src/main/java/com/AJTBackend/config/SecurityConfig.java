@@ -29,10 +29,15 @@ import java.util.List;
  * | motoristas, veiculos, ordens-servico       | todos         | ADMIN, GERENTE                | ADMIN, GERENTE  |
  * | paradas-os                                 | todos         | ADMIN, GERENTE (+ MOTORISTA   | ADMIN, GERENTE  |
  * |                                            |               |   no PATCH, so statusParada)  |                 |
- * | passageiros, transfers, pontos-coleta      | todos         | ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
+ * | passageiros (ver nota abaixo)              | ADMIN, GERENTE| ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
+ * |                                            |   ATENDENTE   |                               |                 |
+ * | transfers, pontos-coleta                   | todos         | ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
  * | auditoria (so leitura)                     | ADMIN, GERENTE| -                             | -               |
- * | painel/resumo (faturamento so ADMIN/GERENTE)| todos        | -                             | -               |
+ * | painel/resumo (faturamento so ADMIN/GERENTE)| todos         | -                             | -               |
  * | cotacao, auth/me, auth/senha               | todos         | todos                         | -               |
+ *
+ * nota: o MOTORISTA ve os passageiros da OS por /api/transfers/{id}/passageiros, com o
+ * documento mascarado (PassageiroService), nunca o cadastro completo.
  */
 @Configuration
 @EnableWebSecurity
@@ -72,6 +77,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/usuarios/**").hasRole(ADMIN)
                         .requestMatchers("/api/auditoria/**").hasAnyRole(ADMIN, GERENTE)
                         .requestMatchers(HttpMethod.DELETE, "/api/**").hasAnyRole(ADMIN, GERENTE)
+                        // cadastro de passageiros tem documento (LGPD): motorista nao lista. os passageiros
+                        // da OS dele chegam por /api/transfers/{id}/passageiros, com o documento mascarado
+                        .requestMatchers(HttpMethod.GET, "/api/passageiros/**").hasAnyRole(ADMIN, GERENTE, ATENDENTE)
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
 
                         .requestMatchers("/api/motoristas/**", "/api/veiculos/**", "/api/ordens-servico/**")

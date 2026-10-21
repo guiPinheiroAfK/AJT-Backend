@@ -6,10 +6,12 @@ import com.AJTBackend.dto.TransferResponseDTO;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
 import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
+import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.exception.TransferNaoEncontradoException;
 import com.AJTBackend.model.OrdemServico;
 import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.model.Transfer;
+import com.AJTBackend.model.enums.StatusOrdemServico;
 import com.AJTBackend.model.enums.StatusTransfer;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.PassageiroRepository;
@@ -206,11 +208,65 @@ class TransferServiceTest {
     }
 
     @Test
-    void vinculaOrdemDeServicoExistente() {
-        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.now()).build();
+    void vinculaOrdemDeServicoExistenteEConfirmaOTransfer() {
+        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.of(2026, 9, 20)).build();
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(os));
 
-        assertThat(service.criar(dto(null, null, null, 3L)).osId()).isEqualTo(3L);
+        TransferResponseDTO criado = service.criar(dto(null, null, null, 3L));
+
+        assertThat(criado.osId()).isEqualTo(3L);
+        assertThat(criado.status()).isEqualTo(StatusTransfer.CONFIRMADO); // com OS nao fica "aguardando OS"
+    }
+
+    @Test
+    void naoVinculaAOrdemDeServicoDeOutroDia() {
+        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.of(2026, 9, 21)).build();
+        when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(os));
+
+        assertThatThrownBy(() -> service.criar(dto(null, null, null, 3L)))
+                .isInstanceOf(RegraNegocioException.class)
+                .hasMessageContaining("20/09/2026")
+                .hasMessageContaining("21/09/2026");
+        verify(transferRepository, never()).save(any());
+    }
+
+    @Test
+    void naoVinculaAOrdemDeServicoCancelada() {
+        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.of(2026, 9, 20))
+                .status(StatusOrdemServico.CANCELADA).build();
+        when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(os));
+
+        assertThatThrownBy(() -> service.criar(dto(null, null, null, 3L)))
+                .isInstanceOf(RegraNegocioException.class)
+                .hasMessageContaining("CANCELADA");
+    }
+
+    @Test
+    void sairDaOrdemDeServicoVoltaParaAguardandoOs() {
+        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.of(2026, 9, 20)).build();
+        Transfer existente = Transfer.builder().id(5L).dataTransfer(LocalDate.of(2026, 9, 20)).horaTransfer(LocalTime.NOON)
+                .origem("A").destino("B").status(StatusTransfer.CONFIRMADO).ordemServico(os).build();
+        when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
+
+        // PUT sem osId = desvincular (e o que a tela da OS faz)
+        TransferRequestDTO put = new TransferRequestDTO(LocalDate.of(2026, 9, 20), LocalTime.NOON, "A", "B",
+                StatusTransfer.CONFIRMADO, null, null, null, null, null, null);
+
+        assertThat(service.atualizar(5L, put).status()).isEqualTo(StatusTransfer.AGUARDANDO_OS);
+    }
+
+    @Test
+    void editarTransferAntigoDeOsFinalizadaSemMudarOsNemDataContinuaPermitido() {
+        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.of(2026, 9, 20))
+                .status(StatusOrdemServico.FINALIZADA).build();
+        Transfer existente = Transfer.builder().id(5L).dataTransfer(LocalDate.of(2026, 9, 20)).horaTransfer(LocalTime.NOON)
+                .origem("A").destino("B").status(StatusTransfer.CONCLUIDO).ordemServico(os).build();
+        when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
+
+        TransferRequestDTO patch = new TransferRequestDTO(null, null, null, "Hotel novo", null,
+                null, null, null, null, null, null);
+
+        assertThat(service.atualizarParcial(5L, patch).destino()).isEqualTo("Hotel novo");
     }
 
     @Test
