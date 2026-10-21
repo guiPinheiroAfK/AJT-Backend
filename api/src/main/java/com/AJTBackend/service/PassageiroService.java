@@ -1,6 +1,7 @@
 package com.AJTBackend.service;
 
 import com.AJTBackend.config.UsuarioLogado;
+import com.AJTBackend.dto.FiltroPassageiroDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
@@ -8,11 +9,13 @@ import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.model.enums.Role;
+import com.AJTBackend.repository.Especificacoes;
 import com.AJTBackend.repository.PassageiroRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,8 +32,12 @@ public class PassageiroService {
     private final PassageiroRepository passageiroRepository;
     private final UsuarioLogado usuarioLogado;
 
-    public PaginaResponseDTO<PassageiroResponseDTO> listarTodos(Pageable pageable) {
-        return PaginaResponseDTO.de(passageiroRepository.findAll(pageable), this::toResponseDTO);
+    // RF015: nome e nacionalidade sao opcionais (contem, sem diferenciar maiusculas)
+    public PaginaResponseDTO<PassageiroResponseDTO> listar(FiltroPassageiroDTO filtro, Pageable pageable) {
+        Specification<Passageiro> spec = Specification.allOf(
+                Especificacoes.contem("nome", filtro.nome()),
+                Especificacoes.contem("nacionalidade", filtro.nacionalidade()));
+        return PaginaResponseDTO.de(passageiroRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
     public PassageiroResponseDTO buscarPorId(Long id) {

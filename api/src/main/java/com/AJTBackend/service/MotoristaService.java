@@ -1,16 +1,19 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.FiltroMotoristaDTO;
 import com.AJTBackend.dto.MotoristaRequestDTO;
 import com.AJTBackend.dto.MotoristaResponseDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.exception.CnhJaCadastradaException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
+import com.AJTBackend.repository.Especificacoes;
 import com.AJTBackend.repository.MotoristaRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +28,12 @@ public class MotoristaService {
 
     private final MotoristaRepository motoristaRepository;
 
-    public PaginaResponseDTO<MotoristaResponseDTO> listarTodos(Pageable pageable) {
-        return PaginaResponseDTO.de(motoristaRepository.findAll(pageable), this::toResponseDTO);
+    // RF015: nome e cnh sao opcionais (contem, sem diferenciar maiusculas)
+    public PaginaResponseDTO<MotoristaResponseDTO> listar(FiltroMotoristaDTO filtro, Pageable pageable) {
+        Specification<Motorista> spec = Specification.allOf(
+                Especificacoes.contem("nome", filtro.nome()),
+                Especificacoes.contem("cnh", filtro.cnh()));
+        return PaginaResponseDTO.de(motoristaRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
     public MotoristaResponseDTO buscarPorId(Long id) {
