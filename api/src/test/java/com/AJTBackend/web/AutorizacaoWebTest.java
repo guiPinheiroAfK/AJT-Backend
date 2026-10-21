@@ -83,6 +83,10 @@ class AutorizacaoWebTest extends WebTestBase {
             "MOTORISTA, GET,    /api/transfers/1/passageiros, 200",
             "MOTORISTA, GET,    /api/transfers,         200",
             "MOTORISTA, GET,    /api/ordens-servico,    200",
+            // "minhas OS do dia" (HU07): so o motorista
+            "MOTORISTA, GET,    /api/ordens-servico/minhas, 200",
+            "GERENTE,   GET,    /api/ordens-servico/minhas, 403",
+            "ATENDENTE, GET,    /api/ordens-servico/minhas, 403",
             "ATENDENTE, GET,    /api/motoristas,        200",
 
             // DELETE: so ADMIN e GERENTE
