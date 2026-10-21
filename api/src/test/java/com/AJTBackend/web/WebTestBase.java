@@ -9,9 +9,11 @@ import com.AJTBackend.service.AuthService;
 import com.AJTBackend.service.CotacaoService;
 import com.AJTBackend.service.MotoristaService;
 import com.AJTBackend.service.OrdemServicoService;
+import com.AJTBackend.service.PainelService;
 import com.AJTBackend.service.ParadaOsService;
 import com.AJTBackend.service.PassageiroService;
 import com.AJTBackend.service.PontoColetaService;
+import com.AJTBackend.service.RelatorioOrdemServicoService;
 import com.AJTBackend.service.TransferService;
 import com.AJTBackend.service.UsuarioService;
 import com.AJTBackend.service.VeiculoService;
@@ -52,6 +54,8 @@ abstract class WebTestBase {
     @MockitoBean protected ParadaOsService paradaOsService;
     @MockitoBean protected CotacaoService cotacaoService;
     @MockitoBean protected AuditoriaService auditoriaService;
+    @MockitoBean protected PainelService painelService;
+    @MockitoBean protected RelatorioOrdemServicoService relatorioOrdemServicoService;
 
     protected static final String TRANSFER_VALIDO = """
             {"dataTransfer":"2026-09-20","horaTransfer":"14:30:00","origem":"Aeroporto GRU","destino":"Hotel"}

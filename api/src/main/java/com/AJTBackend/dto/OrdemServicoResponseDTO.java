@@ -9,5 +9,6 @@ public record OrdemServicoResponseDTO(
         LocalDate dataServico,
         Long motoristaId,
         Long veiculoId,
-        StatusOrdemServico status
+        StatusOrdemServico status,
+        Long versao
 ) {}

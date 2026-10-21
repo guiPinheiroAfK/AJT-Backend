@@ -2,10 +2,14 @@ package com.AJTBackend.integracao;
 
 import com.AJTBackend.model.enums.Role;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -14,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -154,6 +159,100 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
 
         mockMvc.perform(get("/api/auditoria").header("Authorization", bearer(Role.ATENDENTE)))
                 .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void auditoriaRegistraMudancaDeValorEFiltraPeloHistoricoDoTransfer() throws Exception {
+        long transferId = criarTransfer(",\"valorBase\":150.00");
+        long outroId = criarTransfer("");
+        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"valorBase\":180.00}"))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(get("/api/auditoria").param("tabela", "transfers").param("registroId", String.valueOf(transferId))
+                        .header("Authorization", bearer(Role.GERENTE)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElementos").value(2))
+                .andExpect(jsonPath("$.conteudo[*].mensagem",
+                        org.hamcrest.Matchers.hasItem(containsString("valor 150.00 -> 180.00"))))
+                .andExpect(jsonPath("$.conteudo[?(@.registroId == " + outroId + ")]").isEmpty());
+    }
+
+    @Test
+    void pdfDaOrdemDeServicoTrazPassageirosESemValores() throws Exception {
+        String os = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-25\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        long osId = objectMapper.readTree(os).get("id").asLong();
+        long ana = criarPassageiro("Ana Relatorio", "PDF111");
+        criarTransfer(",\"osId\":" + osId + ",\"valorBase\":321.00,\"passageiroIds\":[" + ana + "]");
+
+        byte[] pdf = mockMvc.perform(get("/api/ordens-servico/" + osId + "/pdf")
+                        .header("Authorization", bearer(Role.ATENDENTE)))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Type", "application/pdf"))
+                .andExpect(header().string("Content-Disposition", containsString("ordem-servico-" + osId + ".pdf")))
+                .andReturn().getResponse().getContentAsByteArray();
+
+        PdfReader leitor = new PdfReader(pdf);
+        String texto = new PdfTextExtractor(leitor).getTextFromPage(1);
+        leitor.close();
+        assertThat(texto).contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU");
+        assertThat(texto).doesNotContain("321", "PDF111"); // nem valor nem documento no papel do motorista
+
+        mockMvc.perform(get("/api/ordens-servico/999999/pdf").header("Authorization", bearer(Role.ATENDENTE)))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void edicaoComVersaoVelhaRetorna409EPreservaAAlteracaoDoOutroUsuario() throws Exception {
+        long transferId = criarTransfer("");
+        Long versao = jdbcTemplate.queryForObject("SELECT versao FROM transfers WHERE id = ?", Long.class, transferId);
+
+        // a gerente salva primeiro, em cima da versao que carregou
+        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CONFIRMADO\",\"versao\":" + versao + "}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.versao").value(versao + 1));
+
+        // a atendente tinha carregado a mesma versao e tenta salvar depois: 409, nada e sobrescrito
+        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"CANCELADO\",\"versao\":" + versao + "}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.erro").value("Conflito de edição"));
+
+        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
+                .andExpect(jsonPath("$.status").value("CONFIRMADO"));
+    }
+
+    @Test
+    void painelContaODiaESomaOFaturamentoSemCancelados() throws Exception {
+        // data so deste teste, pra nao misturar com os transfers dos outros
+        String base = "{\"dataTransfer\":\"2031-01-15\",\"horaTransfer\":\"09:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\"";
+        for (String extra : List.of(",\"valorBase\":100.00}", ",\"valorBase\":50.50}",
+                ",\"valorBase\":999.00,\"status\":\"CANCELADO\"}")) {
+            mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
+                            .contentType(MediaType.APPLICATION_JSON).content(base + extra))
+                    .andExpect(status().isCreated());
+        }
+
+        mockMvc.perform(get("/api/painel/resumo").param("data", "2031-01-15")
+                        .header("Authorization", bearer(Role.GERENTE)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalTransfers").value(3))
+                .andExpect(jsonPath("$.transfersPorStatus.AGUARDANDO_OS").value(2))
+                .andExpect(jsonPath("$.transfersPorStatus.CANCELADO").value(1))
+                .andExpect(jsonPath("$.faturamentoDia").value(150.50))
+                .andExpect(jsonPath("$.faturamentoMes").value(150.50));
+
+        mockMvc.perform(get("/api/painel/resumo").param("data", "2031-01-15")
+                        .header("Authorization", bearer(Role.ATENDENTE)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalTransfers").value(3))
+                .andExpect(jsonPath("$.faturamentoDia").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test

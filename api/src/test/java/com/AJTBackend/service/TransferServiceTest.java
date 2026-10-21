@@ -4,6 +4,7 @@ import com.AJTBackend.dto.CotacaoDTO;
 import com.AJTBackend.dto.TransferRequestDTO;
 import com.AJTBackend.dto.TransferResponseDTO;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
+import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.TransferNaoEncontradoException;
 import com.AJTBackend.model.OrdemServico;
@@ -32,6 +33,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -100,7 +102,7 @@ class TransferServiceTest {
                 .thenReturn(new CotacaoDTO("USD", "BRL", new BigDecimal("6"), null));
 
         TransferRequestDTO patch = new TransferRequestDTO(null, null, null, null, null,
-                null, new BigDecimal("20.00"), null, null, null);
+                null, new BigDecimal("20.00"), null, null, null, null);
         TransferResponseDTO atualizado = service.atualizarParcial(5L, patch);
 
         assertThat(atualizado.valorOriginal()).isEqualByComparingTo("20.00");
@@ -115,9 +117,25 @@ class TransferServiceTest {
         when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
 
         TransferRequestDTO patch = new TransferRequestDTO(null, null, null, null, StatusTransfer.CONFIRMADO,
-                null, null, null, null, null);
+                null, null, null, null, null, null);
         assertThat(service.atualizarParcial(5L, patch).status()).isEqualTo(StatusTransfer.CONFIRMADO);
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
+    }
+
+    @Test
+    void versaoVelhaDoClienteRetorna409SemAlterarNada() {
+        Transfer existente = Transfer.builder().id(5L).versao(2L).dataTransfer(LocalDate.now()).horaTransfer(LocalTime.NOON)
+                .origem("A").destino("B").status(StatusTransfer.AGUARDANDO_OS).build();
+        when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
+
+        TransferRequestDTO patch = new TransferRequestDTO(null, null, null, null, StatusTransfer.CONFIRMADO,
+                null, null, null, null, null, 1L);
+
+        assertThatThrownBy(() -> service.atualizarParcial(5L, patch))
+                .isInstanceOf(ConflitoDeVersaoException.class)
+                .hasMessageContaining("alterado por outro usuário");
+        assertThat(existente.getStatus()).isEqualTo(StatusTransfer.AGUARDANDO_OS);
+        verify(auditoriaService, never()).registrarAtualizacao(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
@@ -130,7 +148,7 @@ class TransferServiceTest {
 
     private static TransferRequestDTO dto(BigDecimal valorBase, BigDecimal valorOriginal, String moeda, Long osId) {
         return new TransferRequestDTO(LocalDate.of(2026, 9, 20), LocalTime.of(14, 30), "Aeroporto GRU", "Hotel",
-                null, valorBase, valorOriginal, moeda, osId, null);
+                null, valorBase, valorOriginal, moeda, osId, null, null);
     }
 
     private static Passageiro passageiro(Long id) {
@@ -143,7 +161,7 @@ class TransferServiceTest {
         when(passageiroRepository.findAllById(any())).thenReturn(List.of(passageiro(1L), passageiro(2L)));
 
         TransferRequestDTO dto = new TransferRequestDTO(LocalDate.of(2026, 9, 20), LocalTime.of(14, 30),
-                "GRU", "Hotel", null, null, null, null, null, Set.of(1L, 2L));
+                "GRU", "Hotel", null, null, null, null, null, Set.of(1L, 2L), null);
         TransferResponseDTO criado = service.criar(dto);
 
         assertThat(criado.passageiroIds()).containsExactlyInAnyOrder(1L, 2L);
@@ -155,7 +173,7 @@ class TransferServiceTest {
         when(passageiroRepository.findAllById(any())).thenReturn(List.of(passageiro(1L)));
 
         TransferRequestDTO dto = new TransferRequestDTO(LocalDate.of(2026, 9, 20), LocalTime.of(14, 30),
-                "GRU", "Hotel", null, null, null, null, null, Set.of(1L, 99L));
+                "GRU", "Hotel", null, null, null, null, null, Set.of(1L, 99L), null);
 
         assertThatThrownBy(() -> service.criar(dto))
                 .isInstanceOf(PassageiroNaoEncontradoException.class)
@@ -182,7 +200,7 @@ class TransferServiceTest {
         when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
 
         TransferRequestDTO patch = new TransferRequestDTO(null, null, null, null, null,
-                null, null, null, null, Set.of());
+                null, null, null, null, Set.of(), null);
 
         assertThat(service.atualizarParcial(5L, patch).passageiroIds()).isEmpty();
     }
@@ -204,9 +222,9 @@ class TransferServiceTest {
                 .origem("A").destino("B").status(StatusTransfer.AGUARDANDO_OS).build();
         when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
         service.atualizarParcial(5L, new TransferRequestDTO(null, null, null, null, StatusTransfer.CONFIRMADO,
-                null, null, null, null, null));
+                null, null, null, null, null, null));
 
         verify(auditoriaService).registrarAtualizacao(eq("transfers"), eq(5L), eq("Transfer atualizado"),
-                eq(StatusTransfer.AGUARDANDO_OS), eq(StatusTransfer.CONFIRMADO));
+                eq(StatusTransfer.AGUARDANDO_OS), eq(StatusTransfer.CONFIRMADO), isNull(), isNull());
     }
 }

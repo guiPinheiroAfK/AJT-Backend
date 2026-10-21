@@ -3,6 +3,7 @@ package com.AJTBackend.service;
 import com.AJTBackend.dto.OrdemServicoRequestDTO;
 import com.AJTBackend.dto.OrdemServicoResponseDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
+import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.exception.OrdemServicoNaoEncontradoException;
 import com.AJTBackend.exception.VeiculoNaoEncontradoException;
@@ -68,6 +69,7 @@ public class OrdemServicoService {
     public OrdemServicoResponseDTO atualizar(Long id, OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
+        conferirVersao(ordemServico, dto.versao());
 
         ordemServico.setDataServico(dto.dataServico());
         ordemServico.setMotorista(buscarMotorista(dto.motoristaId()));
@@ -76,6 +78,7 @@ public class OrdemServicoService {
         ordemServico.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
 
         auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de servico atualizada", statusAnterior, ordemServico.getStatus());
+        ordemServicoRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(ordemServico);
     }
 
@@ -83,6 +86,7 @@ public class OrdemServicoService {
     public OrdemServicoResponseDTO atualizarParcial(Long id, OrdemServicoRequestDTO dto) {
         OrdemServico ordemServico = ordemServicoRepository.findById(id)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
+        conferirVersao(ordemServico, dto.versao());
 
         if (dto.dataServico() != null) {
             ordemServico.setDataServico(dto.dataServico());
@@ -99,6 +103,7 @@ public class OrdemServicoService {
         }
 
         auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de servico atualizada", statusAnterior, ordemServico.getStatus());
+        ordemServicoRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(ordemServico);
     }
 
@@ -110,6 +115,13 @@ public class OrdemServicoService {
         ordemServicoRepository.deleteById(id);
         auditoriaService.registrar(TABELA, id, "Ordem de servico removida");
         log.info("Ordem de servico removida: id={}", id);
+    }
+
+    // RNF008: o cliente editou em cima de uma versao velha (outra pessoa salvou no meio tempo)
+    private static void conferirVersao(OrdemServico ordemServico, Long versaoDoCliente) {
+        if (versaoDoCliente != null && !versaoDoCliente.equals(ordemServico.getVersao())) {
+            throw new ConflitoDeVersaoException("Ordem de serviço", ordemServico.getId());
+        }
     }
 
     private Motorista buscarMotorista(Long motoristaId) {
@@ -134,7 +146,8 @@ public class OrdemServicoService {
                 ordemServico.getDataServico(),
                 ordemServico.getMotorista() != null ? ordemServico.getMotorista().getId() : null,
                 ordemServico.getVeiculo() != null ? ordemServico.getVeiculo().getId() : null,
-                ordemServico.getStatus()
+                ordemServico.getStatus(),
+                ordemServico.getVersao()
         );
     }
 }

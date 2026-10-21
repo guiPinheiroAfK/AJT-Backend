@@ -64,6 +64,14 @@ class AutorizacaoWebTest extends WebTestBase {
             "GERENTE,   GET,    /api/usuarios,          403",
             "ATENDENTE, GET,    /api/usuarios/1,        403",
 
+            // pdf da OS: leitura, qualquer perfil (HU10 e do atendente)
+            "ATENDENTE, GET,    /api/ordens-servico/1/pdf, 200",
+            "MOTORISTA, GET,    /api/ordens-servico/1/pdf, 200",
+
+            // painel: leitura pra todos (o faturamento e filtrado no service)
+            "ATENDENTE, GET,    /api/painel/resumo,     200",
+            "MOTORISTA, GET,    /api/painel/resumo,     200",
+
             // auditoria: so leitura, so ADMIN e GERENTE
             "ADMIN,     GET,    /api/auditoria,         200",
             "GERENTE,   GET,    /api/auditoria,         200",

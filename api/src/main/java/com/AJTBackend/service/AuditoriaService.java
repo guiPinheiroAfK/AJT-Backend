@@ -6,11 +6,16 @@ import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.model.LogAuditoria;
 import com.AJTBackend.repository.LogAuditoriaRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * trilha de auditoria das operacoes de escrita (quem fez o que e quando).
@@ -44,17 +49,55 @@ public class AuditoriaService {
     @Transactional
     public void registrarAtualizacao(String tabela, Long registroId, String acao,
                                      Enum<?> statusAnterior, Enum<?> statusAtual) {
-        String descricao = statusAnterior == statusAtual
-                ? acao
-                : acao + ": status " + statusAnterior + " -> " + statusAtual;
+        registrarAtualizacao(tabela, registroId, acao, statusAnterior, statusAtual, null, null);
+    }
+
+    /**
+     * mesma coisa, mas tambem registra a mudanca de valor (em BRL), pedida no RF014:
+     * "Transfer atualizado: status AGUARDANDO_OS -> CONFIRMADO; valor 150.00 -> 180.00".
+     * a comparacao usa compareTo pra 150.0 e 150.00 nao contarem como mudanca.
+     */
+    @Transactional
+    public void registrarAtualizacao(String tabela, Long registroId, String acao,
+                                     Enum<?> statusAnterior, Enum<?> statusAtual,
+                                     BigDecimal valorAnterior, BigDecimal valorAtual) {
+        List<String> mudancas = new ArrayList<>();
+        if (statusAnterior != statusAtual) {
+            mudancas.add("status " + statusAnterior + " -> " + statusAtual);
+        }
+        if (valorMudou(valorAnterior, valorAtual)) {
+            mudancas.add("valor " + formatarValor(valorAnterior) + " -> " + formatarValor(valorAtual));
+        }
+        String descricao = mudancas.isEmpty() ? acao : acao + ": " + String.join("; ", mudancas);
         registrar(tabela, registroId, descricao);
     }
 
-    public PaginaResponseDTO<AuditoriaResponseDTO> listar(String tabela, Pageable pageable) {
-        var pagina = (tabela == null || tabela.isBlank())
-                ? logAuditoriaRepository.findAll(pageable)
-                : logAuditoriaRepository.findByTabelaAfetada(tabela, pageable);
+    /**
+     * tabela filtra por recurso; tabela + registroId devolve o historico de um registro
+     * so (ex: o historico de um transfer, HU11). registroId sozinho nao faz sentido
+     * (ids se repetem entre tabelas), entao e ignorado sem tabela.
+     */
+    public PaginaResponseDTO<AuditoriaResponseDTO> listar(String tabela, Long registroId, Pageable pageable) {
+        Page<LogAuditoria> pagina;
+        if (tabela == null || tabela.isBlank()) {
+            pagina = logAuditoriaRepository.findAll(pageable);
+        } else if (registroId != null) {
+            pagina = logAuditoriaRepository.findByTabelaAfetadaAndRegistroId(tabela, registroId, pageable);
+        } else {
+            pagina = logAuditoriaRepository.findByTabelaAfetada(tabela, pageable);
+        }
         return PaginaResponseDTO.de(pagina, this::toResponseDTO);
+    }
+
+    private static boolean valorMudou(BigDecimal anterior, BigDecimal atual) {
+        if (anterior == null || atual == null) {
+            return anterior != atual;
+        }
+        return anterior.compareTo(atual) != 0;
+    }
+
+    private static String formatarValor(BigDecimal valor) {
+        return valor == null ? "sem valor" : valor.setScale(2, RoundingMode.HALF_UP).toPlainString();
     }
 
     private AuditoriaResponseDTO toResponseDTO(LogAuditoria log) {

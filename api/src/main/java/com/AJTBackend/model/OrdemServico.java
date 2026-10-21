@@ -21,6 +21,10 @@ public class OrdemServico {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    // lock otimista (RNF008, V9): o UPDATE so passa se ninguem salvou o registro antes
+    @Version
+    private Long versao;
+
     @Column(name = "data_servico", nullable = false)
     private LocalDate dataServico;
 
