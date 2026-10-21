@@ -1,5 +1,6 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.FiltroTransferDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.TransferRequestDTO;
 import com.AJTBackend.dto.TransferResponseDTO;
@@ -13,6 +14,7 @@ import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.model.Transfer;
 import com.AJTBackend.model.enums.StatusOrdemServico;
 import com.AJTBackend.model.enums.StatusTransfer;
+import com.AJTBackend.repository.Especificacoes;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.PassageiroRepository;
 import com.AJTBackend.repository.TransferRepository;
@@ -20,6 +22,7 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -49,8 +52,19 @@ public class TransferService {
     private final AuditoriaService auditoriaService;
     private final TransactionTemplate transactionTemplate;
 
-    public PaginaResponseDTO<TransferResponseDTO> listarTodos(Pageable pageable) {
-        return PaginaResponseDTO.de(transferRepository.findAll(pageable), this::toResponseDTO);
+    // RF015: todos os filtros sao opcionais e se somam (E)
+    public PaginaResponseDTO<TransferResponseDTO> listar(FiltroTransferDTO filtro, Pageable pageable) {
+        Especificacoes.validarPeriodo(filtro.dataInicio(), filtro.dataFim());
+        Specification<Transfer> semOs = Boolean.TRUE.equals(filtro.semOs())
+                ? (root, query, cb) -> cb.isNull(root.get("ordemServico"))
+                : null;
+        Specification<Transfer> spec = Specification.allOf(
+                Especificacoes.igual("status", filtro.status()),
+                Especificacoes.dataEntre("dataTransfer", filtro.dataInicio(), filtro.dataFim()),
+                Especificacoes.algumContem(filtro.busca(), "origem", "destino"),
+                Especificacoes.igual("ordemServico.id", filtro.osId()),
+                semOs);
+        return PaginaResponseDTO.de(transferRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
     public TransferResponseDTO buscarPorId(Long id) {

@@ -64,6 +64,7 @@ public class VeiculoService {
     public VeiculoResponseDTO atualizar(Long id, VeiculoRequestDTO dto) {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
+        Versoes.conferir(veiculo.getVersao(), dto.versao(), "Veículo", id);
 
         if (!dto.placa().equals(veiculo.getPlaca()) && veiculoRepository.existsByPlaca(dto.placa())) {
             throw new PlacaJaCadastradaException(dto.placa());
@@ -75,6 +76,7 @@ public class VeiculoService {
         veiculo.setTipo(dto.tipo());
         veiculo.setMarca(dto.marca());
 
+        veiculoRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(veiculo);
     }
 
@@ -82,6 +84,7 @@ public class VeiculoService {
     public VeiculoResponseDTO atualizarParcial(Long id, VeiculoRequestDTO dto) {
         Veiculo veiculo = veiculoRepository.findById(id)
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
+        Versoes.conferir(veiculo.getVersao(), dto.versao(), "Veículo", id);
 
         if (dto.label() != null) {
             veiculo.setLabel(dto.label());
@@ -102,6 +105,7 @@ public class VeiculoService {
             veiculo.setMarca(dto.marca());
         }
 
+        veiculoRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(veiculo);
     }
 
@@ -121,7 +125,8 @@ public class VeiculoService {
                 veiculo.getPlaca(),
                 veiculo.getCapacidade(),
                 veiculo.getTipo(),
-                veiculo.getMarca()
+                veiculo.getMarca(),
+                veiculo.getVersao()
         );
     }
 }

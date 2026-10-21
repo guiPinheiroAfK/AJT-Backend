@@ -34,5 +34,9 @@ public record MotoristaRequestDTO(
         @DecimalMin(value = "-180", message = "Longitude inválida", groups = {Default.class, OnPatch.class})
         @DecimalMax(value = "180", message = "Longitude inválida", groups = {Default.class, OnPatch.class})
         @Schema(example = "-46.6333")
-        Double longitudeAtual
+        Double longitudeAtual,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409
+        @Schema(example = "3")
+        Long versao
 ) {}

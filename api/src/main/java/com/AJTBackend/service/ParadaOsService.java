@@ -18,6 +18,7 @@ import com.AJTBackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
@@ -40,19 +41,30 @@ public class ParadaOsService {
     private final OrdemServicoRepository ordemServicoRepository;
     private final TransferRepository transferRepository;
     private final UsuarioLogado usuarioLogado;
+    private final AcessoMotorista acessoMotorista;
 
+    // HU07: o MOTORISTA so enxerga (e so muda o status de) paradas das OS dele; as outras dao 404
     public PaginaResponseDTO<ParadaOsResponseDTO> listarTodos(Pageable pageable) {
         // transfers de cada parada sao carregados em lote (hibernate.default_batch_fetch_size)
+        if (acessoMotorista.restrito()) {
+            return acessoMotorista.motoristaId()
+                    .map(id -> PaginaResponseDTO.de(paradaOsRepository.findByOrdemServicoMotoristaId(id, pageable), this::toResponseDTO))
+                    .orElseGet(() -> PaginaResponseDTO.de(Page.<ParadaOs>empty(pageable), this::toResponseDTO));
+        }
         return PaginaResponseDTO.de(paradaOsRepository.findAll(pageable), this::toResponseDTO);
     }
 
     public ParadaOsResponseDTO buscarPorId(Long id) {
-        ParadaOs paradaOs = paradaOsRepository.findById(id)
-                .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
-        return toResponseDTO(paradaOs);
+        return toResponseDTO(buscarVisivel(id));
     }
 
     public List<ParadaOsResponseDTO> listarPorOrdemServico(Long osId) {
+        if (acessoMotorista.restrito()) {
+            OrdemServico ordemServico = buscarOrdemServico(osId);
+            if (!acessoMotorista.podeVer(ordemServico)) {
+                throw new OrdemServicoNaoEncontradoException(osId);
+            }
+        }
         return paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(osId)
                 .stream()
                 .map(this::toResponseDTO)
@@ -82,6 +94,7 @@ public class ParadaOsService {
     public ParadaOsResponseDTO atualizar(Long id, ParadaOsRequestDTO dto) {
         ParadaOs paradaOs = paradaOsRepository.findById(id)
                 .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
+        Versoes.conferir(paradaOs.getVersao(), dto.versao(), "Parada", id);
 
         paradaOs.setOrdemServico(buscarOrdemServico(dto.osId()));
         paradaOs.setOrdemParada(dto.ordemParada());
@@ -93,6 +106,7 @@ public class ParadaOsService {
         paradaOs.setStatusParada(dto.statusParada() != null ? dto.statusParada() : STATUS_PADRAO);
         paradaOs.setTransfers(buscarTransfers(dto.transferIds()));
 
+        paradaOsRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(paradaOs);
     }
 
@@ -100,8 +114,8 @@ public class ParadaOsService {
     public ParadaOsResponseDTO atualizarParcial(Long id, ParadaOsRequestDTO dto) {
         validarAlteracaoPorMotorista(dto);
 
-        ParadaOs paradaOs = paradaOsRepository.findById(id)
-                .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
+        ParadaOs paradaOs = buscarVisivel(id);
+        Versoes.conferir(paradaOs.getVersao(), dto.versao(), "Parada", id);
 
         if (dto.osId() != null) {
             paradaOs.setOrdemServico(buscarOrdemServico(dto.osId()));
@@ -131,6 +145,7 @@ public class ParadaOsService {
             paradaOs.setTransfers(buscarTransfers(dto.transferIds()));
         }
 
+        paradaOsRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(paradaOs);
     }
 
@@ -141,6 +156,15 @@ public class ParadaOsService {
         }
         paradaOsRepository.deleteById(id);
         log.info("Parada de OS removida: id={}", id);
+    }
+
+    private ParadaOs buscarVisivel(Long id) {
+        ParadaOs paradaOs = paradaOsRepository.findById(id)
+                .orElseThrow(() -> new ParadaOsNaoEncontradaException(id));
+        if (!acessoMotorista.podeVer(paradaOs.getOrdemServico())) {
+            throw new ParadaOsNaoEncontradaException(id);
+        }
+        return paradaOs;
     }
 
     private OrdemServico buscarOrdemServico(Long osId) {
@@ -196,7 +220,8 @@ public class ParadaOsService {
                 paradaOs.getHorarioPrevisto(),
                 paradaOs.getAcao(),
                 paradaOs.getStatusParada(),
-                transferIds
+                transferIds,
+                paradaOs.getVersao()
         );
     }
 }

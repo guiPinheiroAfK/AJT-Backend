@@ -30,5 +30,14 @@ public record UsuarioRequestDTO(
         Role role,
 
         @Schema(example = "true")
-        Boolean ativo
+        Boolean ativo,
+
+        // HU07: cadastro de motorista ligado ao usuario (so perfil MOTORISTA). no PUT, ausente = desliga;
+        // no PATCH, ausente = mantem. trocar o perfil pra outro que nao MOTORISTA tambem desliga
+        @Schema(example = "1")
+        Long motoristaId,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409
+        @Schema(example = "3")
+        Long versao
 ) {}

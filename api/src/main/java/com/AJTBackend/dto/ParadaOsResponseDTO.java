@@ -16,5 +16,6 @@ public record ParadaOsResponseDTO(
         LocalTime horarioPrevisto,
         AcaoParada acao,
         StatusParada statusParada,
-        Set<Long> transferIds
+        Set<Long> transferIds,
+        Long versao
 ) {}

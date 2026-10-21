@@ -28,5 +28,9 @@ public record PassageiroRequestDTO(
 
         @Size(max = 50, message = "Nacionalidade deve ter no máximo 50 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Americana")
-        String nacionalidade
+        String nacionalidade,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409
+        @Schema(example = "3")
+        Long versao
 ) {}

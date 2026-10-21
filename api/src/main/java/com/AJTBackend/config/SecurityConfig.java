@@ -38,6 +38,8 @@ import java.util.List;
  *
  * nota: o MOTORISTA ve os passageiros da OS por /api/transfers/{id}/passageiros, com o
  * documento mascarado (PassageiroService), nunca o cadastro completo.
+ * nota 2 (HU07): o MOTORISTA so enxerga as OS e paradas do cadastro ligado ao usuario dele
+ * (AcessoMotorista) e tem GET /api/ordens-servico/minhas so pra ele.
  */
 @Configuration
 @EnableWebSecurity
@@ -80,6 +82,8 @@ public class SecurityConfig {
                         // cadastro de passageiros tem documento (LGPD): motorista nao lista. os passageiros
                         // da OS dele chegam por /api/transfers/{id}/passageiros, com o documento mascarado
                         .requestMatchers(HttpMethod.GET, "/api/passageiros/**").hasAnyRole(ADMIN, GERENTE, ATENDENTE)
+                        // "minhas OS do dia" (HU07) so faz sentido pro motorista
+                        .requestMatchers(HttpMethod.GET, "/api/ordens-servico/minhas").hasRole(MOTORISTA)
                         .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
 
                         .requestMatchers("/api/motoristas/**", "/api/veiculos/**", "/api/ordens-servico/**")

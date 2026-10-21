@@ -6,5 +6,6 @@ public record VeiculoResponseDTO(
         String placa,
         Integer capacidade,
         String tipo,
-        String marca
+        String marca,
+        Long versao
 ) {}

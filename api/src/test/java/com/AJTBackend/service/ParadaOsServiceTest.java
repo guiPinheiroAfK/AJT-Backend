@@ -2,14 +2,18 @@ package com.AJTBackend.service;
 
 import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.ParadaOsRequestDTO;
+import com.AJTBackend.exception.ParadaOsNaoEncontradaException;
 import com.AJTBackend.exception.TransferNaoEncontradoException;
+import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.OrdemServico;
 import com.AJTBackend.model.ParadaOs;
 import com.AJTBackend.model.Transfer;
+import com.AJTBackend.model.Usuario;
 import com.AJTBackend.model.enums.StatusParada;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.ParadaOsRepository;
 import com.AJTBackend.repository.TransferRepository;
+import com.AJTBackend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.security.access.AccessDeniedException;
@@ -51,7 +55,15 @@ class ParadaOsServiceTest {
     private final ParadaOsRepository paradaOsRepository = mock(ParadaOsRepository.class);
     private final OrdemServicoRepository ordemServicoRepository = mock(OrdemServicoRepository.class);
     private final TransferRepository transferRepository = mock(TransferRepository.class);
-    private final ParadaOsService service = new ParadaOsService(paradaOsRepository, ordemServicoRepository, transferRepository, new UsuarioLogado());
+    private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
+    private final ParadaOsService service = new ParadaOsService(paradaOsRepository, ordemServicoRepository, transferRepository,
+            new UsuarioLogado(), new AcessoMotorista(new UsuarioLogado(), usuarioRepository));
+
+    // o usuario logado ("usuario") e o cadastro de motorista 5, dono da OS da parada()
+    private void usuarioLigadoAoMotorista(long motoristaId) {
+        when(usuarioRepository.findByUsername("usuario")).thenReturn(Optional.of(Usuario.builder()
+                .id(9L).username("usuario").motorista(Motorista.builder().id(motoristaId).build()).build()));
+    }
 
     @AfterEach
     void limparContexto() {
@@ -61,6 +73,7 @@ class ParadaOsServiceTest {
     @Test
     void motoristaPodeAtualizarSoOStatusDaParada() {
         logadoComo("MOTORISTA");
+        usuarioLigadoAoMotorista(5L);
         ParadaOs parada = parada();
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
 
@@ -76,6 +89,25 @@ class ParadaOsServiceTest {
         assertThatThrownBy(() -> service.atualizarParcial(1L, patch("Outro local", StatusParada.CONCLUIDA, null)))
                 .isInstanceOf(AccessDeniedException.class);
         verify(paradaOsRepository, never()).findById(anyLong());
+    }
+
+    @Test
+    void motoristaNaoMexeEmParadaDeOsDeOutroMotorista() {
+        logadoComo("MOTORISTA");
+        usuarioLigadoAoMotorista(6L);
+        when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
+
+        // 404 e nao 403: o motorista nem fica sabendo que a parada existe (HU07)
+        assertThatThrownBy(() -> service.atualizarParcial(1L, patch(null, StatusParada.CONCLUIDA, null)))
+                .isInstanceOf(ParadaOsNaoEncontradaException.class);
+    }
+
+    @Test
+    void motoristaSemCadastroLigadoNaoVeParadas() {
+        logadoComo("MOTORISTA");
+        when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
+
+        assertThatThrownBy(() -> service.buscarPorId(1L)).isInstanceOf(ParadaOsNaoEncontradaException.class);
     }
 
     @Test
@@ -100,11 +132,12 @@ class ParadaOsServiceTest {
     }
 
     private static ParadaOsRequestDTO patch(String local, StatusParada status, Set<Long> transferIds) {
-        return new ParadaOsRequestDTO(null, null, local, null, null, null, null, status, transferIds);
+        return new ParadaOsRequestDTO(null, null, local, null, null, null, null, status, transferIds, null);
     }
 
     private static ParadaOs parada() {
-        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.now()).build();
+        OrdemServico os = OrdemServico.builder().id(3L).dataServico(LocalDate.now())
+                .motorista(Motorista.builder().id(5L).build()).build();
         return ParadaOs.builder().id(1L).ordemServico(os).ordemParada(1).localParada("Portao 3").build();
     }
 

@@ -4,11 +4,14 @@ import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.UsuarioRequestDTO;
 import com.AJTBackend.dto.UsuarioResponseDTO;
+import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.exception.UsernameJaCadastradoException;
 import com.AJTBackend.exception.UsuarioNaoEncontradoException;
+import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.Usuario;
 import com.AJTBackend.model.enums.Role;
+import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.UsuarioRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
@@ -30,6 +33,7 @@ public class UsuarioService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final UsuarioLogado usuarioLogado;
+    private final MotoristaRepository motoristaRepository;
 
     public PaginaResponseDTO<UsuarioResponseDTO> listarTodos(Pageable pageable) {
         return PaginaResponseDTO.de(usuarioRepository.findAll(pageable), this::toResponseDTO);
@@ -64,6 +68,7 @@ public class UsuarioService {
                 .role(dto.role())
                 .ativo(dto.ativo() == null || dto.ativo())
                 .trocarSenha(true) // senha definida por outra pessoa: usuario troca no primeiro acesso
+                .motorista(resolverMotorista(dto.role(), dto.motoristaId(), null))
                 .build();
 
         Usuario salvo = usuarioRepository.save(usuario);
@@ -75,6 +80,7 @@ public class UsuarioService {
     public UsuarioResponseDTO atualizar(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
+        Versoes.conferir(usuario.getVersao(), dto.versao(), "Usuário", id);
 
         validarUsernameDisponivel(usuario, dto.username());
         aplicarRole(usuario, dto.role());
@@ -85,7 +91,9 @@ public class UsuarioService {
         usuario.setNome(dto.nome());
         usuario.setUsername(dto.username());
         redefinirSenhaSeInformada(usuario, dto.senha());
+        usuario.setMotorista(resolverMotorista(usuario.getRole(), dto.motoristaId(), usuario.getId()));
 
+        usuarioRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(usuario);
     }
 
@@ -93,6 +101,7 @@ public class UsuarioService {
     public UsuarioResponseDTO atualizarParcial(Long id, UsuarioRequestDTO dto) {
         Usuario usuario = usuarioRepository.findById(id)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(id));
+        Versoes.conferir(usuario.getVersao(), dto.versao(), "Usuário", id);
 
         if (dto.nome() != null) {
             usuario.setNome(dto.nome());
@@ -108,7 +117,13 @@ public class UsuarioService {
             aplicarAtivo(usuario, dto.ativo());
         }
         redefinirSenhaSeInformada(usuario, dto.senha());
+        if (dto.motoristaId() != null) {
+            usuario.setMotorista(resolverMotorista(usuario.getRole(), dto.motoristaId(), usuario.getId()));
+        } else if (usuario.getRole() != Role.MOTORISTA) {
+            usuario.setMotorista(null); // deixou de ser motorista: o vinculo nao faz mais sentido
+        }
 
+        usuarioRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(usuario);
     }
 
@@ -123,6 +138,28 @@ public class UsuarioService {
 
         usuarioRepository.delete(usuario);
         log.info("Usuario removido: id={}, username={}", id, usuario.getUsername());
+    }
+
+    /*
+     * HU07: liga o usuario a um cadastro de motorista. so pro perfil MOTORISTA, e cada
+     * cadastro pertence a um usuario so (senao dois logins veriam as mesmas OS como "minhas").
+     */
+    private Motorista resolverMotorista(Role role, Long motoristaId, Long usuarioId) {
+        if (motoristaId == null) {
+            return null;
+        }
+        if (role != Role.MOTORISTA) {
+            throw new RegraNegocioException("Só usuário com perfil Motorista pode ser ligado a um cadastro de motorista");
+        }
+        Motorista motorista = motoristaRepository.findById(motoristaId)
+                .orElseThrow(() -> new MotoristaNaoEncontradoException(motoristaId));
+        usuarioRepository.findByMotoristaId(motoristaId)
+                .filter(outro -> !outro.getId().equals(usuarioId))
+                .ifPresent(outro -> {
+                    throw new RegraNegocioException("O motorista " + motorista.getNome()
+                            + " já está ligado ao usuário " + outro.getUsername());
+                });
+        return motorista;
     }
 
     private void validarUsernameDisponivel(Usuario usuario, String novoUsername) {
@@ -176,7 +213,9 @@ public class UsuarioService {
                 usuario.getAtivo(),
                 usuario.getTrocarSenha(),
                 usuario.getUltimoLogin(),
-                usuario.getCriadoEm()
+                usuario.getCriadoEm(),
+                usuario.getMotorista() != null ? usuario.getMotorista().getId() : null,
+                usuario.getVersao()
         );
     }
 }

@@ -49,5 +49,9 @@ public record ParadaOsRequestDTO(
 
         @Size(max = 100, message = "Uma parada pode ter no máximo 100 transfers", groups = {Default.class, OnPatch.class})
         @Schema(example = "[1]")
-        Set<Long> transferIds
+        Set<Long> transferIds,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409
+        @Schema(example = "3")
+        Long versao
 ) {}

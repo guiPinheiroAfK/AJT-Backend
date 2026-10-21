@@ -5,6 +5,7 @@ import com.AJTBackend.model.enums.StatusTransfer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -12,7 +13,8 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
-public interface TransferRepository extends JpaRepository<Transfer, Long> {
+// JpaSpecificationExecutor: listagem com filtros opcionais (RF015, ver Especificacoes)
+public interface TransferRepository extends JpaRepository<Transfer, Long>, JpaSpecificationExecutor<Transfer> {
 
     Page<Transfer> findByStatus(StatusTransfer status, Pageable pageable);
 

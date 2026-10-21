@@ -1,5 +1,6 @@
 package com.AJTBackend.controller;
 
+import com.AJTBackend.dto.FiltroMotoristaDTO;
 import com.AJTBackend.dto.MotoristaRequestDTO;
 import com.AJTBackend.dto.MotoristaResponseDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
@@ -27,11 +28,13 @@ public class MotoristaController {
 
     private final MotoristaService motoristaService;
 
-    @Operation(summary = "Lista motoristas (paginado)")
+    @Operation(summary = "Lista motoristas (paginado, com filtros opcionais)",
+            description = "?nome= e ?cnh= buscam por parte do texto, sem diferenciar maiúsculas. Sem filtro, lista todos.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida")})
     @GetMapping
-    public ResponseEntity<PaginaResponseDTO<MotoristaResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(motoristaService.listarTodos(pageable));
+    public ResponseEntity<PaginaResponseDTO<MotoristaResponseDTO>> listar(@ParameterObject FiltroMotoristaDTO filtro,
+                                                                          @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(motoristaService.listar(filtro, pageable));
     }
 
     @Operation(summary = "Busca motorista por ID")

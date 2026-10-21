@@ -1,6 +1,7 @@
 package com.AJTBackend.service;
 
 import com.AJTBackend.config.UsuarioLogado;
+import com.AJTBackend.dto.FiltroPassageiroDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
@@ -8,11 +9,13 @@ import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.model.Passageiro;
 import com.AJTBackend.model.enums.Role;
+import com.AJTBackend.repository.Especificacoes;
 import com.AJTBackend.repository.PassageiroRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,8 +32,12 @@ public class PassageiroService {
     private final PassageiroRepository passageiroRepository;
     private final UsuarioLogado usuarioLogado;
 
-    public PaginaResponseDTO<PassageiroResponseDTO> listarTodos(Pageable pageable) {
-        return PaginaResponseDTO.de(passageiroRepository.findAll(pageable), this::toResponseDTO);
+    // RF015: nome e nacionalidade sao opcionais (contem, sem diferenciar maiusculas)
+    public PaginaResponseDTO<PassageiroResponseDTO> listar(FiltroPassageiroDTO filtro, Pageable pageable) {
+        Specification<Passageiro> spec = Specification.allOf(
+                Especificacoes.contem("nome", filtro.nome()),
+                Especificacoes.contem("nacionalidade", filtro.nacionalidade()));
+        return PaginaResponseDTO.de(passageiroRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
     public PassageiroResponseDTO buscarPorId(Long id) {
@@ -70,6 +77,7 @@ public class PassageiroService {
     public PassageiroResponseDTO atualizar(Long id, PassageiroRequestDTO dto) {
         Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
+        Versoes.conferir(passageiro.getVersao(), dto.versao(), "Passageiro", id);
 
         validarDocumento(dto.tipoDocumento(), dto.documento());
         passageiro.setNome(dto.nome());
@@ -77,6 +85,7 @@ public class PassageiroService {
         passageiro.setDocumento(dto.documento());
         passageiro.setNacionalidade(dto.nacionalidade());
 
+        passageiroRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(passageiro);
     }
 
@@ -84,6 +93,7 @@ public class PassageiroService {
     public PassageiroResponseDTO atualizarParcial(Long id, PassageiroRequestDTO dto) {
         Passageiro passageiro = passageiroRepository.findById(id)
                 .orElseThrow(() -> new PassageiroNaoEncontradoException(id));
+        Versoes.conferir(passageiro.getVersao(), dto.versao(), "Passageiro", id);
 
         if (dto.nome() != null) {
             passageiro.setNome(dto.nome());
@@ -102,6 +112,7 @@ public class PassageiroService {
             validarDocumento(passageiro.getTipoDocumento(), passageiro.getDocumento());
         }
 
+        passageiroRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(passageiro);
     }
 
@@ -122,7 +133,8 @@ public class PassageiroService {
                 p.getNome(),
                 p.getTipoDocumento(),
                 documento,
-                p.getNacionalidade()
+                p.getNacionalidade(),
+                p.getVersao()
         );
     }
 

@@ -1,5 +1,6 @@
 package com.AJTBackend.controller;
 
+import com.AJTBackend.dto.FiltroPassageiroDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
@@ -27,11 +28,13 @@ public class PassageiroController {
 
     private final PassageiroService service;
 
-    @Operation(summary = "Lista passageiros (paginado)")
+    @Operation(summary = "Lista passageiros (paginado, com filtros opcionais)",
+            description = "?nome= e ?nacionalidade= buscam por parte do texto, sem diferenciar maiúsculas. Sem filtro, lista todos.")
     @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida")})
     @GetMapping
-    public ResponseEntity<PaginaResponseDTO<PassageiroResponseDTO>> listarTodos(@ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
-        return ResponseEntity.ok(service.listarTodos(pageable));
+    public ResponseEntity<PaginaResponseDTO<PassageiroResponseDTO>> listar(@ParameterObject FiltroPassageiroDTO filtro,
+                                                                           @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
+        return ResponseEntity.ok(service.listar(filtro, pageable));
     }
 
     @Operation(summary = "Busca passageiro por ID")

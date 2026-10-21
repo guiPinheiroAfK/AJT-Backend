@@ -1,16 +1,19 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.FiltroMotoristaDTO;
 import com.AJTBackend.dto.MotoristaRequestDTO;
 import com.AJTBackend.dto.MotoristaResponseDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.exception.CnhJaCadastradaException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
+import com.AJTBackend.repository.Especificacoes;
 import com.AJTBackend.repository.MotoristaRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,8 +28,12 @@ public class MotoristaService {
 
     private final MotoristaRepository motoristaRepository;
 
-    public PaginaResponseDTO<MotoristaResponseDTO> listarTodos(Pageable pageable) {
-        return PaginaResponseDTO.de(motoristaRepository.findAll(pageable), this::toResponseDTO);
+    // RF015: nome e cnh sao opcionais (contem, sem diferenciar maiusculas)
+    public PaginaResponseDTO<MotoristaResponseDTO> listar(FiltroMotoristaDTO filtro, Pageable pageable) {
+        Specification<Motorista> spec = Specification.allOf(
+                Especificacoes.contem("nome", filtro.nome()),
+                Especificacoes.contem("cnh", filtro.cnh()));
+        return PaginaResponseDTO.de(motoristaRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
     public MotoristaResponseDTO buscarPorId(Long id) {
@@ -65,6 +72,7 @@ public class MotoristaService {
     public MotoristaResponseDTO atualizar(Long id, MotoristaRequestDTO dto) {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
+        Versoes.conferir(motorista.getVersao(), dto.versao(), "Motorista", id);
 
         if (!dto.cnh().equals(motorista.getCnh()) && motoristaRepository.existsByCnh(dto.cnh())) {
             throw new CnhJaCadastradaException(dto.cnh());
@@ -76,6 +84,7 @@ public class MotoristaService {
         motorista.setLatitudeAtual(dto.latitudeAtual());
         motorista.setLongitudeAtual(dto.longitudeAtual());
 
+        motoristaRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(motorista);
     }
 
@@ -83,6 +92,7 @@ public class MotoristaService {
     public MotoristaResponseDTO atualizarParcial(Long id, MotoristaRequestDTO dto) {
         Motorista motorista = motoristaRepository.findById(id)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
+        Versoes.conferir(motorista.getVersao(), dto.versao(), "Motorista", id);
 
         if (dto.nome() != null) {
             motorista.setNome(dto.nome());
@@ -103,6 +113,7 @@ public class MotoristaService {
             motorista.setLongitudeAtual(dto.longitudeAtual());
         }
 
+        motoristaRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(motorista);
     }
 
@@ -122,7 +133,8 @@ public class MotoristaService {
                 motorista.getCnh(),
                 motorista.getTelefone(),
                 motorista.getLatitudeAtual(),
-                motorista.getLongitudeAtual()
+                motorista.getLongitudeAtual(),
+                motorista.getVersao()
         );
     }
 }
