@@ -62,10 +62,15 @@ public class RelatorioOrdemServicoService {
     private final OrdemServicoRepository ordemServicoRepository;
     private final ParadaOsRepository paradaOsRepository;
     private final UsuarioLogado usuarioLogado;
+    private final AcessoMotorista acessoMotorista;
 
     public byte[] gerar(Long osId) {
         OrdemServico os = ordemServicoRepository.findById(osId)
                 .orElseThrow(() -> new OrdemServicoNaoEncontradoException(osId));
+        // HU07: motorista so imprime as OS dele
+        if (!acessoMotorista.podeVer(os)) {
+            throw new OrdemServicoNaoEncontradoException(osId);
+        }
         List<ParadaOs> paradas = paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(osId);
         List<Transfer> transfers = os.getTransfers().stream()
                 .sorted(Comparator.comparing(Transfer::getHoraTransfer, Comparator.nullsLast(Comparator.naturalOrder())))

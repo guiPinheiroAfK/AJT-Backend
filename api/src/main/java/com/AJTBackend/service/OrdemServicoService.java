@@ -1,5 +1,7 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.dto.FiltroOrdemServicoDTO;
+import com.AJTBackend.dto.OrdemServicoDoDiaDTO;
 import com.AJTBackend.dto.OrdemServicoRequestDTO;
 import com.AJTBackend.dto.OrdemServicoResponseDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
@@ -12,6 +14,7 @@ import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.OrdemServico;
 import com.AJTBackend.model.Veiculo;
 import com.AJTBackend.model.enums.StatusOrdemServico;
+import com.AJTBackend.repository.Especificacoes;
 import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
@@ -19,10 +22,13 @@ import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.List;
 
 
 @Service
@@ -38,19 +44,68 @@ public class OrdemServicoService {
     private final MotoristaRepository motoristaRepository;
     private final VeiculoRepository veiculoRepository;
     private final AuditoriaService auditoriaService;
+    private final AcessoMotorista acessoMotorista;
+    private final ParadaOsService paradaOsService;
 
-    public PaginaResponseDTO<OrdemServicoResponseDTO> listarTodos(Pageable pageable) {
-        return PaginaResponseDTO.de(ordemServicoRepository.findAll(pageable), this::toResponseDTO);
+    /*
+     * leitura: RF015 (filtros opcionais, somados) + HU07 (o MOTORISTA so ve as OS dele;
+     * o motoristaId que vier no filtro e trocado pelo dele, e sem vinculo ele nao ve nenhuma)
+     */
+    public PaginaResponseDTO<OrdemServicoResponseDTO> listar(FiltroOrdemServicoDTO filtro, Pageable pageable) {
+        Especificacoes.validarPeriodo(filtro.dataInicio(), filtro.dataFim());
+        Specification<OrdemServico> spec = Specification.allOf(
+                Especificacoes.igual("status", filtro.status()),
+                Especificacoes.dataEntre("dataServico", filtro.dataInicio(), filtro.dataFim()),
+                Especificacoes.igual("motorista.id", acessoMotorista.restrito() ? null : filtro.motoristaId()),
+                Especificacoes.igual("veiculo.id", filtro.veiculoId()),
+                restricaoDoMotorista());
+        return PaginaResponseDTO.de(ordemServicoRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
+    // motorista que pede uma OS que nao e dele recebe 404: nem fica sabendo que ela existe
     public OrdemServicoResponseDTO buscarPorId(Long id) {
-        OrdemServico ordemServico = ordemServicoRepository.findById(id)
-                .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
-        return toResponseDTO(ordemServico);
+        return toResponseDTO(buscarVisivel(id));
     }
 
     public PaginaResponseDTO<OrdemServicoResponseDTO> buscarPorStatus(StatusOrdemServico status, Pageable pageable) {
-        return PaginaResponseDTO.de(ordemServicoRepository.findByStatus(status, pageable), this::toResponseDTO);
+        return listar(new FiltroOrdemServicoDTO(status, null, null, null, null), pageable);
+    }
+
+    /**
+     * HU07: as OS do motorista logado num dia (hoje, no fuso de Sao Paulo, se nao vier data),
+     * cada uma com as paradas na ordem em que ele passa.
+     */
+    public List<OrdemServicoDoDiaDTO> minhasDoDia(LocalDate data) {
+        LocalDate dia = data != null ? data : LocalDate.now(PainelService.FUSO_OPERACAO);
+        Long motoristaId = acessoMotorista.motoristaId().orElse(null);
+        if (motoristaId == null) {
+            return List.of();
+        }
+        Specification<OrdemServico> spec = Specification.allOf(
+                Especificacoes.igual("motorista.id", motoristaId),
+                Especificacoes.igual("dataServico", dia));
+        return ordemServicoRepository.findAll(spec, Sort.by("id")).stream()
+                .map(os -> new OrdemServicoDoDiaDTO(toResponseDTO(os), paradaOsService.listarPorOrdemServico(os.getId())))
+                .toList();
+    }
+
+    /** OS que o usuario logado pode ver (motorista: so as dele); senao 404. */
+    OrdemServico buscarVisivel(Long id) {
+        OrdemServico ordemServico = ordemServicoRepository.findById(id)
+                .orElseThrow(() -> new OrdemServicoNaoEncontradoException(id));
+        if (!acessoMotorista.podeVer(ordemServico)) {
+            throw new OrdemServicoNaoEncontradoException(id);
+        }
+        return ordemServico;
+    }
+
+    private Specification<OrdemServico> restricaoDoMotorista() {
+        if (!acessoMotorista.restrito()) {
+            return null;
+        }
+        return acessoMotorista.motoristaId()
+                .<Specification<OrdemServico>>map(id -> Especificacoes.igual("motorista.id", id))
+                .orElseGet(Especificacoes::nenhum);
     }
 
     @Transactional
