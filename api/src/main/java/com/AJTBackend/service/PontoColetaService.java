@@ -67,6 +67,7 @@ public class PontoColetaService {
     public PontoColetaResponseDTO atualizar(Long id, PontoColetaRequestDTO dto) {
         PontoColeta pontoColeta = pontoColetaRepository.findById(id)
                 .orElseThrow(() -> new PontoColetaNaoEncontradoException(id));
+        Versoes.conferir(pontoColeta.getVersao(), dto.versao(), "Ponto de coleta", id);
 
         pontoColeta.setTransfer(buscarTransfer(dto.transferId()));
         pontoColeta.setLocalColeta(dto.localColeta());
@@ -75,6 +76,7 @@ public class PontoColetaService {
         pontoColeta.setLatitude(dto.latitude());
         pontoColeta.setLongitude(dto.longitude());
 
+        pontoColetaRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(pontoColeta);
     }
 
@@ -82,6 +84,7 @@ public class PontoColetaService {
     public PontoColetaResponseDTO atualizarParcial(Long id, PontoColetaRequestDTO dto) {
         PontoColeta pontoColeta = pontoColetaRepository.findById(id)
                 .orElseThrow(() -> new PontoColetaNaoEncontradoException(id));
+        Versoes.conferir(pontoColeta.getVersao(), dto.versao(), "Ponto de coleta", id);
 
         if (dto.transferId() != null) {
             pontoColeta.setTransfer(buscarTransfer(dto.transferId()));
@@ -102,6 +105,7 @@ public class PontoColetaService {
             pontoColeta.setLongitude(dto.longitude());
         }
 
+        pontoColetaRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(pontoColeta);
     }
 
@@ -127,7 +131,8 @@ public class PontoColetaService {
                 pontoColeta.getOrdemParada(),
                 pontoColeta.getHorarioPrevisto(),
                 pontoColeta.getLatitude(),
-                pontoColeta.getLongitude()
+                pontoColeta.getLongitude(),
+                pontoColeta.getVersao()
         );
     }
 }

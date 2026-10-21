@@ -10,5 +10,6 @@ public record PontoColetaResponseDTO(
         Integer ordemParada,
         LocalTime horarioPrevisto,
         BigDecimal latitude,
-        BigDecimal longitude
+        BigDecimal longitude,
+        Long versao
 ) {}
