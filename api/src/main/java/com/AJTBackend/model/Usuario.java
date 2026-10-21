@@ -52,6 +52,11 @@ public class Usuario {
     @Column(name = "ultimo_login")
     private LocalDateTime ultimoLogin;
 
+    // HU07: cadastro de motorista deste usuario (so perfil MOTORISTA); define quais OS ele ve (V11)
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "motorista_id", unique = true)
+    private Motorista motorista;
+
     @Column(name = "criado_em", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime criadoEm = LocalDateTime.now();
