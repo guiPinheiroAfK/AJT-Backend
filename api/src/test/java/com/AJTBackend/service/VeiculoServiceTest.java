@@ -101,6 +101,14 @@ class VeiculoServiceTest {
     }
 
     @Test
+    void putParaUmaPlacaLivreTrocaAPlaca() {
+        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+        when(repository.existsByPlaca("BBB2B22")).thenReturn(false);
+
+        assertThat(service.atualizar(1L, dto("Van 01", "BBB2B22", 15, 2L)).placa()).isEqualTo("BBB2B22");
+    }
+
+    @Test
     void manterAMesmaPlacaNaoConsultaDuplicidade() {
         when(repository.findById(1L)).thenReturn(Optional.of(van()));
 

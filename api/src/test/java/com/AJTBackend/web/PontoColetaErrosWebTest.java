@@ -50,28 +50,28 @@ class PontoColetaErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/pontos-coleta"), json), detalhe);
+        enviar(post("/api/pontos-coleta"), json).andExpect(validacao(detalhe));
         verify(pontoColetaService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/pontos-coleta/1"), json), detalhe);
+        enviar(put("/api/pontos-coleta/1"), json).andExpect(validacao(detalhe));
         verify(pontoColetaService, never()).atualizar(any(), any());
     }
 
     @Test
     void horarioEmFormatoErradoRetorna400DeCorpoInvalido() throws Exception {
-        esperaErro(enviar(post("/api/pontos-coleta"),
-                        "{\"transferId\":1,\"localColeta\":\"P\",\"latitude\":0,\"longitude\":0,\"horarioPrevisto\":\"25:99\"}"),
-                400, "Requisição inválida", "corpo da requisição");
+        enviar(post("/api/pontos-coleta"),
+                        "{\"transferId\":1,\"localColeta\":\"P\",\"latitude\":0,\"longitude\":0,\"horarioPrevisto\":\"25:99\"}")
+                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
     }
 
     @Test
     void patchRecusaLocalVazioECoordenadaForaDaFaixa() throws Exception {
-        esperaValidacao(enviar(patch("/api/pontos-coleta/1"), "{\"localColeta\":\"\"}"), "localColeta: Local de coleta não pode ser vazio");
-        esperaValidacao(enviar(patch("/api/pontos-coleta/1"), "{\"latitude\":-90.01}"), "latitude: Latitude inválida");
+        enviar(patch("/api/pontos-coleta/1"), "{\"localColeta\":\"\"}").andExpect(validacao("localColeta: Local de coleta não pode ser vazio"));
+        enviar(patch("/api/pontos-coleta/1"), "{\"latitude\":-90.01}").andExpect(validacao("latitude: Latitude inválida"));
         verify(pontoColetaService, never()).atualizarParcial(any(), any());
     }
 
@@ -79,7 +79,7 @@ class PontoColetaErrosWebTest extends ErrosWebTestBase {
     void transferInexistenteNoCadastroRetorna404() throws Exception {
         when(pontoColetaService.criar(any())).thenThrow(new TransferNaoEncontradoException(42L));
 
-        esperaErro(enviar(post("/api/pontos-coleta"), VALIDO), 404, "Recurso não encontrado", "42");
+        enviar(post("/api/pontos-coleta"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "42"));
     }
 
     @Test
@@ -89,23 +89,23 @@ class PontoColetaErrosWebTest extends ErrosWebTestBase {
         when(pontoColetaService.atualizarParcial(eq(99L), any())).thenThrow(new PontoColetaNaoEncontradoException(99L));
         doThrow(new PontoColetaNaoEncontradoException(99L)).when(pontoColetaService).deletar(99L);
 
-        esperaErro(chamar(get("/api/pontos-coleta/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/pontos-coleta/99"), VALIDO), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/pontos-coleta/99"), "{\"localColeta\":\"Outro\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/pontos-coleta/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/pontos-coleta/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/pontos-coleta/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/pontos-coleta/99"), "{\"localColeta\":\"Outro\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/pontos-coleta/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
         verify(pontoColetaService).buscarPorId(99L);
         verify(pontoColetaService).deletar(99L);
     }
 
     @Test
     void transferComTipoErradoNaUrlRetorna400() throws Exception {
-        esperaErro(chamar(get("/api/pontos-coleta/transfer/xyz")), 400, "Parâmetro inválido", "transferId");
+        chamar(get("/api/pontos-coleta/transfer/xyz")).andExpect(erro(400, "Parâmetro inválido", "transferId"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
         when(pontoColetaService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Ponto de coleta", 1L));
 
-        esperaErro(enviar(put("/api/pontos-coleta/1"), VALIDO), 409, "Conflito de edição", "Ponto de coleta 1");
+        enviar(put("/api/pontos-coleta/1"), VALIDO).andExpect(erro(409, "Conflito de edição", "Ponto de coleta 1"));
     }
 }

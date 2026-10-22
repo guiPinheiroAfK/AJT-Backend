@@ -110,4 +110,24 @@ class RelatorioOrdemServicoServiceTest {
         assertThat(texto).contains("Rodoviaria");
         assertThat(texto).doesNotContain("null");
     }
+
+    // RNF007/LGPD: o papel fica com o motorista, entao o documento do passageiro nunca e impresso
+    @Test
+    void documentoDoPassageiroNaoSaiNoPapel() throws IOException {
+        Transfer transfer = Transfer.builder().id(20L).horaTransfer(LocalTime.of(10, 0)).origem("GRU").destino("Hotel")
+                .passageiros(Set.of(
+                        Passageiro.builder().id(1L).nome("Ana Lima").tipoDocumento("CPF").documento("529.982.247-25").build(),
+                        Passageiro.builder().id(2L).nome("John Doe").tipoDocumento("PASSAPORTE").documento("XP9988776").build()))
+                .build();
+        OrdemServico os = OrdemServico.builder().id(4L).dataServico(LocalDate.of(2026, 10, 21))
+                .transfers(new ArrayList<>(List.of(transfer))).build();
+        when(ordemServicoRepository.findById(4L)).thenReturn(Optional.of(os));
+        when(acessoMotorista.podeVer(any())).thenReturn(true);
+        when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(4L)).thenReturn(List.of());
+
+        String texto = texto(service.gerar(4L));
+
+        assertThat(texto).contains("Ana Lima", "John Doe");
+        assertThat(texto).doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
+    }
 }

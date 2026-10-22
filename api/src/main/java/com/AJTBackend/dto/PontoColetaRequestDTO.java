@@ -20,7 +20,7 @@ public record PontoColetaRequestDTO(
         Long transferId,
 
         @NotBlank(message = "Local de coleta é obrigatório")
-        @Pattern(regexp = ".*\\S.*", message = "Local de coleta não pode ser vazio", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Local de coleta não pode ser vazio", groups = OnPatch.class)
         @Size(max = 100, message = "Local de coleta deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Portão 3 - Desembarque Internacional")
         String localColeta,

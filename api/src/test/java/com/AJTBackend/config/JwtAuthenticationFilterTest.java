@@ -10,10 +10,12 @@ import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -119,6 +121,27 @@ class JwtAuthenticationFilterTest {
         filter.doFilter(requisicao(null), new MockHttpServletResponse(), chain);
 
         assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(usuarioRepository, never()).findByUsername(anyString());
+    }
+
+    @Test
+    void headerSemPrefixoBearerSegueSemAutenticar() throws Exception {
+        filter.doFilter(requisicao("Basic YWRtaW46YWRtaW4="), new MockHttpServletResponse(), chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        verify(usuarioRepository, never()).findByUsername(anyString());
+        assertThat(chain.getRequest()).isNotNull();
+    }
+
+    @Test
+    void requisicaoJaAutenticadaNaoEhReprocessada() throws Exception {
+        Authentication existente = new UsernamePasswordAuthenticationToken("maria", null, List.of());
+        SecurityContextHolder.getContext().setAuthentication(existente);
+
+        filter.doFilter(requisicao("Bearer " + jwtService.gerarToken("joao", Role.ADMIN)),
+                new MockHttpServletResponse(), chain);
+
+        assertThat(SecurityContextHolder.getContext().getAuthentication()).isSameAs(existente);
         verify(usuarioRepository, never()).findByUsername(anyString());
     }
 

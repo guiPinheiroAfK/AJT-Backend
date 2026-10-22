@@ -52,20 +52,20 @@ class MotoristaErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/motoristas"), json), detalhe);
+        enviar(post("/api/motoristas"), json).andExpect(validacao(detalhe));
         verify(motoristaService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/motoristas/1"), json), detalhe);
+        enviar(put("/api/motoristas/1"), json).andExpect(validacao(detalhe));
         verify(motoristaService, never()).atualizar(any(), any());
     }
 
     @Test
     void patchRecusaTextoVazio() throws Exception {
-        esperaValidacao(enviar(patch("/api/motoristas/1"), "{\"cnh\":\"  \"}"), "cnh: CNH não pode ser vazia");
+        enviar(patch("/api/motoristas/1"), "{\"cnh\":\"  \"}").andExpect(validacao("cnh: CNH não pode ser vazia"));
         verify(motoristaService, never()).atualizarParcial(any(), any());
     }
 
@@ -76,38 +76,38 @@ class MotoristaErrosWebTest extends ErrosWebTestBase {
         when(motoristaService.atualizarParcial(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
         doThrow(new MotoristaNaoEncontradoException(99L)).when(motoristaService).deletar(99L);
 
-        esperaErro(chamar(get("/api/motoristas/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/motoristas/99"), VALIDO), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/motoristas/99"), "{\"nome\":\"Dora\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/motoristas/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/motoristas/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/motoristas/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/motoristas/99"), "{\"nome\":\"Dora\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/motoristas/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
     void buscaPorCnhInexistenteRetorna404ESemParametroRetorna400() throws Exception {
         when(motoristaService.buscarPorCnh("000")).thenThrow(new MotoristaNaoEncontradoException("000"));
 
-        esperaErro(chamar(get("/api/motoristas/buscar").param("cnh", "000")), 404, "Recurso não encontrado", "000");
-        esperaErro(chamar(get("/api/motoristas/buscar")), 400, "Parâmetro inválido", "'cnh' é obrigatório");
+        chamar(get("/api/motoristas/buscar").param("cnh", "000")).andExpect(erro(404, "Recurso não encontrado", "000"));
+        chamar(get("/api/motoristas/buscar")).andExpect(erro(400, "Parâmetro inválido", "'cnh' é obrigatório"));
     }
 
     @Test
     void cnhDuplicadaRetorna400() throws Exception {
         when(motoristaService.criar(any())).thenThrow(new CnhJaCadastradaException("12345678900"));
 
-        esperaErro(enviar(post("/api/motoristas"), VALIDO), 400, "Erro de validação", "Já existe motorista cadastrado com CNH");
+        enviar(post("/api/motoristas"), VALIDO).andExpect(erro(400, "Erro de validação", "Já existe motorista cadastrado com CNH"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
         when(motoristaService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Motorista", 1L));
 
-        esperaErro(enviar(put("/api/motoristas/1"), VALIDO), 409, "Conflito de edição", "alterado por outro usuário");
+        enviar(put("/api/motoristas/1"), VALIDO).andExpect(erro(409, "Conflito de edição", "alterado por outro usuário"));
     }
 
     @Test
     void excluirMotoristaComOrdemDeServicoRetorna409() throws Exception {
         doThrow(new DataIntegrityViolationException("fk")).when(motoristaService).deletar(1L);
 
-        esperaErro(chamar(delete("/api/motoristas/1")), 409, "Conflito de dados", "em uso");
+        chamar(delete("/api/motoristas/1")).andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 }

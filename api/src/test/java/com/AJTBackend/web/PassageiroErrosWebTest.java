@@ -51,28 +51,28 @@ class PassageiroErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/passageiros"), json), detalhe);
+        enviar(post("/api/passageiros"), json).andExpect(validacao(detalhe));
         verify(passageiroService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/passageiros/1"), json), detalhe);
+        enviar(put("/api/passageiros/1"), json).andExpect(validacao(detalhe));
         verify(passageiroService, never()).atualizar(any(), any());
     }
 
     @Test
     void patchRecusaTextoVazioMasAceitaCampoAusente() throws Exception {
-        esperaValidacao(enviar(patch("/api/passageiros/1"), "{\"nome\":\"\"}"), "nome: Nome não pode ser vazio");
-        esperaValidacao(enviar(patch("/api/passageiros/1"), "{\"documento\":\" \"}"), "documento: Documento não pode ser vazio");
+        enviar(patch("/api/passageiros/1"), "{\"nome\":\"\"}").andExpect(validacao("nome: Nome não pode ser vazio"));
+        enviar(patch("/api/passageiros/1"), "{\"documento\":\" \"}").andExpect(validacao("documento: Documento não pode ser vazio"));
         verify(passageiroService, never()).atualizarParcial(any(), any());
     }
 
     @Test
     void corpoAusenteOuMalformadoRetorna400() throws Exception {
-        esperaErro(enviar(post("/api/passageiros"), ""), 400, "Requisição inválida", "corpo da requisição");
-        esperaErro(enviar(post("/api/passageiros"), "{\"nome\":"), 400, "Requisição inválida", "corpo da requisição");
+        enviar(post("/api/passageiros"), "").andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+        enviar(post("/api/passageiros"), "{\"nome\":").andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
     }
 
     @Test
@@ -82,29 +82,29 @@ class PassageiroErrosWebTest extends ErrosWebTestBase {
         when(passageiroService.atualizarParcial(eq(99L), any())).thenThrow(new PassageiroNaoEncontradoException(99L));
         doThrow(new PassageiroNaoEncontradoException(99L)).when(passageiroService).deletar(99L);
 
-        esperaErro(chamar(get("/api/passageiros/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/passageiros/99"), VALIDO), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/passageiros/99"), "{\"nome\":\"Bia\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/passageiros/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/passageiros/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/passageiros/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/passageiros/99"), "{\"nome\":\"Bia\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/passageiros/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
     void cpfInvalidoRetorna400DeRegraDeNegocio() throws Exception {
         when(passageiroService.criar(any())).thenThrow(new RegraNegocioException("CPF inválido: confira os 11 dígitos."));
 
-        esperaErro(enviar(post("/api/passageiros"), "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"123\"}"),
-                400, "Regra de negócio", "CPF inválido");
+        enviar(post("/api/passageiros"), "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"123\"}")
+                .andExpect(erro(400, "Regra de negócio", "CPF inválido"));
     }
 
     @Test
     void excluirPassageiroEmUsoRetorna409() throws Exception {
         doThrow(new DataIntegrityViolationException("fk")).when(passageiroService).deletar(1L);
 
-        esperaErro(chamar(delete("/api/passageiros/1")), 409, "Conflito de dados", "em uso");
+        chamar(delete("/api/passageiros/1")).andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 
     @Test
     void idComTipoErradoRetorna400() throws Exception {
-        esperaErro(chamar(get("/api/passageiros/abc")), 400, "Parâmetro inválido", "id");
+        chamar(get("/api/passageiros/abc")).andExpect(erro(400, "Parâmetro inválido", "id"));
     }
 }

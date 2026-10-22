@@ -7,6 +7,7 @@ import com.AJTBackend.dto.TrocaSenhaRequestDTO;
 import com.AJTBackend.exception.CredenciaisInvalidasException;
 import com.AJTBackend.exception.MuitasTentativasException;
 import com.AJTBackend.exception.RegraNegocioException;
+import com.AJTBackend.exception.UsuarioNaoEncontradoException;
 import com.AJTBackend.model.Usuario;
 import com.AJTBackend.model.enums.Role;
 import com.AJTBackend.repository.UsuarioRepository;
@@ -157,6 +158,23 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.login(new LoginRequestDTO("admin", "x"), IP))
                 .isInstanceOf(MuitasTentativasException.class);
         verify(usuarioRepository, never()).findByUsername(anyString());
+    }
+
+    @Test
+    void trocaDeSenhaDeUsuarioRemovidoRetorna404() {
+        when(usuarioRepository.findByUsername("removido")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.trocarSenha("removido", new TrocaSenhaRequestDTO("a", "senha-nova-123")))
+                .isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void loginSemUsernameRetornaCredenciaisInvalidas() {
+        // o @NotBlank do DTO barra isso no controller; aqui confere que o service tambem nao quebra (log, contador)
+        when(usuarioRepository.findByUsername(null)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(new LoginRequestDTO(null, "x"), IP))
+                .isInstanceOf(CredenciaisInvalidasException.class);
     }
 
     private Usuario usuario(String username, String senha, boolean ativo) {

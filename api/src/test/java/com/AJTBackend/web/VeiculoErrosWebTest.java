@@ -52,27 +52,27 @@ class VeiculoErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/veiculos"), json), detalhe);
+        enviar(post("/api/veiculos"), json).andExpect(validacao(detalhe));
         verify(veiculoService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/veiculos/1"), json), detalhe);
+        enviar(put("/api/veiculos/1"), json).andExpect(validacao(detalhe));
         verify(veiculoService, never()).atualizar(any(), any());
     }
 
     @Test
     void capacidadeComTextoRetorna400DeCorpoInvalido() throws Exception {
-        esperaErro(enviar(post("/api/veiculos"), "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":\"quinze\"}"),
-                400, "Requisição inválida", "corpo da requisição");
+        enviar(post("/api/veiculos"), "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":\"quinze\"}")
+                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
     }
 
     @Test
     void patchRecusaTextoVazioECapacidadeInvalida() throws Exception {
-        esperaValidacao(enviar(patch("/api/veiculos/1"), "{\"placa\":\"\"}"), "placa: Placa não pode ser vazia");
-        esperaValidacao(enviar(patch("/api/veiculos/1"), "{\"capacidade\":0}"), "capacidade: Capacidade deve ser maior que zero");
+        enviar(patch("/api/veiculos/1"), "{\"placa\":\"\"}").andExpect(validacao("placa: Placa não pode ser vazia"));
+        enviar(patch("/api/veiculos/1"), "{\"capacidade\":0}").andExpect(validacao("capacidade: Capacidade deve ser maior que zero"));
         verify(veiculoService, never()).atualizarParcial(any(), any());
     }
 
@@ -83,38 +83,38 @@ class VeiculoErrosWebTest extends ErrosWebTestBase {
         when(veiculoService.atualizarParcial(eq(99L), any())).thenThrow(new VeiculoNaoEncontradoException(99L));
         doThrow(new VeiculoNaoEncontradoException(99L)).when(veiculoService).deletar(99L);
 
-        esperaErro(chamar(get("/api/veiculos/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/veiculos/99"), VALIDO), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/veiculos/99"), "{\"marca\":\"Fiat\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/veiculos/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/veiculos/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/veiculos/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/veiculos/99"), "{\"marca\":\"Fiat\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/veiculos/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
     void buscaPorPlacaInexistenteRetorna404ESemParametroRetorna400() throws Exception {
         when(veiculoService.buscarPorPlaca("XXX0000")).thenThrow(new VeiculoNaoEncontradoException("XXX0000"));
 
-        esperaErro(chamar(get("/api/veiculos/buscar").param("placa", "XXX0000")), 404, "Recurso não encontrado", "XXX0000");
-        esperaErro(chamar(get("/api/veiculos/buscar")), 400, "Parâmetro inválido", "'placa' é obrigatório");
+        chamar(get("/api/veiculos/buscar").param("placa", "XXX0000")).andExpect(erro(404, "Recurso não encontrado", "XXX0000"));
+        chamar(get("/api/veiculos/buscar")).andExpect(erro(400, "Parâmetro inválido", "'placa' é obrigatório"));
     }
 
     @Test
     void placaDuplicadaRetorna400() throws Exception {
         when(veiculoService.criar(any())).thenThrow(new PlacaJaCadastradaException("ABC1D23"));
 
-        esperaErro(enviar(post("/api/veiculos"), VALIDO), 400, "Erro de validação", "Já existe veículo cadastrado com placa");
+        enviar(post("/api/veiculos"), VALIDO).andExpect(erro(400, "Erro de validação", "Já existe veículo cadastrado com placa"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
         when(veiculoService.atualizarParcial(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Veículo", 1L));
 
-        esperaErro(enviar(patch("/api/veiculos/1"), "{\"marca\":\"Fiat\",\"versao\":0}"), 409, "Conflito de edição", "Veículo 1");
+        enviar(patch("/api/veiculos/1"), "{\"marca\":\"Fiat\",\"versao\":0}").andExpect(erro(409, "Conflito de edição", "Veículo 1"));
     }
 
     @Test
     void excluirVeiculoComOrdemDeServicoRetorna409() throws Exception {
         doThrow(new DataIntegrityViolationException("fk")).when(veiculoService).deletar(1L);
 
-        esperaErro(chamar(delete("/api/veiculos/1")), 409, "Conflito de dados", "em uso");
+        chamar(delete("/api/veiculos/1")).andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 }

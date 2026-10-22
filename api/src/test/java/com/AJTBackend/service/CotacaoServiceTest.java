@@ -65,6 +65,13 @@ class CotacaoServiceTest {
     }
 
     @Test
+    void respostaSemTabelaDeTaxasViraIndisponivel() {
+        when(client.obterCotacao("USD", "BRL")).thenReturn(new CotacaoResponseDTO(BigDecimal.ONE, "USD", "2026-09-16", null));
+
+        assertThatThrownBy(() -> service.obterCotacao("USD", "BRL")).isInstanceOf(CotacaoIndisponivelException.class);
+    }
+
+    @Test
     void erroDoClientViraIndisponivel() {
         when(client.obterCotacao("USD", "BRL")).thenThrow(new RuntimeException("timeout"));
 
