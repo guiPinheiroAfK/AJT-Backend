@@ -54,27 +54,27 @@ class UsuarioErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/usuarios"), json), detalhe);
+        enviar(post("/api/usuarios"), json).andExpect(validacao(detalhe));
         verify(usuarioService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/usuarios/1"), json), detalhe);
+        enviar(put("/api/usuarios/1"), json).andExpect(validacao(detalhe));
         verify(usuarioService, never()).atualizar(any(), any());
     }
 
     @Test
     void perfilForaDoEnumListaOsAceitos() throws Exception {
-        esperaValidacao(enviar(post("/api/usuarios"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"role\":\"SUPERUSER\"}"),
-                "role: valor 'SUPERUSER' inválido. Aceitos: ADMIN, GERENTE, ATENDENTE, MOTORISTA");
+        enviar(post("/api/usuarios"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"role\":\"SUPERUSER\"}")
+                .andExpect(validacao("role: valor 'SUPERUSER' inválido. Aceitos: ADMIN, GERENTE, ATENDENTE, MOTORISTA"));
     }
 
     @Test
     void patchRecusaNomeVazioEUsernameForaDoPadrao() throws Exception {
-        esperaValidacao(enviar(patch("/api/usuarios/1"), "{\"nome\":\" \"}"), "nome: Nome não pode ser vazio");
-        esperaValidacao(enviar(patch("/api/usuarios/1"), "{\"username\":\"a b\"}"), "de 3 a 50 caracteres");
+        enviar(patch("/api/usuarios/1"), "{\"nome\":\" \"}").andExpect(validacao("nome: Nome não pode ser vazio"));
+        enviar(patch("/api/usuarios/1"), "{\"username\":\"a b\"}").andExpect(validacao("de 3 a 50 caracteres"));
         verify(usuarioService, never()).atualizarParcial(any(), any());
     }
 
@@ -84,10 +84,10 @@ class UsuarioErrosWebTest extends ErrosWebTestBase {
         when(usuarioService.atualizarParcial(eq(1L), any())).thenThrow(new RegraNegocioException("Você não pode alterar o próprio perfil"));
         doThrow(new RegraNegocioException("Você não pode excluir o próprio usuário")).when(usuarioService).deletar(1L);
 
-        esperaErro(enviar(post("/api/usuarios"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"role\":\"ATENDENTE\"}"),
-                400, "Regra de negócio", "Senha é obrigatória");
-        esperaErro(enviar(patch("/api/usuarios/1"), "{\"role\":\"ATENDENTE\"}"), 400, "Regra de negócio", "próprio perfil");
-        esperaErro(chamar(delete("/api/usuarios/1")), 400, "Regra de negócio", "próprio usuário");
+        enviar(post("/api/usuarios"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"role\":\"ATENDENTE\"}")
+                .andExpect(erro(400, "Regra de negócio", "Senha é obrigatória"));
+        enviar(patch("/api/usuarios/1"), "{\"role\":\"ATENDENTE\"}").andExpect(erro(400, "Regra de negócio", "próprio perfil"));
+        chamar(delete("/api/usuarios/1")).andExpect(erro(400, "Regra de negócio", "próprio usuário"));
     }
 
     @Test
@@ -97,17 +97,17 @@ class UsuarioErrosWebTest extends ErrosWebTestBase {
                 .thenThrow(new MotoristaNaoEncontradoException(77L));
 
         String atendenteComMotorista = "{\"nome\":\"Ana\",\"username\":\"ana\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\",\"motoristaId\":5}";
-        esperaErro(enviar(post("/api/usuarios"), atendenteComMotorista), 400, "Regra de negócio", "perfil Motorista");
+        enviar(post("/api/usuarios"), atendenteComMotorista).andExpect(erro(400, "Regra de negócio", "perfil Motorista"));
 
         String motoristaInexistente = "{\"nome\":\"Ana\",\"username\":\"ana\",\"senha\":\"senha12345\",\"role\":\"MOTORISTA\",\"motoristaId\":77}";
-        esperaErro(enviar(post("/api/usuarios"), motoristaInexistente), 404, "Recurso não encontrado", "77");
+        enviar(post("/api/usuarios"), motoristaInexistente).andExpect(erro(404, "Recurso não encontrado", "77"));
     }
 
     @Test
     void usernameDuplicadoRetorna400() throws Exception {
         when(usuarioService.criar(any())).thenThrow(new UsernameJaCadastradoException("maria"));
 
-        esperaErro(enviar(post("/api/usuarios"), VALIDO), 400, "Erro de validação", "Já existe usuário cadastrado com username");
+        enviar(post("/api/usuarios"), VALIDO).andExpect(erro(400, "Erro de validação", "Já existe usuário cadastrado com username"));
     }
 
     @Test
@@ -117,17 +117,17 @@ class UsuarioErrosWebTest extends ErrosWebTestBase {
         when(usuarioService.buscarPorUsername("ninguem")).thenThrow(new UsuarioNaoEncontradoException("ninguem"));
         doThrow(new UsuarioNaoEncontradoException(99L)).when(usuarioService).deletar(99L);
 
-        esperaErro(chamar(get("/api/usuarios/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/usuarios/99"), VALIDO), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/usuarios/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(get("/api/usuarios/buscar").param("username", "ninguem")), 404, "Recurso não encontrado", "ninguem");
-        esperaErro(chamar(get("/api/usuarios/buscar")), 400, "Parâmetro inválido", "'username' é obrigatório");
+        chamar(get("/api/usuarios/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/usuarios/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/usuarios/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(get("/api/usuarios/buscar").param("username", "ninguem")).andExpect(erro(404, "Recurso não encontrado", "ninguem"));
+        chamar(get("/api/usuarios/buscar")).andExpect(erro(400, "Parâmetro inválido", "'username' é obrigatório"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
         when(usuarioService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Usuário", 1L));
 
-        esperaErro(enviar(put("/api/usuarios/1"), VALIDO), 409, "Conflito de edição", "Usuário 1");
+        enviar(put("/api/usuarios/1"), VALIDO).andExpect(erro(409, "Conflito de edição", "Usuário 1"));
     }
 }

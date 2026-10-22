@@ -46,7 +46,7 @@ class TratamentoGlobalErrosWebTest extends ErrosWebTestBase {
         when(passageiroService.listar(any(FiltroPassageiroDTO.class), any()))
                 .thenThrow(new IllegalStateException("connection pool esgotado em db-01:5432"));
 
-        esperaErro(chamar(get("/api/passageiros")), 500, "Erro interno", "erro inesperado");
+        chamar(get("/api/passageiros")).andExpect(erro(500, "Erro interno", "erro inesperado"));
         chamar(get("/api/passageiros"))
                 .andExpect(jsonPath("$.mensagem", not(containsString("db-01")))); // nada de detalhe interno pro cliente
     }
@@ -56,7 +56,7 @@ class TratamentoGlobalErrosWebTest extends ErrosWebTestBase {
         when(veiculoService.atualizarParcial(eq(1L), any()))
                 .thenThrow(new ObjectOptimisticLockingFailureException("Veiculo", 1L));
 
-        esperaErro(enviar(patch("/api/veiculos/1"), "{\"marca\":\"Fiat\"}"), 409, "Conflito de edição", "ao mesmo tempo");
+        enviar(patch("/api/veiculos/1"), "{\"marca\":\"Fiat\"}").andExpect(erro(409, "Conflito de edição", "ao mesmo tempo"));
     }
 
     @Test
@@ -66,46 +66,46 @@ class TratamentoGlobalErrosWebTest extends ErrosWebTestBase {
                 .thenThrow(new MuitasTentativasException());
 
         String corpo = "{\"username\":\"maria\",\"senha\":\"errada123\"}";
-        esperaErro(mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(corpo)),
-                401, "Falha na autenticação", "inválidos");
-        esperaErro(mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(corpo)),
-                429, "Muitas tentativas", "Aguarde");
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(erro(401, "Falha na autenticação", "inválidos"));
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(erro(429, "Muitas tentativas", "Aguarde"));
     }
 
     @Test
     void loginComCamposGrandesDemaisRetorna400() throws Exception {
-        esperaValidacao(mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + "u".repeat(51) + "\",\"senha\":\"x\"}")),
-                "username: Username deve ter no máximo 50 caracteres");
-        esperaValidacao(mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"maria\",\"senha\":\"" + "s".repeat(73) + "\"}")),
-                "senha: Senha deve ter no máximo 72 caracteres");
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"" + "u".repeat(51) + "\",\"senha\":\"x\"}"))
+                .andExpect(validacao("username: Username deve ter no máximo 50 caracteres"));
+        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"maria\",\"senha\":\"" + "s".repeat(73) + "\"}"))
+                .andExpect(validacao("senha: Senha deve ter no máximo 72 caracteres"));
     }
 
     @Test
     void trocaDeSenhaInvalidaRetorna400() throws Exception {
-        esperaValidacao(enviar(put("/api/auth/senha"), "{\"novaSenha\":\"novasenha1\"}"), "senhaAtual: Senha atual é obrigatória");
-        esperaValidacao(enviar(put("/api/auth/senha"), "{\"senhaAtual\":\"atual1234\",\"novaSenha\":\"curta\"}"),
-                "novaSenha: Nova senha deve ter entre 8 e 72 caracteres");
+        enviar(put("/api/auth/senha"), "{\"novaSenha\":\"novasenha1\"}").andExpect(validacao("senhaAtual: Senha atual é obrigatória"));
+        enviar(put("/api/auth/senha"), "{\"senhaAtual\":\"atual1234\",\"novaSenha\":\"curta\"}")
+                .andExpect(validacao("novaSenha: Nova senha deve ter entre 8 e 72 caracteres"));
 
         when(authService.trocarSenha(anyString(), any())).thenThrow(new RegraNegocioException("Senha atual incorreta"));
-        esperaErro(enviar(put("/api/auth/senha"), "{\"senhaAtual\":\"errada123\",\"novaSenha\":\"novasenha1\"}"),
-                400, "Regra de negócio", "Senha atual incorreta");
+        enviar(put("/api/auth/senha"), "{\"senhaAtual\":\"errada123\",\"novaSenha\":\"novasenha1\"}")
+                .andExpect(erro(400, "Regra de negócio", "Senha atual incorreta"));
     }
 
     @Test
     void parametrosComTipoOuFormatoErradoRetornam400() throws Exception {
-        esperaErro(chamar(get("/api/painel/resumo").param("data", "19-10-2026")), 400, "Parâmetro inválido", "data");
-        esperaErro(chamar(get("/api/auditoria").param("tabela", "transfers").param("registroId", "sete")),
-                400, "Parâmetro inválido", "registroId");
-        esperaErro(chamar(get("/api/cotacao").param("de", "USD")), 400, "Parâmetro inválido", "'para' é obrigatório");
-        esperaErro(chamar(get("/api/cotacao").param("de", "US").param("para", "BRL")), 400, "Erro de validação", "parâmetros");
+        chamar(get("/api/painel/resumo").param("data", "19-10-2026")).andExpect(erro(400, "Parâmetro inválido", "data"));
+        chamar(get("/api/auditoria").param("tabela", "transfers").param("registroId", "sete"))
+                .andExpect(erro(400, "Parâmetro inválido", "registroId"));
+        chamar(get("/api/cotacao").param("de", "USD")).andExpect(erro(400, "Parâmetro inválido", "'para' é obrigatório"));
+        chamar(get("/api/cotacao").param("de", "US").param("para", "BRL")).andExpect(erro(400, "Erro de validação", "parâmetros"));
     }
 
     @Test
     void verboNaoSuportadoRetorna405EmJson() throws Exception {
-        esperaErro(chamar(put("/api/painel/resumo")), 405, "Método não permitido", "PUT");
-        esperaErro(mockMvc.perform(post("/api/cotacao").with(user("t").roles("ATENDENTE"))), 405, "Método não permitido", "POST");
+        chamar(put("/api/painel/resumo")).andExpect(erro(405, "Método não permitido", "PUT"));
+        mockMvc.perform(post("/api/cotacao").with(user("t").roles("ATENDENTE"))).andExpect(erro(405, "Método não permitido", "POST"));
     }
 
     @Test
@@ -113,17 +113,17 @@ class TratamentoGlobalErrosWebTest extends ErrosWebTestBase {
         when(motoristaService.listar(any(FiltroMotoristaDTO.class), any()))
                 .thenThrow(new PropertyReferenceException("xpto", TypeInformation.of(Motorista.class), List.of()));
 
-        esperaErro(chamar(get("/api/motoristas").param("sort", "xpto,asc")), 400, "Parâmetro inválido", "'xpto'");
+        chamar(get("/api/motoristas").param("sort", "xpto,asc")).andExpect(erro(400, "Parâmetro inválido", "'xpto'"));
     }
 
     @Test
     void numeroComTextoNoCorpoRetorna400DeCorpoMalFormatado() throws Exception {
-        esperaErro(enviar(post("/api/veiculos"), "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":\"muitos\"}"),
-                400, "Requisição inválida", "mal formatado");
+        enviar(post("/api/veiculos"), "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":\"muitos\"}")
+                .andExpect(erro(400, "Requisição inválida", "mal formatado"));
     }
 
     @Test
     void rotaInexistenteRetorna404EmJson() throws Exception {
-        esperaErro(chamar(get("/api/nao-existe")), 404, "Recurso não encontrado", "nao-existe");
+        chamar(get("/api/nao-existe")).andExpect(erro(404, "Recurso não encontrado", "nao-existe"));
     }
 }

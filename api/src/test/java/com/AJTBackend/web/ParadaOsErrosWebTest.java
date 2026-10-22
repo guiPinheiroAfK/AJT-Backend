@@ -61,23 +61,23 @@ class ParadaOsErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/paradas-os"), json), detalhe);
+        enviar(post("/api/paradas-os"), json).andExpect(validacao(detalhe));
         verify(paradaOsService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/paradas-os/1"), json), detalhe);
+        enviar(put("/api/paradas-os/1"), json).andExpect(validacao(detalhe));
         verify(paradaOsService, never()).atualizar(any(), any());
     }
 
     @Test
     void acaoEStatusForaDoEnumListamOsAceitos() throws Exception {
-        esperaValidacao(enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"acao\":\"PULAR\"}"),
-                "acao: valor 'PULAR' inválido. Aceitos: EMBARQUE, DESEMBARQUE");
-        esperaValidacao(enviar(patch("/api/paradas-os/1"), "{\"statusParada\":\"FEITA\"}"),
-                "statusParada: valor 'FEITA' inválido. Aceitos: PENDENTE, EM_ANDAMENTO, CONCLUIDA, CANCELADA");
+        enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"acao\":\"PULAR\"}")
+                .andExpect(validacao("acao: valor 'PULAR' inválido. Aceitos: EMBARQUE, DESEMBARQUE"));
+        enviar(patch("/api/paradas-os/1"), "{\"statusParada\":\"FEITA\"}")
+                .andExpect(validacao("statusParada: valor 'FEITA' inválido. Aceitos: PENDENTE, EM_ANDAMENTO, CONCLUIDA, CANCELADA"));
     }
 
     @Test
@@ -86,9 +86,9 @@ class ParadaOsErrosWebTest extends ErrosWebTestBase {
                 .thenThrow(new OrdemServicoNaoEncontradoException(8L))
                 .thenThrow(new TransferNaoEncontradoException(9L));
 
-        esperaErro(enviar(post("/api/paradas-os"), VALIDO), 404, "Recurso não encontrado", "8");
-        esperaErro(enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"transferIds\":[9]}"),
-                404, "Recurso não encontrado", "9");
+        enviar(post("/api/paradas-os"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "8"));
+        enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"transferIds\":[9]}")
+                .andExpect(erro(404, "Recurso não encontrado", "9"));
     }
 
     @Test
@@ -98,10 +98,10 @@ class ParadaOsErrosWebTest extends ErrosWebTestBase {
         when(paradaOsService.listarPorOrdemServico(98L)).thenThrow(new OrdemServicoNaoEncontradoException(98L));
         doThrow(new ParadaOsNaoEncontradaException(99L)).when(paradaOsService).deletar(99L);
 
-        esperaErro(chamar(get("/api/paradas-os/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/paradas-os/99"), "{\"statusParada\":\"CONCLUIDA\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(get("/api/paradas-os/ordem-servico/98")), 404, "Recurso não encontrado", "98");
-        esperaErro(chamar(delete("/api/paradas-os/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/paradas-os/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/paradas-os/99"), "{\"statusParada\":\"CONCLUIDA\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(get("/api/paradas-os/ordem-servico/98")).andExpect(erro(404, "Recurso não encontrado", "98"));
+        chamar(delete("/api/paradas-os/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
@@ -109,17 +109,17 @@ class ParadaOsErrosWebTest extends ErrosWebTestBase {
         when(paradaOsService.atualizarParcial(eq(1L), any()))
                 .thenThrow(new AccessDeniedException("Motorista só pode alterar o status da parada"));
 
-        esperaErro(mockMvc.perform(patch("/api/paradas-os/1").with(user("mot").roles("MOTORISTA"))
-                        .contentType("application/json").content("{\"localParada\":\"Outro lugar\"}")),
-                403, "Acesso negado", "só pode alterar o status");
+        mockMvc.perform(patch("/api/paradas-os/1").with(user("mot").roles("MOTORISTA"))
+                        .contentType("application/json").content("{\"localParada\":\"Outro lugar\"}"))
+                .andExpect(erro(403, "Acesso negado", "só pode alterar o status"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
         when(paradaOsService.atualizarParcial(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Parada", 1L));
 
-        esperaErro(enviar(patch("/api/paradas-os/1"), "{\"statusParada\":\"CONCLUIDA\",\"versao\":0}"),
-                409, "Conflito de edição", "Parada 1");
+        enviar(patch("/api/paradas-os/1"), "{\"statusParada\":\"CONCLUIDA\",\"versao\":0}")
+                .andExpect(erro(409, "Conflito de edição", "Parada 1"));
     }
 
     @Test
