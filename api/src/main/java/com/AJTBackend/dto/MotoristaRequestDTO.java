@@ -11,13 +11,13 @@ import jakarta.validation.groups.Default;
 
 public record MotoristaRequestDTO(
         @NotBlank(message = "Nome é obrigatório")
-        @Pattern(regexp = ".*\\S.*", message = "Nome não pode ser vazio", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Nome não pode ser vazio", groups = OnPatch.class)
         @Size(max = 100, message = "Nome deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Carlos Andrade")
         String nome,
 
         @NotBlank(message = "CNH é obrigatória")
-        @Pattern(regexp = ".*\\S.*", message = "CNH não pode ser vazia", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "CNH não pode ser vazia", groups = OnPatch.class)
         @Size(max = 20, message = "CNH deve ter no máximo 20 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "12345678901")
         String cnh,

@@ -11,7 +11,7 @@ import jakarta.validation.groups.Default;
 
 public record UsuarioRequestDTO(
         @NotBlank(message = "Nome é obrigatório")
-        @Pattern(regexp = ".*\\S.*", message = "Nome não pode ser vazio", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Nome não pode ser vazio", groups = OnPatch.class)
         @Size(max = 100, message = "Nome deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Maria Souza")
         String nome,

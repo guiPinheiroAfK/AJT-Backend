@@ -11,13 +11,13 @@ import jakarta.validation.groups.Default;
 
 public record VeiculoRequestDTO(
         @NotBlank(message = "Label é obrigatório")
-        @Pattern(regexp = ".*\\S.*", message = "Label não pode ser vazio", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Label não pode ser vazio", groups = OnPatch.class)
         @Size(max = 50, message = "Label deve ter no máximo 50 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Van 01")
         String label,
 
         @NotBlank(message = "Placa é obrigatória")
-        @Pattern(regexp = ".*\\S.*", message = "Placa não pode ser vazia", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Placa não pode ser vazia", groups = OnPatch.class)
         @Size(max = 10, message = "Placa deve ter no máximo 10 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "ABC1D23")
         String placa,
