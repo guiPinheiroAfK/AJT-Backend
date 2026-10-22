@@ -3,28 +3,17 @@ package com.AJTBackend.config;
 import com.AJTBackend.model.enums.Role;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
+import java.util.Arrays;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-/*
- * o que testa: o unico ponto que le o usuario autenticado (UsuarioLogado) —
- * username (ou "sistema" quando ninguem esta logado), comparacao com um
- * username especifico e checagem de perfil.
- *
- * como rodar: teste unitario puro; o "usuario logado" e simulado escrevendo
- * direto no SecurityContextHolder. sem spring, sem banco, sem docker. roda
- * com "mvn test".
- *
- * por que existe: UsuarioService, ParadaOsService e AuditoriaService
- * dependem dessa classe pra regras de seguranca (ninguem se exclui, motorista
- * so muda o status da parada, auditoria diz quem fez). testar aqui uma vez
- * evita repetir a montagem do contexto de seguranca em cada um deles.
- */
 class UsuarioLogadoTest {
 
     private final UsuarioLogado usuarioLogado = new UsuarioLogado();
@@ -34,49 +23,161 @@ class UsuarioLogadoTest {
         SecurityContextHolder.clearContext();
     }
 
-    private static void logadoComo(String username, String... roles) {
-        var authorities = java.util.Arrays.stream(roles)
-                .map(r -> new SimpleGrantedAuthority("ROLE_" + r)).toList();
+    private static void logadoComAuthorities(String username, String... authorities) {
+        List<SimpleGrantedAuthority> concedidas = Arrays.stream(authorities)
+                .map(SimpleGrantedAuthority::new).toList();
         SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken(username, null, authorities));
+                new UsernamePasswordAuthenticationToken(username, null, concedidas));
+    }
+
+    private static void logadoComo(String username, String... roles) {
+        String[] authorities = Arrays.stream(roles).map(r -> "ROLE_" + r).toArray(String[]::new);
+        logadoComAuthorities(username, authorities);
+    }
+
+    // ----- ninguem logado -----
+
+    @Test
+    void semUsuarioLogadoOUsernameValeSistema() {
+        // When
+        String username = usuarioLogado.usernameOuSistema();
+
+        // Then
+        assertThat(username).isEqualTo("sistema");
     }
 
     @Test
-    void semUsuarioLogadoValeSistema() {
-        assertThat(usuarioLogado.usernameOuSistema()).isEqualTo("sistema");
-        assertThat(usuarioLogado.ehUsuario("admin")).isFalse();
-        assertThat(usuarioLogado.temPerfil(Role.ADMIN)).isFalse();
+    void semUsuarioLogadoNinguemEhOUsuarioInformado() {
+        // When
+        boolean ehUsuario = usuarioLogado.ehUsuario("admin");
+
+        // Then
+        assertThat(ehUsuario).isFalse();
     }
+
+    @Test
+    void semUsuarioLogadoNaoHaPerfilNenhum() {
+        // When
+        boolean temPerfil = usuarioLogado.temPerfil(Role.ADMIN);
+
+        // Then
+        assertThat(temPerfil).isFalse();
+    }
+
+    // ----- username -----
 
     @Test
     void devolveOUsernameDoUsuarioLogado() {
+        // Given
         logadoComo("maria", "GERENTE");
 
-        assertThat(usuarioLogado.usernameOuSistema()).isEqualTo("maria");
+        // When
+        String username = usuarioLogado.usernameOuSistema();
+
+        // Then
+        assertThat(username).isEqualTo("maria");
     }
 
     @Test
-    void ehUsuarioComparaExatamenteOUsername() {
+    void ehUsuarioConfirmaOProprioUsername() {
+        // Given
         logadoComo("maria", "GERENTE");
 
-        assertThat(usuarioLogado.ehUsuario("maria")).isTrue();
-        assertThat(usuarioLogado.ehUsuario("joao")).isFalse();
-        assertThat(usuarioLogado.ehUsuario(null)).isFalse();
+        // When
+        boolean ehUsuario = usuarioLogado.ehUsuario("maria");
+
+        // Then
+        assertThat(ehUsuario).isTrue();
     }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"joao", "Maria", " maria", "maria ", ""})
+    void ehUsuarioRecusaQualquerOutroUsernameComparandoExatamente(String outro) {
+        // Given
+        logadoComo("maria", "GERENTE");
+
+        // When
+        boolean ehUsuario = usuarioLogado.ehUsuario(outro);
+
+        // Then
+        assertThat(ehUsuario).isFalse();
+    }
+
+    @Test
+    void ehUsuarioComUsernameNuloEhFalso() {
+        // Given
+        logadoComo("maria", "GERENTE");
+
+        // When
+        boolean ehUsuario = usuarioLogado.ehUsuario(null);
+
+        // Then
+        assertThat(ehUsuario).isFalse();
+    }
+
+    // ----- perfil -----
 
     @Test
     void temPerfilConfereAAuthorityComPrefixoRole() {
+        // Given
         logadoComo("carlos", "MOTORISTA");
 
-        assertThat(usuarioLogado.temPerfil(Role.MOTORISTA)).isTrue();
-        assertThat(usuarioLogado.temPerfil(Role.ADMIN)).isFalse();
+        // When
+        boolean temPerfil = usuarioLogado.temPerfil(Role.MOTORISTA);
+
+        // Then
+        assertThat(temPerfil).isTrue();
+    }
+
+    @Test
+    void naoTemOPerfilQueNaoFoiConcedido() {
+        // Given
+        logadoComo("carlos", "MOTORISTA");
+
+        // When
+        boolean temPerfil = usuarioLogado.temPerfil(Role.ADMIN);
+
+        // Then
+        assertThat(temPerfil).isFalse();
+    }
+
+    @Test
+    void usuarioComVariosPerfisTemCadaUmDeles() {
+        // Given
+        logadoComo("ana", "GERENTE", "ATENDENTE");
+
+        // When
+        boolean gerente = usuarioLogado.temPerfil(Role.GERENTE);
+        boolean atendente = usuarioLogado.temPerfil(Role.ATENDENTE);
+        boolean admin = usuarioLogado.temPerfil(Role.ADMIN);
+
+        // Then
+        assertThat(gerente).isTrue();
+        assertThat(atendente).isTrue();
+        assertThat(admin).isFalse();
+    }
+
+    @Test
+    void authoritySemOPrefixoRoleNaoContaComoPerfil() {
+        // Given: "MOTORISTA" sozinho nao e o mesmo que "ROLE_MOTORISTA"
+        logadoComAuthorities("carlos", "MOTORISTA");
+
+        // When
+        boolean temPerfil = usuarioLogado.temPerfil(Role.MOTORISTA);
+
+        // Then
+        assertThat(temPerfil).isFalse();
     }
 
     @Test
     void usuarioSemPerfilNaoTemNenhum() {
-        SecurityContextHolder.getContext().setAuthentication(
-                new UsernamePasswordAuthenticationToken("x", null, List.of()));
+        // Given
+        logadoComAuthorities("x");
 
-        assertThat(usuarioLogado.temPerfil(Role.MOTORISTA)).isFalse();
+        // When
+        boolean temPerfil = usuarioLogado.temPerfil(Role.MOTORISTA);
+
+        // Then
+        assertThat(temPerfil).isFalse();
     }
 }
