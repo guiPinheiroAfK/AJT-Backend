@@ -22,6 +22,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -118,6 +119,19 @@ class AuditoriaServiceTest {
         verify(repository).save(captor.capture());
         assertThat(captor.getValue().getMensagem())
                 .isEqualTo("Transfer atualizado: status AGUARDANDO_OS -> CONFIRMADO; valor sem valor -> 90.00 (por sistema)");
+    }
+
+    @Test
+    void valorApagadoApareceComoSemValorEAusenteNosDoisNaoEhMudanca() {
+        service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
+                StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO, new BigDecimal("150"), null);
+        service.registrarAtualizacao("transfers", 6L, "Transfer atualizado",
+                StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO, null, null);
+
+        ArgumentCaptor<LogAuditoria> captor = ArgumentCaptor.forClass(LogAuditoria.class);
+        verify(repository, times(2)).save(captor.capture());
+        assertThat(captor.getAllValues().get(0).getMensagem()).contains("valor 150.00 -> sem valor");
+        assertThat(captor.getAllValues().get(1).getMensagem()).doesNotContain("valor");
     }
 
     @Test
