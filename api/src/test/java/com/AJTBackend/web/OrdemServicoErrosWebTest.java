@@ -37,18 +37,18 @@ class OrdemServicoErrosWebTest extends ErrosWebTestBase {
 
     @Test
     void dataObrigatoriaEmFormatoValido() throws Exception {
-        esperaValidacao(enviar(post("/api/ordens-servico"), "{}"), "dataServico: Data do serviço é obrigatória");
-        esperaValidacao(enviar(put("/api/ordens-servico/1"), "{\"status\":\"ABERTA\"}"), "dataServico: Data do serviço é obrigatória");
-        esperaErro(enviar(post("/api/ordens-servico"), "{\"dataServico\":\"21/10/2026\"}"), 400, "Requisição inválida", "corpo da requisição");
+        enviar(post("/api/ordens-servico"), "{}").andExpect(validacao("dataServico: Data do serviço é obrigatória"));
+        enviar(put("/api/ordens-servico/1"), "{\"status\":\"ABERTA\"}").andExpect(validacao("dataServico: Data do serviço é obrigatória"));
+        enviar(post("/api/ordens-servico"), "{\"dataServico\":\"21/10/2026\"}").andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
         verify(ordemServicoService, never()).criar(any());
     }
 
     @Test
     void statusForaDoEnumNoCorpoENaUrlRetorna400() throws Exception {
-        esperaValidacao(enviar(post("/api/ordens-servico"), "{\"dataServico\":\"2026-10-21\",\"status\":\"PAUSADA\"}"),
-                "status: valor 'PAUSADA' inválido. Aceitos: ABERTA, EM_ANDAMENTO, FINALIZADA, CANCELADA");
-        esperaErro(chamar(get("/api/ordens-servico/buscar").param("status", "PAUSADA")), 400, "Parâmetro inválido", "status");
-        esperaErro(chamar(get("/api/ordens-servico/buscar")), 400, "Parâmetro inválido", "'status' é obrigatório");
+        enviar(post("/api/ordens-servico"), "{\"dataServico\":\"2026-10-21\",\"status\":\"PAUSADA\"}")
+                .andExpect(validacao("status: valor 'PAUSADA' inválido. Aceitos: ABERTA, EM_ANDAMENTO, FINALIZADA, CANCELADA"));
+        chamar(get("/api/ordens-servico/buscar").param("status", "PAUSADA")).andExpect(erro(400, "Parâmetro inválido", "status"));
+        chamar(get("/api/ordens-servico/buscar")).andExpect(erro(400, "Parâmetro inválido", "'status' é obrigatório"));
     }
 
     @Test
@@ -56,17 +56,17 @@ class OrdemServicoErrosWebTest extends ErrosWebTestBase {
         when(ordemServicoService.listar(any(), any()))
                 .thenThrow(new RegraNegocioException("A data inicial (2026-10-30) é depois da final (2026-10-01)."));
 
-        esperaErro(chamar(get("/api/ordens-servico").param("dataInicio", "2026-10-30").param("dataFim", "2026-10-01")),
-                400, "Regra de negócio", "depois da final");
-        esperaValidacao(chamar(get("/api/ordens-servico").param("dataInicio", "ontem")), "dataInicio");
-        esperaValidacao(chamar(get("/api/ordens-servico").param("motoristaId", "um")), "motoristaId");
+        chamar(get("/api/ordens-servico").param("dataInicio", "2026-10-30").param("dataFim", "2026-10-01"))
+                .andExpect(erro(400, "Regra de negócio", "depois da final"));
+        chamar(get("/api/ordens-servico").param("dataInicio", "ontem")).andExpect(validacao("dataInicio"));
+        chamar(get("/api/ordens-servico").param("motoristaId", "um")).andExpect(validacao("motoristaId"));
     }
 
     @Test
     void minhasComDataInvalidaRetorna400() throws Exception {
-        esperaErro(mockMvc.perform(get("/api/ordens-servico/minhas").param("data", "hoje")
-                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("mot").roles("MOTORISTA"))),
-                400, "Parâmetro inválido", "data");
+        mockMvc.perform(get("/api/ordens-servico/minhas").param("data", "hoje")
+                        .with(org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user("mot").roles("MOTORISTA")))
+                .andExpect(erro(400, "Parâmetro inválido", "data"));
     }
 
     @Test
@@ -75,8 +75,8 @@ class OrdemServicoErrosWebTest extends ErrosWebTestBase {
                 .thenThrow(new MotoristaNaoEncontradoException(5L))
                 .thenThrow(new VeiculoNaoEncontradoException(6L));
 
-        esperaErro(enviar(post("/api/ordens-servico"), "{\"dataServico\":\"2026-10-21\",\"motoristaId\":5}"), 404, "Recurso não encontrado", "5");
-        esperaErro(enviar(post("/api/ordens-servico"), "{\"dataServico\":\"2026-10-21\",\"veiculoId\":6}"), 404, "Recurso não encontrado", "6");
+        enviar(post("/api/ordens-servico"), "{\"dataServico\":\"2026-10-21\",\"motoristaId\":5}").andExpect(erro(404, "Recurso não encontrado", "5"));
+        enviar(post("/api/ordens-servico"), "{\"dataServico\":\"2026-10-21\",\"veiculoId\":6}").andExpect(erro(404, "Recurso não encontrado", "6"));
     }
 
     @Test
@@ -87,11 +87,11 @@ class OrdemServicoErrosWebTest extends ErrosWebTestBase {
         when(relatorioOrdemServicoService.gerar(99L)).thenThrow(new OrdemServicoNaoEncontradoException(99L));
         doThrow(new OrdemServicoNaoEncontradoException(99L)).when(ordemServicoService).deletar(99L);
 
-        esperaErro(chamar(get("/api/ordens-servico/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/ordens-servico/99"), VALIDO), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/ordens-servico/99"), "{\"status\":\"CANCELADA\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(get("/api/ordens-servico/99/pdf")), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/ordens-servico/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/ordens-servico/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/ordens-servico/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/ordens-servico/99"), "{\"status\":\"CANCELADA\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(get("/api/ordens-servico/99/pdf")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/ordens-servico/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
@@ -99,7 +99,7 @@ class OrdemServicoErrosWebTest extends ErrosWebTestBase {
         when(ordemServicoService.atualizarParcial(eq(1L), any()))
                 .thenThrow(new RegraNegocioException("A ordem de serviço #1 tem 2 transfer(s) do dia dela. Desvincule-os antes de mudar a data."));
 
-        esperaErro(enviar(patch("/api/ordens-servico/1"), "{\"dataServico\":\"2026-10-22\"}"), 400, "Regra de negócio", "Desvincule");
+        enviar(patch("/api/ordens-servico/1"), "{\"dataServico\":\"2026-10-22\"}").andExpect(erro(400, "Regra de negócio", "Desvincule"));
     }
 
     @Test
@@ -107,7 +107,7 @@ class OrdemServicoErrosWebTest extends ErrosWebTestBase {
         when(ordemServicoService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Ordem de serviço", 1L));
         doThrow(new DataIntegrityViolationException("fk")).when(ordemServicoService).deletar(1L);
 
-        esperaErro(enviar(put("/api/ordens-servico/1"), VALIDO), 409, "Conflito de edição", "Ordem de serviço 1");
-        esperaErro(chamar(delete("/api/ordens-servico/1")), 409, "Conflito de dados", "em uso");
+        enviar(put("/api/ordens-servico/1"), VALIDO).andExpect(erro(409, "Conflito de edição", "Ordem de serviço 1"));
+        chamar(delete("/api/ordens-servico/1")).andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 }

@@ -118,6 +118,14 @@ class MotoristaServiceTest {
     }
 
     @Test
+    void putParaUmaCnhLivreTrocaACnh() {
+        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+        when(repository.existsByCnh("222")).thenReturn(false);
+
+        assertThat(service.atualizar(1L, dto("Carlos", "222", null, 3L)).cnh()).isEqualTo("222");
+    }
+
+    @Test
     void manterAMesmaCnhNaoConsultaDuplicidade() {
         when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
 

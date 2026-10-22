@@ -183,6 +183,19 @@ class OrdemServicoServiceTest {
     }
 
     @Test
+    void osSemTransfersMudaDeDiaEComTransfersPodeSerEditadaNoMesmoDia() {
+        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
+        assertThat(service.atualizar(1L, dto(DIA.plusDays(3), null, null, null, null)).dataServico())
+                .isEqualTo(DIA.plusDays(3));
+
+        OrdemServico comTransfer = os(2L, null);
+        comTransfer.setTransfers(new ArrayList<>(List.of(Transfer.builder().id(2L).build())));
+        when(repository.findById(2L)).thenReturn(Optional.of(comTransfer));
+        assertThat(service.atualizar(2L, dto(DIA, null, null, StatusOrdemServico.EM_ANDAMENTO, null)).status())
+                .isEqualTo(StatusOrdemServico.EM_ANDAMENTO);
+    }
+
+    @Test
     void osComTransfersNaoMudaDeDiaNoPutNemNoPatch() {
         OrdemServico comTransfer = os(1L, null);
         comTransfer.setTransfers(new ArrayList<>(List.of(Transfer.builder().id(2L).build())));

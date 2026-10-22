@@ -27,7 +27,7 @@ public record ParadaOsRequestDTO(
         Integer ordemParada,
 
         @NotBlank(message = "Local da parada é obrigatório")
-        @Pattern(regexp = ".*\\S.*", message = "Local da parada não pode ser vazio", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Local da parada não pode ser vazio", groups = OnPatch.class)
         @Size(max = 100, message = "Local da parada deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Portão 3")
         String localParada,

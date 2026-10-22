@@ -63,23 +63,23 @@ class TransferErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(post("/api/transfers"), json), detalhe);
+        enviar(post("/api/transfers"), json).andExpect(validacao(detalhe));
         verify(transferService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        esperaValidacao(enviar(put("/api/transfers/1"), json), detalhe);
+        enviar(put("/api/transfers/1"), json).andExpect(validacao(detalhe));
         verify(transferService, never()).atualizar(any(), any());
     }
 
     @Test
     void dataOuHoraEmFormatoErradoRetorna400() throws Exception {
-        esperaErro(enviar(post("/api/transfers"), "{\"dataTransfer\":\"2026-02-30\",\"horaTransfer\":\"10:00:00\",\"origem\":\"A\",\"destino\":\"B\"}"),
-                400, "Requisição inválida", "corpo da requisição");
-        esperaErro(enviar(post("/api/transfers"), "{\"dataTransfer\":\"2026-10-21\",\"horaTransfer\":\"10h\",\"origem\":\"A\",\"destino\":\"B\"}"),
-                400, "Requisição inválida", "corpo da requisição");
+        enviar(post("/api/transfers"), "{\"dataTransfer\":\"2026-02-30\",\"horaTransfer\":\"10:00:00\",\"origem\":\"A\",\"destino\":\"B\"}")
+                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+        enviar(post("/api/transfers"), "{\"dataTransfer\":\"2026-10-21\",\"horaTransfer\":\"10h\",\"origem\":\"A\",\"destino\":\"B\"}")
+                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
     }
 
     @Test
@@ -87,11 +87,11 @@ class TransferErrosWebTest extends ErrosWebTestBase {
         when(transferService.listar(any(), any()))
                 .thenThrow(new RegraNegocioException("A data inicial (2026-10-30) é depois da final (2026-10-01)."));
 
-        esperaErro(chamar(get("/api/transfers").param("dataInicio", "2026-10-30").param("dataFim", "2026-10-01")),
-                400, "Regra de negócio", "depois da final");
-        esperaValidacao(chamar(get("/api/transfers").param("dataFim", "31/10/2026")), "dataFim");
-        esperaValidacao(chamar(get("/api/transfers").param("status", "PERDIDO")), "status");
-        esperaValidacao(chamar(get("/api/transfers").param("semOs", "talvez")), "semOs");
+        chamar(get("/api/transfers").param("dataInicio", "2026-10-30").param("dataFim", "2026-10-01"))
+                .andExpect(erro(400, "Regra de negócio", "depois da final"));
+        chamar(get("/api/transfers").param("dataFim", "31/10/2026")).andExpect(validacao("dataFim"));
+        chamar(get("/api/transfers").param("status", "PERDIDO")).andExpect(validacao("status"));
+        chamar(get("/api/transfers").param("semOs", "talvez")).andExpect(validacao("semOs"));
     }
 
     @Test
@@ -100,8 +100,8 @@ class TransferErrosWebTest extends ErrosWebTestBase {
                 .thenThrow(new RegraNegocioException("O transfer é do dia 21/10/2026 e a ordem de serviço #3 é do dia 22/10/2026. A OS agrupa os transfers de um mesmo dia."))
                 .thenThrow(new RegraNegocioException("A ordem de serviço #4 está CANCELADA e não recebe transfers. Use uma OS aberta ou em andamento."));
 
-        esperaErro(enviar(patch("/api/transfers/1"), "{\"osId\":3}"), 400, "Regra de negócio", "mesmo dia");
-        esperaErro(enviar(patch("/api/transfers/1"), "{\"osId\":4}"), 400, "Regra de negócio", "CANCELADA");
+        enviar(patch("/api/transfers/1"), "{\"osId\":3}").andExpect(erro(400, "Regra de negócio", "mesmo dia"));
+        enviar(patch("/api/transfers/1"), "{\"osId\":4}").andExpect(erro(400, "Regra de negócio", "CANCELADA"));
     }
 
     @Test
@@ -110,8 +110,8 @@ class TransferErrosWebTest extends ErrosWebTestBase {
                 .thenThrow(new OrdemServicoNaoEncontradoException(30L))
                 .thenThrow(new PassageiroNaoEncontradoException(31L));
 
-        esperaErro(enviar(post("/api/transfers"), "{" + BASE + ",\"osId\":30}"), 404, "Recurso não encontrado", "30");
-        esperaErro(enviar(post("/api/transfers"), "{" + BASE + ",\"passageiroIds\":[31]}"), 404, "Recurso não encontrado", "31");
+        enviar(post("/api/transfers"), "{" + BASE + ",\"osId\":30}").andExpect(erro(404, "Recurso não encontrado", "30"));
+        enviar(post("/api/transfers"), "{" + BASE + ",\"passageiroIds\":[31]}").andExpect(erro(404, "Recurso não encontrado", "31"));
     }
 
     @Test
@@ -121,11 +121,11 @@ class TransferErrosWebTest extends ErrosWebTestBase {
         when(transferService.atualizarParcial(eq(99L), any())).thenThrow(new TransferNaoEncontradoException(99L));
         doThrow(new TransferNaoEncontradoException(99L)).when(transferService).deletar(99L);
 
-        esperaErro(chamar(get("/api/transfers/99")), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(get("/api/transfers/99/passageiros")), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(put("/api/transfers/99"), "{" + BASE + "}"), 404, "Recurso não encontrado", "99");
-        esperaErro(enviar(patch("/api/transfers/99"), "{\"origem\":\"C\"}"), 404, "Recurso não encontrado", "99");
-        esperaErro(chamar(delete("/api/transfers/99")), 404, "Recurso não encontrado", "99");
+        chamar(get("/api/transfers/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(get("/api/transfers/99/passageiros")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(put("/api/transfers/99"), "{" + BASE + "}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        enviar(patch("/api/transfers/99"), "{\"origem\":\"C\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
+        chamar(delete("/api/transfers/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
@@ -133,14 +133,14 @@ class TransferErrosWebTest extends ErrosWebTestBase {
         when(transferService.criar(any()))
                 .thenThrow(new CotacaoIndisponivelException("USD", "BRL", new RuntimeException("timeout")));
 
-        esperaErro(enviar(post("/api/transfers"), "{" + BASE + ",\"valorOriginal\":100,\"moedaOrigem\":\"USD\"}"),
-                502, "Servico externo indisponível", "USD");
+        enviar(post("/api/transfers"), "{" + BASE + ",\"valorOriginal\":100,\"moedaOrigem\":\"USD\"}")
+                .andExpect(erro(502, "Servico externo indisponível", "USD"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
         when(transferService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Transfer", 1L));
 
-        esperaErro(enviar(put("/api/transfers/1"), "{" + BASE + ",\"versao\":2}"), 409, "Conflito de edição", "Transfer 1");
+        enviar(put("/api/transfers/1"), "{" + BASE + ",\"versao\":2}").andExpect(erro(409, "Conflito de edição", "Transfer 1"));
     }
 }

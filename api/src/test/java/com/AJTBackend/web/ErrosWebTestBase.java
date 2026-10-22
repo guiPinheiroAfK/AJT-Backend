@@ -2,6 +2,7 @@ package com.AJTBackend.web;
 
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.ResultMatcher;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
@@ -36,20 +37,27 @@ abstract class ErrosWebTestBase extends WebTestBase {
         return mockMvc.perform(requisicao.with(admin()));
     }
 
+    /*
+     * devolvem o ResultMatcher em vez de chamar andExpect aqui: o andExpect fica no proprio
+     * teste, onde o Sonar (java:S2699) reconhece a verificacao.
+     */
+
     /** 400 de validacao do DTO, com o trecho esperado em um dos detalhes ("campo: mensagem"). */
-    protected static void esperaValidacao(ResultActions resposta, String trechoDoDetalhe) throws Exception {
-        resposta.andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.erro").value("Erro de validação"))
-                .andExpect(jsonPath("$.detalhes", hasItem(containsString(trechoDoDetalhe))));
+    protected static ResultMatcher validacao(String trechoDoDetalhe) {
+        return ResultMatcher.matchAll(
+                status().isBadRequest(),
+                jsonPath("$.status").value(400),
+                jsonPath("$.erro").value("Erro de validação"),
+                jsonPath("$.detalhes", hasItem(containsString(trechoDoDetalhe))));
     }
 
     /** erro no formato padrao: status http, rotulo "erro" e um trecho da mensagem. */
-    protected static void esperaErro(ResultActions resposta, int status, String erro, String trechoDaMensagem) throws Exception {
-        resposta.andExpect(status().is(status))
-                .andExpect(jsonPath("$.status").value(status))
-                .andExpect(jsonPath("$.erro").value(erro))
-                .andExpect(jsonPath("$.mensagem", containsString(trechoDaMensagem)))
-                .andExpect(jsonPath("$.timestamp").exists());
+    protected static ResultMatcher erro(int status, String erro, String trechoDaMensagem) {
+        return ResultMatcher.matchAll(
+                status().is(status),
+                jsonPath("$.status").value(status),
+                jsonPath("$.erro").value(erro),
+                jsonPath("$.mensagem", containsString(trechoDaMensagem)),
+                jsonPath("$.timestamp").exists());
     }
 }

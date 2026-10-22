@@ -65,6 +65,14 @@ class UsuarioServiceCrudTest {
     }
 
     @Test
+    void cadastroRespeitaOAtivoInformado() {
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThat(service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, true, null, null)).ativo()).isTrue();
+        assertThat(service.criar(dto("Bia", "bia", "senha12345", Role.ATENDENTE, false, null, null)).ativo()).isFalse();
+    }
+
+    @Test
     void listaEBuscas() {
         var pagina = PageRequest.of(0, 5);
         when(repository.findAll(pagina)).thenReturn(new PageImpl<>(List.of(maria()), pagina, 1));

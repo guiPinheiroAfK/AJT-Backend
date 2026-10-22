@@ -26,13 +26,13 @@ public record TransferRequestDTO(
         LocalTime horaTransfer,
 
         @NotBlank(message = "Origem é obrigatória")
-        @Pattern(regexp = ".*\\S.*", message = "Origem não pode ser vazia", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Origem não pode ser vazia", groups = OnPatch.class)
         @Size(max = 100, message = "Origem deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Aeroporto de Guarulhos (GRU)")
         String origem,
 
         @NotBlank(message = "Destino é obrigatório")
-        @Pattern(regexp = ".*\\S.*", message = "Destino não pode ser vazio", groups = OnPatch.class)
+        @Pattern(regexp = "\\s*\\S.*", message = "Destino não pode ser vazio", groups = OnPatch.class)
         @Size(max = 100, message = "Destino deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
         @Schema(example = "Hotel Copacabana Palace")
         String destino,
