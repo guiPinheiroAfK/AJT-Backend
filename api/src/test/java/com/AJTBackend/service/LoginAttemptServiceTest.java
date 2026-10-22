@@ -52,6 +52,16 @@ class LoginAttemptServiceTest {
     }
 
     @Test
+    void usernameAusenteTemContadorProprio() {
+        for (int i = 0; i < 3; i++) {
+            service.registrarFalha("10.0.0.1", null);
+        }
+
+        assertThat(service.bloqueado("10.0.0.1", null)).isTrue();
+        assertThat(service.bloqueado("10.0.0.1", "admin")).isFalse();
+    }
+
+    @Test
     void usernameNaoDiferenciaMaiusculas() {
         for (int i = 0; i < 3; i++) {
             service.registrarFalha("10.0.0.1", "Admin");

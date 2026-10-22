@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /*
  * o que testa: geracao e validacao de token jwt (JwtService), incluindo
@@ -76,6 +78,21 @@ class JwtServiceTest {
         assertThat(jwtService.emitidoAntesDe(claims, LocalDateTime.now().plusMinutes(1))).isTrue();
         assertThat(jwtService.emitidoAntesDe(claims, LocalDateTime.now().minusMinutes(1))).isFalse();
         assertThat(jwtService.emitidoAntesDe(claims, null)).isFalse();
+    }
+
+    @Test
+    void falhaNaInicializacaoSemChave() {
+        assertThatThrownBy(() -> new JwtService(null, 60_000))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("AJT_JWT_SECRET");
+    }
+
+    @Test
+    void tokenSemDataDeEmissaoNaoEhConsideradoAntigo() {
+        Claims semIat = mock(Claims.class);
+        when(semIat.getIssuedAt()).thenReturn(null);
+
+        assertThat(jwtService.emitidoAntesDe(semIat, LocalDateTime.now())).isFalse();
     }
 
     @Test
