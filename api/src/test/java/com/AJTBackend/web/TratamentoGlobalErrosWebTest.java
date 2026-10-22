@@ -1,12 +1,18 @@
 package com.AJTBackend.web;
 
+import com.AJTBackend.dto.FiltroMotoristaDTO;
 import com.AJTBackend.dto.FiltroPassageiroDTO;
 import com.AJTBackend.exception.CredenciaisInvalidasException;
 import com.AJTBackend.exception.MuitasTentativasException;
 import com.AJTBackend.exception.RegraNegocioException;
+import com.AJTBackend.model.Motorista;
 import org.junit.jupiter.api.Test;
+import org.springframework.data.mapping.PropertyReferenceException;
+import org.springframework.data.util.TypeInformation;
 import org.springframework.http.MediaType;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+
+import java.util.List;
 
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.containsString;
@@ -25,8 +31,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * o que testa: os erros que nao sao de um recurso so e passam pelo GlobalExceptionHandler —
  * falha inesperada (500 sem vazar detalhe interno), duas gravacoes simultaneas barradas pelo
  * @Version (409), login invalido (401) ou bloqueado (429), troca de senha com dados invalidos,
- * parametros de painel/auditoria/cotacao com tipo ou formato errado, verbo nao suportado (405)
- * e rota inexistente (404).
+ * parametros de painel/auditoria/cotacao com tipo ou formato errado, ordenacao por campo
+ * inexistente, numero com texto no corpo, verbo nao suportado (405) e rota inexistente (404).
  *
  * como rodar: @WebMvcTest (ErrosWebTestBase), services mockados. sem banco. "mvn test".
  *
@@ -100,6 +106,20 @@ class TratamentoGlobalErrosWebTest extends ErrosWebTestBase {
     void verboNaoSuportadoRetorna405EmJson() throws Exception {
         esperaErro(chamar(put("/api/painel/resumo")), 405, "Método não permitido", "PUT");
         esperaErro(mockMvc.perform(post("/api/cotacao").with(user("t").roles("ATENDENTE"))), 405, "Método não permitido", "POST");
+    }
+
+    @Test
+    void ordenacaoPorCampoInexistenteRetorna400ComONomeDoCampo() throws Exception {
+        when(motoristaService.listar(any(FiltroMotoristaDTO.class), any()))
+                .thenThrow(new PropertyReferenceException("xpto", TypeInformation.of(Motorista.class), List.of()));
+
+        esperaErro(chamar(get("/api/motoristas").param("sort", "xpto,asc")), 400, "Parâmetro inválido", "'xpto'");
+    }
+
+    @Test
+    void numeroComTextoNoCorpoRetorna400DeCorpoMalFormatado() throws Exception {
+        esperaErro(enviar(post("/api/veiculos"), "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":\"muitos\"}"),
+                400, "Requisição inválida", "mal formatado");
     }
 
     @Test
