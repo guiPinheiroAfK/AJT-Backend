@@ -87,6 +87,30 @@ class ParadaOsServiceCrudTest {
     }
 
     @Test
+    void cadastroEPutRespeitamOStatusInformado() {
+        logadoComo("GERENTE");
+        when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(OS));
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(repository.findById(1L)).thenReturn(Optional.of(parada()));
+
+        var criada = service.criar(new ParadaOsRequestDTO(3L, 1, "Portao 3", null, null, null, null,
+                StatusParada.EM_ANDAMENTO, Set.of(), null));
+        var editada = service.atualizar(1L, new ParadaOsRequestDTO(3L, 1, "Portao 3", null, null, null, null,
+                StatusParada.CONCLUIDA, Set.of(), 4L));
+
+        assertThat(criada.statusParada()).isEqualTo(StatusParada.EM_ANDAMENTO);
+        assertThat(editada.statusParada()).isEqualTo(StatusParada.CONCLUIDA);
+    }
+
+    @Test
+    void buscaDeParadaInexistenteLanca404() {
+        logadoComo("GERENTE");
+        when(repository.findById(9L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(ParadaOsNaoEncontradaException.class);
+    }
+
+    @Test
     void cadastroComOsInexistenteLanca404SemGravar() {
         logadoComo("GERENTE");
         when(ordemServicoRepository.findById(9L)).thenReturn(Optional.empty());

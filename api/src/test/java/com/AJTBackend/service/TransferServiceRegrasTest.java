@@ -13,8 +13,12 @@ import com.AJTBackend.model.enums.StatusTransfer;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.PassageiroRepository;
 import com.AJTBackend.repository.TransferRepository;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -33,8 +37,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -108,6 +114,24 @@ class TransferServiceRegrasTest {
         when(repository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(transfer(StatusTransfer.CONFIRMADO, null))));
         assertThat(service.listar(new FiltroTransferDTO(StatusTransfer.CONFIRMADO, DIA, DIA, "a", 1L, true), PageRequest.of(0, 5)).conteudo())
                 .hasSize(1);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void filtroSemOsDesligadoOuAusenteNaoRestringePorOs() {
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(transfer(StatusTransfer.CONFIRMADO, null))));
+        ArgumentCaptor<Specification<Transfer>> spec = ArgumentCaptor.forClass(Specification.class);
+
+        service.listar(new FiltroTransferDTO(null, null, null, null, null, false), PageRequest.of(0, 5));
+        service.listar(new FiltroTransferDTO(null, null, null, null, null, null), PageRequest.of(0, 5));
+
+        verify(repository, times(2)).findAll(spec.capture(), any(Pageable.class));
+        CriteriaBuilder cb = mock(CriteriaBuilder.class, RETURNS_MOCKS);
+        for (Specification<Transfer> s : spec.getAllValues()) {
+            s.toPredicate(mock(Root.class, RETURNS_MOCKS), mock(CriteriaQuery.class), cb);
+        }
+        verify(cb, never()).isNull(any());
     }
 
     @Test
