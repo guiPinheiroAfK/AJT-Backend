@@ -21,6 +21,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -29,6 +30,8 @@ import java.util.stream.Collectors;
 public class GlobalExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    private static final String ERRO_VALIDACAO = "Erro de validação";
+    private static final String PARAMETRO_INVALIDO = "Parâmetro inválido";
 
     // 404 - qualquer XNaoEncontradoException (Motorista, Passageiro, Transfer, ...)
     @ExceptionHandler(RecursoNaoEncontradoException.class)
@@ -46,7 +49,7 @@ public class GlobalExceptionHandler {
     // 400 - qualquer XJaCadastradoException (CNH, placa, username, ...)
     @ExceptionHandler(RegistroDuplicadoException.class)
     public ResponseEntity<ErroResponseDTO> handleRegistroDuplicado(RegistroDuplicadoException ex) {
-        return resposta(HttpStatus.BAD_REQUEST, "Erro de validação", ex.getMessage(), null);
+        return resposta(HttpStatus.BAD_REQUEST, ERRO_VALIDACAO, ex.getMessage(), null);
     }
 
     // 400 - regra de negocio violada
@@ -64,7 +67,7 @@ public class GlobalExceptionHandler {
                 .map(erro -> erro.getField() + ": " + erro.getDefaultMessage())
                 .toList();
 
-        return resposta(HttpStatus.BAD_REQUEST, "Erro de validação", "Um ou mais campos estão inválidos", detalhes);
+        return resposta(HttpStatus.BAD_REQUEST, ERRO_VALIDACAO, "Um ou mais campos estão inválidos", detalhes);
     }
 
     // 400 - validacao de parametros de metodo (@RequestParam, @PathVariable com constraints)
@@ -75,20 +78,20 @@ public class GlobalExceptionHandler {
                 .map(erro -> erro.getDefaultMessage())
                 .toList();
 
-        return resposta(HttpStatus.BAD_REQUEST, "Erro de validação", "Um ou mais parâmetros estão inválidos", detalhes);
+        return resposta(HttpStatus.BAD_REQUEST, ERRO_VALIDACAO, "Um ou mais parâmetros estão inválidos", detalhes);
     }
 
     // 400 - parametro obrigatorio ausente na query string
     @ExceptionHandler(MissingServletRequestParameterException.class)
     public ResponseEntity<ErroResponseDTO> handleParametroAusente(MissingServletRequestParameterException ex) {
-        return resposta(HttpStatus.BAD_REQUEST, "Parâmetro inválido",
+        return resposta(HttpStatus.BAD_REQUEST, PARAMETRO_INVALIDO,
                 "O parâmetro '" + ex.getParameterName() + "' é obrigatório", null);
     }
 
     // 400 - ordenacao por campo inexistente (ex: ?sort=xpto)
     @ExceptionHandler(PropertyReferenceException.class)
     public ResponseEntity<ErroResponseDTO> handleOrdenacaoInvalida(PropertyReferenceException ex) {
-        return resposta(HttpStatus.BAD_REQUEST, "Parâmetro inválido",
+        return resposta(HttpStatus.BAD_REQUEST, PARAMETRO_INVALIDO,
                 "Não é possível ordenar pelo campo '" + ex.getPropertyName() + "'", null);
     }
 
@@ -118,7 +121,7 @@ public class GlobalExceptionHandler {
     // 400 - parâmetro de URL com tipo incompatível (ex: /api/motoristas/abc)
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
     public ResponseEntity<ErroResponseDTO> handleTipoInvalido(MethodArgumentTypeMismatchException ex) {
-        return resposta(HttpStatus.BAD_REQUEST, "Parâmetro inválido",
+        return resposta(HttpStatus.BAD_REQUEST, PARAMETRO_INVALIDO,
                 "O valor '" + ex.getValue() + "' é inválido para o parâmetro '" + ex.getName() + "'", null);
     }
 
@@ -132,7 +135,7 @@ public class GlobalExceptionHandler {
                     .map(Object::toString)
                     .collect(Collectors.joining(", "));
 
-            return resposta(HttpStatus.BAD_REQUEST, "Erro de validação", "Um ou mais campos estão inválidos",
+            return resposta(HttpStatus.BAD_REQUEST, ERRO_VALIDACAO, "Um ou mais campos estão inválidos",
                     List.of(campo + ": valor '" + ife.getValue() + "' inválido. Aceitos: " + aceitos));
         }
 
@@ -180,7 +183,7 @@ public class GlobalExceptionHandler {
     }
 
     private ResponseEntity<ErroResponseDTO> resposta(HttpStatus status, String erro, String mensagem, List<String> detalhes) {
-        ErroResponseDTO corpo = new ErroResponseDTO(LocalDateTime.now(), status.value(), erro, mensagem, detalhes);
+        ErroResponseDTO corpo = new ErroResponseDTO(LocalDateTime.now(ZoneId.systemDefault()), status.value(), erro, mensagem, detalhes);
         return ResponseEntity.status(status).body(corpo);
     }
 }

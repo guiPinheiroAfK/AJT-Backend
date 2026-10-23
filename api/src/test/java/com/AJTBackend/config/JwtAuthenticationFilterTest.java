@@ -6,6 +6,9 @@ import com.AJTBackend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -133,21 +136,12 @@ class JwtAuthenticationFilterTest {
         assertThat(chain.getRequest()).isNotNull();
     }
 
-    @Test
-    void semHeaderSegueSemAutenticar() throws Exception {
+    @ParameterizedTest(name = "Authorization = {0}")
+    @NullSource
+    @ValueSource(strings = "Basic YWRtaW46YWRtaW4=")
+    void semHeaderBearerSegueSemAutenticar(String authorization) throws Exception {
         // When
-        Authentication auth = autenticacaoDepoisDoFiltro(null);
-
-        // Then
-        assertThat(auth).isNull();
-        verify(usuarioRepository, never()).findByUsername(anyString());
-        assertThat(chain.getRequest()).isNotNull();
-    }
-
-    @Test
-    void headerSemPrefixoBearerSegueSemAutenticar() throws Exception {
-        // When
-        Authentication auth = autenticacaoDepoisDoFiltro("Basic YWRtaW46YWRtaW4=");
+        Authentication auth = autenticacaoDepoisDoFiltro(authorization);
 
         // Then
         assertThat(auth).isNull();

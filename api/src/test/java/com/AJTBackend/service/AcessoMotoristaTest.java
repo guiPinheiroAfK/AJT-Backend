@@ -19,7 +19,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /*
- * o que testa: a regra da HU07 isolada (AcessoMotorista) — quem nao e MOTORISTA ve qualquer OS;
+ * o que testa: a regra da HU07 isolada (AcessoMotorista) — quem nao e MOTORISTA ve qualquer OS,
  * o MOTORISTA so ve a OS cujo motorista e o cadastro ligado ao usuario dele; OS ainda sem
  * motorista e motorista sem cadastro ligado nao enxergam nada.
  *

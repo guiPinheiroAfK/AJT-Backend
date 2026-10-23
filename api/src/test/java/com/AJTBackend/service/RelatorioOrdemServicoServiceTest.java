@@ -52,11 +52,8 @@ class RelatorioOrdemServicoServiceTest {
             ordemServicoRepository, paradaOsRepository, new UsuarioLogado(), acessoMotorista);
 
     private static String texto(byte[] pdf) throws IOException {
-        PdfReader leitor = new PdfReader(pdf);
-        try {
+        try (PdfReader leitor = new PdfReader(pdf)) {
             return new PdfTextExtractor(leitor).getTextFromPage(1);
-        } finally {
-            leitor.close();
         }
     }
 
@@ -93,8 +90,8 @@ class RelatorioOrdemServicoServiceTest {
         String texto = texto(service.gerar(2L));
 
         // Then
-        assertThat(texto).contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado");
-        assertThat(texto).doesNotContain("null");
+        assertThat(texto).contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado")
+                .doesNotContain("null");
     }
 
     @Test
@@ -121,12 +118,29 @@ class RelatorioOrdemServicoServiceTest {
         String texto = texto(service.gerar(3L));
 
         // Then
-        assertThat(texto).contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares");
-        assertThat(texto).doesNotContain("Tel."); // sem telefone, sem rotulo solto
-        assertThat(texto).contains("08:45", "EMBARQUE", "#11, #12"); // transfers da parada em ordem de id
-        assertThat(texto).contains("2 pax: Ana, Bia"); // passageiros em ordem alfabetica
-        assertThat(texto).contains("Rodoviaria");
-        assertThat(texto).doesNotContain("null");
+        assertThat(texto).contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares")
+                .doesNotContain("Tel.") // sem telefone, sem rotulo solto
+                .contains("08:45", "EMBARQUE", "#11, #12") // transfers da parada em ordem de id
+                .contains("2 pax: Ana, Bia") // passageiros em ordem alfabetica
+                .contains("Rodoviaria")
+                .doesNotContain("null");
+    }
+
+    @Test
+    void telefoneDoMotoristaSaiNoCabecalhoQuandoCadastrado() throws IOException {
+        // Given
+        OrdemServico os = OrdemServico.builder().id(4L).dataServico(LocalDate.of(2026, 10, 21))
+                .motorista(Motorista.builder().id(5L).nome("Carlos").telefone("(11) 98888-7777").build())
+                .build();
+        when(ordemServicoRepository.findById(4L)).thenReturn(Optional.of(os));
+        when(acessoMotorista.podeVer(any())).thenReturn(true);
+        when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(4L)).thenReturn(List.of());
+
+        // When
+        String texto = texto(service.gerar(4L));
+
+        // Then
+        assertThat(texto).contains("Carlos  •  Tel.: (11) 98888-7777");
     }
 
     // RNF007/LGPD: o papel fica com o motorista, entao o documento do passageiro nunca e impresso
@@ -148,7 +162,7 @@ class RelatorioOrdemServicoServiceTest {
         String texto = texto(service.gerar(4L));
 
         // Then
-        assertThat(texto).contains("Ana Lima", "John Doe");
-        assertThat(texto).doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
+        assertThat(texto).contains("Ana Lima", "John Doe")
+                .doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
     }
 }

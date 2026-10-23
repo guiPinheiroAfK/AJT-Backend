@@ -319,9 +319,10 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         resposta.andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "application/pdf"))
                 .andExpect(header().string("Content-Disposition", containsString("ordem-servico-" + osId + ".pdf")));
-        PdfReader leitor = new PdfReader(resposta.andReturn().getResponse().getContentAsByteArray());
-        String texto = new PdfTextExtractor(leitor).getTextFromPage(1);
-        leitor.close();
+        String texto;
+        try (PdfReader leitor = new PdfReader(resposta.andReturn().getResponse().getContentAsByteArray())) {
+            texto = new PdfTextExtractor(leitor).getTextFromPage(1);
+        }
         assertThat(texto).contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU")
                 .doesNotContain("321", "PDF111");
     }

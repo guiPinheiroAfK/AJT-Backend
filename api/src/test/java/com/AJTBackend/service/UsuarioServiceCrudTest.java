@@ -46,7 +46,7 @@ import static org.mockito.Mockito.when;
  * como rodar: teste unitario com repositorios mockados e BCrypt de verdade (custo baixo);
  * o usuario logado e simulado no SecurityContextHolder. sem spring, sem banco. "mvn test".
  *
- * por que existe: e a tela de quem controla o acesso a todo o resto do sistema.
+ * por que existe: e a tela de quem controla o acesso ao resto inteiro do sistema.
  */
 class UsuarioServiceCrudTest {
 

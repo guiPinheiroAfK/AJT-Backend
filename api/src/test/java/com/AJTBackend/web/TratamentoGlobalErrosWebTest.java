@@ -44,7 +44,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  *
  * como rodar: @WebMvcTest (ErrosWebTestBase), services mockados. sem banco. "mvn test".
  *
- * por que existe: todo erro precisa sair no mesmo formato (ErroResponseDTO) e com o status
+ * por que existe: cada erro precisa sair no mesmo formato (ErroResponseDTO) e com o status
  * certo — inclusive os que ninguem previu, que nao podem mostrar stack trace pro usuario.
  */
 class TratamentoGlobalErrosWebTest extends ErrosWebTestBase {

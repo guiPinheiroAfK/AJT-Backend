@@ -9,6 +9,10 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
+import java.time.Duration;
+import java.time.Instant;
+
+import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -153,7 +157,8 @@ class AutenticacaoIntegrationTest extends IntegracaoTestBase {
 
     private String trocarSenha(String token, String senhaAtual, String novaSenha) throws Exception {
         // garante segundo diferente entre a emissao do token e a troca (o iat do JWT tem precisao de segundos)
-        Thread.sleep(1100);
+        long emitidoEm = jwtService.validarToken(token).getIssuedAt().toInstant().getEpochSecond();
+        await().atMost(Duration.ofSeconds(3)).until(() -> Instant.now().getEpochSecond() > emitidoEm);
         String json = mockMvc.perform(put("/api/auth/senha").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"senhaAtual\":\"" + senhaAtual + "\",\"novaSenha\":\"" + novaSenha + "\"}"))

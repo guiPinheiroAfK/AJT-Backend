@@ -50,6 +50,7 @@ public class SecurityConfig {
     private static final String GERENTE = "GERENTE";
     private static final String ATENDENTE = "ATENDENTE";
     private static final String MOTORISTA = "MOTORISTA";
+    private static final String API = "/api/**";
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JsonAuthErrorHandler jsonAuthErrorHandler;
@@ -78,13 +79,13 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/usuarios/**").hasRole(ADMIN)
                         .requestMatchers("/api/auditoria/**").hasAnyRole(ADMIN, GERENTE)
-                        .requestMatchers(HttpMethod.DELETE, "/api/**").hasAnyRole(ADMIN, GERENTE)
+                        .requestMatchers(HttpMethod.DELETE, API).hasAnyRole(ADMIN, GERENTE)
                         // cadastro de passageiros tem documento (LGPD): motorista nao lista. os passageiros
                         // da OS dele chegam por /api/transfers/{id}/passageiros, com o documento mascarado
                         .requestMatchers(HttpMethod.GET, "/api/passageiros/**").hasAnyRole(ADMIN, GERENTE, ATENDENTE)
                         // "minhas OS do dia" (HU07) so faz sentido pro motorista
                         .requestMatchers(HttpMethod.GET, "/api/ordens-servico/minhas").hasRole(MOTORISTA)
-                        .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, API).authenticated()
 
                         .requestMatchers("/api/motoristas/**", "/api/veiculos/**", "/api/ordens-servico/**")
                             .hasAnyRole(ADMIN, GERENTE)
@@ -114,7 +115,7 @@ public class SecurityConfig {
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration(API, config);
         return source;
     }
 

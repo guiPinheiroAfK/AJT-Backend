@@ -116,11 +116,18 @@ public class RelatorioOrdemServicoService {
         tabela.setWidthPercentage(100);
         linha(tabela, "Data", os.getDataServico() != null ? os.getDataServico().format(DATA) : SEM_INFO);
         linha(tabela, "Status", os.getStatus() != null ? os.getStatus().name() : SEM_INFO);
-        linha(tabela, "Motorista", motorista == null ? "Não definido"
-                : motorista.getNome() + (motorista.getTelefone() != null ? "  •  Tel.: " + motorista.getTelefone() : ""));
+        linha(tabela, "Motorista", descreverMotorista(motorista));
         linha(tabela, "Veículo", veiculo == null ? "Não definido"
                 : veiculo.getLabel() + "  •  Placa " + veiculo.getPlaca() + "  •  " + veiculo.getCapacidade() + " lugares");
         return tabela;
+    }
+
+    private static String descreverMotorista(Motorista motorista) {
+        if (motorista == null) {
+            return "Não definido";
+        }
+        String telefone = motorista.getTelefone() != null ? "  •  Tel.: " + motorista.getTelefone() : "";
+        return motorista.getNome() + telefone;
     }
 
     private PdfPTable tabelaParadas(List<ParadaOs> paradas) {

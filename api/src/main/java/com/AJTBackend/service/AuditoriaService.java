@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,13 +34,7 @@ public class AuditoriaService {
 
     @Transactional
     public void registrar(String tabela, Long registroId, String acao) {
-        String mensagem = acao + " (por " + usuarioLogado.usernameOuSistema() + ")";
-        logAuditoriaRepository.save(LogAuditoria.builder()
-                .tabelaAfetada(tabela)
-                .registroId(registroId)
-                .mensagem(mensagem)
-                .dataHora(LocalDateTime.now())
-                .build());
+        gravar(tabela, registroId, acao);
     }
 
     /**
@@ -49,7 +44,7 @@ public class AuditoriaService {
     @Transactional
     public void registrarAtualizacao(String tabela, Long registroId, String acao,
                                      Enum<?> statusAnterior, Enum<?> statusAtual) {
-        registrarAtualizacao(tabela, registroId, acao, statusAnterior, statusAtual, null, null);
+        gravarAtualizacao(tabela, registroId, acao, statusAnterior, statusAtual, null, null);
     }
 
     /**
@@ -61,6 +56,23 @@ public class AuditoriaService {
     public void registrarAtualizacao(String tabela, Long registroId, String acao,
                                      Enum<?> statusAnterior, Enum<?> statusAtual,
                                      BigDecimal valorAnterior, BigDecimal valorAtual) {
+        gravarAtualizacao(tabela, registroId, acao, statusAnterior, statusAtual, valorAnterior, valorAtual);
+    }
+
+    // os metodos publicos chamam estes privados (e nao uns aos outros) pra nao passar por fora do proxy do @Transactional
+    private void gravar(String tabela, Long registroId, String acao) {
+        String mensagem = acao + " (por " + usuarioLogado.usernameOuSistema() + ")";
+        logAuditoriaRepository.save(LogAuditoria.builder()
+                .tabelaAfetada(tabela)
+                .registroId(registroId)
+                .mensagem(mensagem)
+                .dataHora(LocalDateTime.now(ZoneId.systemDefault()))
+                .build());
+    }
+
+    private void gravarAtualizacao(String tabela, Long registroId, String acao,
+                                   Enum<?> statusAnterior, Enum<?> statusAtual,
+                                   BigDecimal valorAnterior, BigDecimal valorAtual) {
         List<String> mudancas = new ArrayList<>();
         if (statusAnterior != statusAtual) {
             mudancas.add("status " + statusAnterior + " -> " + statusAtual);
@@ -69,7 +81,7 @@ public class AuditoriaService {
             mudancas.add("valor " + formatarValor(valorAnterior) + " -> " + formatarValor(valorAtual));
         }
         String descricao = mudancas.isEmpty() ? acao : acao + ": " + String.join("; ", mudancas);
-        registrar(tabela, registroId, descricao);
+        gravar(tabela, registroId, descricao);
     }
 
     /**

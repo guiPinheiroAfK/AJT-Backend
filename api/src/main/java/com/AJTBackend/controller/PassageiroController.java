@@ -8,7 +8,6 @@ import com.AJTBackend.dto.validacao.OnPatch;
 import com.AJTBackend.service.PassageiroService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +29,7 @@ public class PassageiroController {
 
     @Operation(summary = "Lista passageiros (paginado, com filtros opcionais)",
             description = "?nome= e ?nacionalidade= buscam por parte do texto, sem diferenciar maiúsculas. Sem filtro, lista todos.")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida")})
+    @ApiResponse(responseCode = "200", description = "Lista devolvida")
     @GetMapping
     public ResponseEntity<PaginaResponseDTO<PassageiroResponseDTO>> listar(@ParameterObject FiltroPassageiroDTO filtro,
                                                                            @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
@@ -38,14 +37,15 @@ public class PassageiroController {
     }
 
     @Operation(summary = "Busca passageiro por ID")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Encontrado"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Encontrado")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @GetMapping("/{id}")
     public ResponseEntity<PassageiroResponseDTO> buscarPorId(@PathVariable Long id) {
         return ResponseEntity.ok(service.buscarPorId(id));
     }
 
     @Operation(summary = "Busca passageiros por nacionalidade")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Página devolvida (pode vir vazia)")})
+    @ApiResponse(responseCode = "200", description = "Página devolvida (pode vir vazia)")
     @GetMapping("/buscar")
     public ResponseEntity<PaginaResponseDTO<PassageiroResponseDTO>> buscarPorNacionalidade(
             @RequestParam String nacionalidade,
@@ -54,7 +54,9 @@ public class PassageiroController {
     }
 
     @Operation(summary = "Cria passageiro")
-    @ApiResponses({@ApiResponse(responseCode = "201", description = "Criado"), @ApiResponse(responseCode = "400", description = "Dados inválidos ou registro duplicado"), @ApiResponse(responseCode = "404", description = "Recurso relacionado não encontrado")})
+    @ApiResponse(responseCode = "201", description = "Criado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos ou registro duplicado")
+    @ApiResponse(responseCode = "404", description = "Recurso relacionado não encontrado")
     @PostMapping
     public ResponseEntity<PassageiroResponseDTO> criar(
             @Valid @RequestBody PassageiroRequestDTO dto) {
@@ -63,7 +65,9 @@ public class PassageiroController {
     }
 
     @Operation(summary = "Atualiza passageiro (substituição total)")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Atualizado"), @ApiResponse(responseCode = "400", description = "Dados inválidos"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Atualizado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @PutMapping("/{id}")
     public ResponseEntity<PassageiroResponseDTO> atualizar(
             @PathVariable Long id,
@@ -72,7 +76,9 @@ public class PassageiroController {
     }
 
     @Operation(summary = "Atualiza passageiro parcialmente (só os campos enviados)")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Atualizado"), @ApiResponse(responseCode = "400", description = "Dados inválidos"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Atualizado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @PatchMapping("/{id}")
     public ResponseEntity<PassageiroResponseDTO> atualizarParcial(
             @PathVariable Long id,
@@ -81,7 +87,9 @@ public class PassageiroController {
     }
 
     @Operation(summary = "Exclui passageiro")
-    @ApiResponses({@ApiResponse(responseCode = "204", description = "Excluído"), @ApiResponse(responseCode = "404", description = "Não encontrado"), @ApiResponse(responseCode = "409", description = "Registro em uso por outro recurso")})
+    @ApiResponse(responseCode = "204", description = "Excluído")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
+    @ApiResponse(responseCode = "409", description = "Registro em uso por outro recurso")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
         service.deletar(id);
