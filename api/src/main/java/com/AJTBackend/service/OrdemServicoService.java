@@ -48,10 +48,8 @@ public class OrdemServicoService {
     private final AcessoMotorista acessoMotorista;
     private final ParadaOsService paradaOsService;
 
-    /*
-     * leitura: RF015 (filtros opcionais, somados) + HU07 (o MOTORISTA so ve as OS dele;
-     * o motoristaId que vier no filtro e trocado pelo dele, e sem vinculo ele nao ve nenhuma)
-     */
+    // leitura: RF015 (filtros opcionais, somados) e HU07 (o MOTORISTA so ve as OS dele:
+    // o motorista do filtro e trocado pelo dele, e sem vinculo ele nao ve nenhuma)
     public PaginaResponseDTO<OrdemServicoResponseDTO> listar(FiltroOrdemServicoDTO filtro, Pageable pageable) {
         Especificacoes.validarPeriodo(filtro.dataInicio(), filtro.dataFim());
         Specification<OrdemServico> spec = Specification.allOf(
@@ -119,8 +117,8 @@ public class OrdemServicoService {
                 .build();
 
         OrdemServico salva = ordemServicoRepository.save(ordemServico);
-        auditoriaService.registrar(TABELA, salva.getId(), "Ordem de servico criada");
-        log.info("Ordem de servico criada: id={}", salva.getId());
+        auditoriaService.registrar(TABELA, salva.getId(), "Ordem de serviço criada");
+        log.info("Ordem de serviço criada: id={}", salva.getId());
         return toResponseDTO(salva);
     }
 
@@ -137,7 +135,7 @@ public class OrdemServicoService {
         StatusOrdemServico statusAnterior = ordemServico.getStatus();
         ordemServico.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
 
-        auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de servico atualizada", statusAnterior, ordemServico.getStatus());
+        auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de serviço atualizada", statusAnterior, ordemServico.getStatus());
         ordemServicoRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(ordemServico);
     }
@@ -163,7 +161,7 @@ public class OrdemServicoService {
             ordemServico.setStatus(dto.status());
         }
 
-        auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de servico atualizada", statusAnterior, ordemServico.getStatus());
+        auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de serviço atualizada", statusAnterior, ordemServico.getStatus());
         ordemServicoRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(ordemServico);
     }
@@ -174,8 +172,8 @@ public class OrdemServicoService {
             throw new OrdemServicoNaoEncontradoException(id);
         }
         ordemServicoRepository.deleteById(id);
-        auditoriaService.registrar(TABELA, id, "Ordem de servico removida");
-        log.info("Ordem de servico removida: id={}", id);
+        auditoriaService.registrar(TABELA, id, "Ordem de serviço removida");
+        log.info("Ordem de serviço removida: id={}", id);
     }
 
     // RNF008: o cliente editou em cima de uma versao velha (outra pessoa salvou no meio tempo)

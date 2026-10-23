@@ -32,8 +32,8 @@ public record UsuarioRequestDTO(
         @Schema(example = "true")
         Boolean ativo,
 
-        // HU07: cadastro de motorista ligado ao usuario (so perfil MOTORISTA). no PUT, ausente = desliga;
-        // no PATCH, ausente = mantem. trocar o perfil pra outro que nao MOTORISTA tambem desliga
+        // HU07: cadastro de motorista ligado ao usuario (so perfil MOTORISTA). se nao vier, o PUT
+        // desliga e o PATCH mantem. trocar o perfil pra outro que nao MOTORISTA tambem desliga
         @Schema(example = "1")
         Long motoristaId,
 

@@ -43,8 +43,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class PersistenciaIntegrationTest extends IntegracaoTestBase {
 
-    private static final String PASSAGEIRO_JOHN =
-            "{\"nome\":\"John Doe\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"XP9988776\",\"nacionalidade\":\"Americana\"}";
+    // documento proprio por teste: o banco e compartilhado e documento repetido e recusado (V12)
+    private static String passageiroJohn(String documento) {
+        return "{\"nome\":\"John Doe\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"" + documento
+                + "\",\"nacionalidade\":\"Americana\"}";
+    }
 
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private MotoristaRepository motoristaRepository;
@@ -54,7 +57,7 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveDevolverEmClaroEGravarCifrado_quandoAtendenteCadastraPassageiro() throws Exception {
         // when
-        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_JOHN);
+        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE), passageiroJohn("XP9988776"));
 
         // then
         resposta.andExpect(status().isCreated())
@@ -64,22 +67,39 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
     }
 
     @Test
+    void deveRecusarComMensagemSemONumero_quandoOMesmoCpfVemComOutraPontuacao() throws Exception {
+        // given: um CPF gravado sem pontuacao
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE),
+                "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"10000000108\"}");
+
+        // when: outro passageiro com o mesmo CPF, agora com pontuacao
+        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE),
+                "{\"nome\":\"Bia\",\"tipoDocumento\":\"CPF\",\"documento\":\"100.000.001-08\"}");
+
+        // then: 400, e o hash gravado nao revela o numero
+        resposta.andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Já existe passageiro cadastrado com este CPF."));
+        String hash = jdbcTemplate.queryForObject("SELECT documento_hash FROM passageiros WHERE id = ?", String.class, id);
+        assertThat(hash).hasSize(64).doesNotContain("10000000108");
+    }
+
+    @Test
     void deveDevolverODocumentoEmClaro_quandoAtendenteBuscaPassageiro() throws Exception {
         // given
-        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_JOHN);
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), passageiroJohn("XP1122334"));
 
         // when
         ResultActions resposta = getComo("/api/passageiros/" + id, bearer(Role.ATENDENTE));
 
         // then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.documento").value("XP9988776"));
+                .andExpect(jsonPath("$.documento").value("XP1122334"));
     }
 
     @Test
     void deveRetornar403_quandoMotoristaBuscaPassageiro() throws Exception {
         // given
-        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_JOHN);
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), passageiroJohn("XP5566778"));
 
         // when
         // motorista nao le o cadastro de passageiros (LGPD)

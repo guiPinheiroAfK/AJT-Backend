@@ -57,10 +57,11 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         return criarPelaApi("/api/ordens-servico", bearer(Role.GERENTE), corpo);
     }
 
-    // transfer com a Ana e a Bia (documentos AA111 e BB222)
-    private long transferComAnaEBia() throws Exception {
-        long ana = criarPassageiro("Ana", "AA111");
-        long bia = criarPassageiro("Bia", "BB222");
+    // transfer com a Ana e a Bia; cada teste passa documentos proprios, porque o banco
+    // e compartilhado e documento repetido e recusado (V12)
+    private long transferComAnaEBia(String documentoAna, String documentoBia) throws Exception {
+        long ana = criarPassageiro("Ana", documentoAna);
+        long bia = criarPassageiro("Bia", documentoBia);
         return criarTransfer(",\"passageiroIds\":[" + ana + "," + bia + "]");
     }
 
@@ -74,8 +75,8 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveGravarNaTabelaDeJuncao_quandoTransferEhCriadoComPassageiros() throws Exception {
         // given
-        long ana = criarPassageiro("Ana", "AA111");
-        long bia = criarPassageiro("Bia", "BB222");
+        long ana = criarPassageiro("Ana", "AA777");
+        long bia = criarPassageiro("Bia", "BB888");
 
         // when
         ResultActions resposta = postJson("/api/transfers", bearer(Role.ATENDENTE),
@@ -89,7 +90,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveDevolverOsIdsDosPassageiros_quandoMotoristaBuscaOTransfer() throws Exception {
         // given
-        long transferId = transferComAnaEBia();
+        long transferId = transferComAnaEBia("AA999", "BB000");
 
         // when
         ResultActions resposta = getComo("/api/transfers/" + transferId, bearer(Role.MOTORISTA));
@@ -102,7 +103,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveListarPorNomeComDocumentoMascarado_quandoMotoristaListaPassageirosDoTransfer() throws Exception {
         // given
-        long transferId = transferComAnaEBia();
+        long transferId = transferComAnaEBia("AA111", "BB222");
 
         // when
         ResultActions resposta = getComo("/api/transfers/" + transferId + "/passageiros", bearer(Role.MOTORISTA));
@@ -118,15 +119,15 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveMostrarODocumentoDecifrado_quandoAtendenteListaPassageirosDoTransfer() throws Exception {
         // given
-        long transferId = transferComAnaEBia();
+        long transferId = transferComAnaEBia("AA555", "BB666");
 
         // when
         ResultActions resposta = getComo("/api/transfers/" + transferId + "/passageiros", bearer(Role.ATENDENTE));
 
         // then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].documento").value("AA111")) // atendente ve decifrado
-                .andExpect(jsonPath("$[1].documento").value("BB222"));
+                .andExpect(jsonPath("$[0].documento").value("AA555")) // atendente ve decifrado
+                .andExpect(jsonPath("$[1].documento").value("BB666"));
     }
 
     @Test
@@ -147,7 +148,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveListarNenhumPassageiro_quandoListaFoiLimpaPeloPatch() throws Exception {
         // given
-        long ana = criarPassageiro("Ana", "AA333");
+        long ana = criarPassageiro("Ana", "AA335");
         long transferId = criarTransfer(",\"passageiroIds\":[" + ana + "]");
         patchJson("/api/transfers/" + transferId, bearer(Role.ATENDENTE), "{\"passageiroIds\":[]}")
                 .andExpect(status().isOk());
@@ -188,7 +189,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveContinuarExistindoSemPassageiros_quandoPassageiroLigadoFoiExcluido() throws Exception {
         // given
-        long ana = criarPassageiro("Ana", "AA444");
+        long ana = criarPassageiro("Ana", "AA446");
         long transferId = criarTransfer(",\"passageiroIds\":[" + ana + "]");
         deleteComo("/api/passageiros/" + ana, bearer(Role.GERENTE)).andExpect(status().isNoContent());
 
@@ -379,8 +380,9 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         PdfReader leitor = new PdfReader(resposta.andReturn().getResponse().getContentAsByteArray());
         String texto = new PdfTextExtractor(leitor).getTextFromPage(1);
         leitor.close();
-        assertThat(texto).contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU");
-        assertThat(texto).doesNotContain("321", "PDF111"); // nem valor nem documento no papel do motorista
+        assertThat(texto)
+                .contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU")
+                .doesNotContain("321", "PDF111"); // nem valor nem documento no papel do motorista
     }
 
     @Test

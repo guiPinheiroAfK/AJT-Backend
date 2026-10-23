@@ -32,6 +32,10 @@ public class Passageiro {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String documento;
 
+    // HMAC do tipo + numero (V12, DocumentoHash): acha duplicado sem decifrar o documento
+    @Column(name = "documento_hash", length = 64)
+    private String documentoHash;
+
     @Column(length = 50)
     private String nacionalidade;
 }

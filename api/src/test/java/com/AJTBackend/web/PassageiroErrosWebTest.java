@@ -1,5 +1,6 @@
 package com.AJTBackend.web;
 
+import com.AJTBackend.exception.DocumentoJaCadastradoException;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.RegraNegocioException;
 import org.junit.jupiter.api.Test;
@@ -169,6 +170,18 @@ class PassageiroErrosWebTest extends ErrosWebTestBase {
 
         // then
         resposta.andExpect(erro(400, "Regra de negócio", "CPF inválido"));
+    }
+
+    @Test
+    void deveRetornar400SemRepetirONumero_quandoDocumentoJaEstaCadastrado() throws Exception {
+        // given
+        when(passageiroService.criar(any())).thenThrow(new DocumentoJaCadastradoException("CPF"));
+
+        // when
+        ResultActions resposta = enviar(post("/api/passageiros"), "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"52998224725\"}");
+
+        // then
+        resposta.andExpect(erro(400, "Erro de validação", "Já existe passageiro cadastrado com este CPF"));
     }
 
     @Test

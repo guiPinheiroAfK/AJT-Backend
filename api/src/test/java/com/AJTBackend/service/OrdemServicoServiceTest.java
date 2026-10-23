@@ -266,7 +266,7 @@ class OrdemServicoServiceTest {
         // then
         assertThat(criada.status()).isEqualTo(StatusOrdemServico.ABERTA);
         assertThat(criada.veiculoId()).isEqualTo(6L);
-        verify(auditoriaService).registrar("ordens_servico", 10L, "Ordem de servico criada");
+        verify(auditoriaService).registrar("ordens_servico", 10L, "Ordem de serviço criada");
     }
 
     @Test
@@ -447,6 +447,6 @@ class OrdemServicoServiceTest {
 
         // then
         verify(repository).deleteById(1L);
-        verify(auditoriaService).registrar("ordens_servico", 1L, "Ordem de servico removida");
+        verify(auditoriaService).registrar("ordens_servico", 1L, "Ordem de serviço removida");
     }
 }

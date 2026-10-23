@@ -100,8 +100,9 @@ class RelatorioOrdemServicoServiceTest {
 
         // then
         String texto = texto(pdf);
-        assertThat(texto).contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado");
-        assertThat(texto).doesNotContain("null");
+        assertThat(texto)
+                .contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado")
+                .doesNotContain("null");
     }
 
     @Test
@@ -128,12 +129,13 @@ class RelatorioOrdemServicoServiceTest {
 
         // then
         String texto = texto(pdf);
-        assertThat(texto).contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares");
-        assertThat(texto).doesNotContain("Tel."); // sem telefone, sem rotulo solto
-        assertThat(texto).contains("08:45", "EMBARQUE", "#11, #12"); // transfers da parada em ordem de id
-        assertThat(texto).contains("2 pax: Ana, Bia"); // passageiros em ordem alfabetica
-        assertThat(texto).contains("Rodoviaria");
-        assertThat(texto).doesNotContain("null");
+        assertThat(texto)
+                .contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares")
+                .doesNotContain("Tel.") // sem telefone, sem rotulo solto
+                .contains("08:45", "EMBARQUE", "#11, #12") // transfers da parada em ordem de id
+                .contains("2 pax: Ana, Bia") // passageiros em ordem alfabetica
+                .contains("Rodoviaria")
+                .doesNotContain("null");
     }
 
     @Test
@@ -167,7 +169,8 @@ class RelatorioOrdemServicoServiceTest {
 
         // then
         String texto = texto(pdf);
-        assertThat(texto).contains("Ana Lima", "John Doe");
-        assertThat(texto).doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
+        assertThat(texto)
+                .contains("Ana Lima", "John Doe")
+                .doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
     }
 }

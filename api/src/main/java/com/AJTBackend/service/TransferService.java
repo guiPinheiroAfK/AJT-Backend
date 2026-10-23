@@ -33,6 +33,7 @@ import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -135,7 +136,7 @@ public class TransferService {
             transfer.setValorOriginal(dto.valorOriginal());
             transfer.setMoedaOrigem(moeda);
             transfer.setOrdemServico(buscarOrdemServico(dto.osId()));
-            // PUT sem passageiroIds mantem os atuais; enviar [] remove todos
+            // PUT sem passageiroIds mantem os atuais, e lista vazia esvazia
             if (dto.passageiroIds() != null) {
                 transfer.setPassageiros(buscarPassageiros(dto.passageiroIds()));
             }
@@ -177,8 +178,9 @@ public class TransferService {
         if (dto.valorOriginal() == null && moedaDto == null) {
             return null;
         }
-        Transfer atual = transactionTemplate.execute(tx -> transferRepository.findById(id)
-                .orElseThrow(() -> new TransferNaoEncontradoException(id)));
+        // execute() so devolve null se o callback devolver null; aqui ele lanca 404 antes disso
+        Transfer atual = Objects.requireNonNull(transactionTemplate.execute(tx -> transferRepository.findById(id)
+                .orElseThrow(() -> new TransferNaoEncontradoException(id))));
         BigDecimal valorOriginal = dto.valorOriginal() != null ? dto.valorOriginal() : atual.getValorOriginal();
         String moeda = moedaDto != null ? moedaDto : atual.getMoedaOrigem();
         return valorTransferService.calcularValorBase(null, valorOriginal, moeda);
@@ -229,11 +231,11 @@ public class TransferService {
     }
 
     /*
-     * regras do vinculo transfer <-> OS (RF009, RF010), aplicadas no estado final do transfer:
-     * - so entra em OS aberta ou em andamento (nao em cancelada/finalizada);
-     * - a OS agrupa os transfers de um dia: a data do transfer tem que ser a da OS;
-     * - o status acompanha o vinculo: com OS, "aguardando OS" vira CONFIRMADO; ao sair da OS,
-     *   CONFIRMADO volta pra AGUARDANDO_OS.
+     * regras do vinculo entre transfer e OS (RF009, RF010), aplicadas no estado final do transfer:
+     * 1. so entra em OS aberta ou em andamento, nunca em cancelada ou finalizada
+     * 2. a OS agrupa os transfers de um dia, entao a data do transfer tem que ser a da OS
+     * 3. o status acompanha o vinculo: com OS, "aguardando OS" vira CONFIRMADO, e ao sair da OS
+     *    CONFIRMADO volta pra AGUARDANDO_OS
      * as duas primeiras so sao conferidas quando a OS ou a data mudam, pra nao travar a edicao
      * de transfers antigos de uma OS ja finalizada.
      */

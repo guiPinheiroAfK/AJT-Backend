@@ -55,7 +55,7 @@ public record TransferRequestDTO(
         @Schema(example = "1")
         Long osId,
 
-        // ids dos passageiros do transfer; ausente = nao altera (PUT/PATCH), [] = remove todos
+        // ids dos passageiros do transfer: sem o campo, PUT e PATCH mantem a lista; lista vazia esvazia
         @Size(max = 50, message = "Um transfer pode ter no máximo 50 passageiros", groups = {Default.class, OnPatch.class})
         @Schema(example = "[1, 2]")
         Set<Long> passageiroIds,

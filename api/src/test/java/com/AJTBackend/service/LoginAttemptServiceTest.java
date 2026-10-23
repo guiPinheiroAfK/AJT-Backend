@@ -1,6 +1,8 @@
 package com.AJTBackend.service;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -23,28 +25,24 @@ class LoginAttemptServiceTest {
 
     private final LoginAttemptService service = new LoginAttemptService(3, 15);
 
-    @Test
-    void naoDeveBloquear_quandoFalhasFicamAbaixoDoLimite() {
+    // o bloqueio vale pro par IP + usuario: 3 falhas bloqueiam so aquele par
+    @ParameterizedTest(name = "{0} falhas de {1}/admin, consulta {2}/{3} -> bloqueado={4}")
+    @CsvSource({
+            "2, 10.0.0.1, 10.0.0.1, admin, false", // abaixo do limite
+            "3, 10.0.0.1, 10.0.0.1, admin, true",  // atingiu o limite
+            "3, 10.0.0.1, 10.0.0.2, admin, false", // mesmo usuario em outro IP
+            "3, 10.0.0.1, 10.0.0.1, maria, false"  // outro usuario no mesmo IP
+    })
+    void deveBloquearSoOParIpUsuario_quandoFalhasAtingemOLimite(int falhas, String ipDasFalhas, String ip, String usuario,
+                                                                boolean esperado) {
         // given
-        falhar(IP, "admin", 2);
+        falhar(ipDasFalhas, "admin", falhas);
 
         // when
-        boolean bloqueado = service.bloqueado(IP, "admin");
+        boolean bloqueado = service.bloqueado(ip, usuario);
 
         // then
-        assertThat(bloqueado).isFalse();
-    }
-
-    @Test
-    void deveBloquear_quandoFalhasAtingemOLimite() {
-        // given
-        falhar(IP, "admin", 3);
-
-        // when
-        boolean bloqueado = service.bloqueado(IP, "admin");
-
-        // then
-        assertThat(bloqueado).isTrue();
+        assertThat(bloqueado).isEqualTo(esperado);
     }
 
     @Test
@@ -61,29 +59,6 @@ class LoginAttemptServiceTest {
         assertThat(bloqueado).isFalse();
     }
 
-    @Test
-    void naoDeveBloquearOutroIp_quandoMesmoUsuarioFoiBloqueado() {
-        // given
-        falhar(IP, "admin", 3);
-
-        // when
-        boolean bloqueado = service.bloqueado("10.0.0.2", "admin");
-
-        // then
-        assertThat(bloqueado).isFalse();
-    }
-
-    @Test
-    void naoDeveBloquearOutroUsuario_quandoMesmoIpFoiBloqueado() {
-        // given
-        falhar(IP, "admin", 3);
-
-        // when
-        boolean bloqueado = service.bloqueado(IP, "maria");
-
-        // then
-        assertThat(bloqueado).isFalse();
-    }
 
     @Test
     void deveBloquear_quandoFalhasSemUsernameAtingemOLimite() {

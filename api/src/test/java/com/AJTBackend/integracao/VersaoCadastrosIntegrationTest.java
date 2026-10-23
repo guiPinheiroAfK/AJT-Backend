@@ -30,12 +30,15 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
 
     @Autowired private JdbcTemplate jdbcTemplate;
 
-    private static final String PASSAGEIRO_ANA = "{\"nome\":\"Ana\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"V1\"}";
+    // documento novo a cada chamada: o banco e compartilhado e documento repetido e recusado (V12)
+    private static String passageiroAna() {
+        return "{\"nome\":\"Ana\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"V" + UUID.randomUUID() + "\"}";
+    }
 
     @Test
     void deveNascerComVersaoZero_quandoPassageiroEhCriado() throws Exception {
         // when
-        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE), passageiroAna());
 
         // then
         resposta.andExpect(status().isCreated())
@@ -45,7 +48,7 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveSalvarESubirAVersao_quandoPatchDePassageiroTrazAVersaoAtual() throws Exception {
         // given
-        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), passageiroAna());
 
         // when
         ResultActions resposta = patchJson("/api/passageiros/" + id, bearer(Role.ATENDENTE), "{\"nome\":\"Ana Maria\",\"versao\":0}");
@@ -58,7 +61,7 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveRetornar409_quandoPatchDePassageiroTrazVersaoQueJaFoiSalva() throws Exception {
         // given
-        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), passageiroAna());
         patchJson("/api/passageiros/" + id, bearer(Role.ATENDENTE), "{\"nome\":\"Ana Maria\",\"versao\":0}")
                 .andExpect(status().isOk());
 
@@ -75,7 +78,7 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
     @Test
     void devePreservarQuemSalvouAntes_quandoAEdicaoSeguinteLevou409() throws Exception {
         // given
-        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), passageiroAna());
         patchJson("/api/passageiros/" + id, bearer(Role.ATENDENTE), "{\"nome\":\"Ana Maria\",\"versao\":0}")
                 .andExpect(status().isOk());
         patchJson("/api/passageiros/" + id, bearer(Role.GERENTE), "{\"nome\":\"Ana Paula\",\"versao\":0}")
@@ -91,7 +94,8 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
     @Test
     void deveSalvarSemConferir_quandoClienteAntigoNaoMandaAVersao() throws Exception {
         // given
-        String placa = ("V" + UUID.randomUUID().toString().replace("-", "")).substring(0, 7).toUpperCase();
+        // placa valida (ABC1234) e unica entre execucoes: 3 letras fixas + 4 digitos aleatorios
+        String placa = "VRS" + String.format("%04d", Math.floorMod(UUID.randomUUID().hashCode(), 10000));
         long id = criarPelaApi("/api/veiculos", bearer(Role.GERENTE),
                 "{\"label\":\"Van\",\"placa\":\"" + placa + "\",\"capacidade\":10}");
 

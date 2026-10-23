@@ -43,6 +43,8 @@ class VeiculoErrosWebTest extends ErrosWebTestBase {
                 Arguments.of("label maior que 50", "{\"label\":\"" + "v".repeat(51) + "\",\"placa\":\"ABC1D23\",\"capacidade\":15}", "50 caracteres"),
                 Arguments.of("sem placa", "{\"label\":\"Van\",\"capacidade\":15}", "placa: Placa é obrigatória"),
                 Arguments.of("placa maior que 10", "{\"label\":\"Van\",\"placa\":\"ABCDEFGHIJK\",\"capacidade\":15}", "10 caracteres"),
+                Arguments.of("placa curta", "{\"label\":\"Van\",\"placa\":\"XX12\",\"capacidade\":15}", "placa: Placa inválida"),
+                Arguments.of("placa fora do padrao", "{\"label\":\"Van\",\"placa\":\"1234ABC\",\"capacidade\":15}", "placa: Placa inválida"),
                 Arguments.of("sem capacidade", "{\"label\":\"Van\",\"placa\":\"ABC1D23\"}", "capacidade: Capacidade é obrigatória"),
                 Arguments.of("capacidade zero", "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":0}", "capacidade: Capacidade deve ser maior que zero"),
                 Arguments.of("capacidade negativa", "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":-3}", "capacidade: Capacidade deve ser maior que zero"),

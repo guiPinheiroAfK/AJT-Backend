@@ -190,6 +190,7 @@ Um handler cobre a classe-mãe: criar uma nova `XNaoEncontrada` **não** exige n
 | `V9__Versao_Concorrencia` | coluna `versao` nas 8 tabelas editáveis (lock otimista, ADR-0016) |
 | `V10__Status_Transfer_Com_Os` | corrige transfers antigos: quem está numa OS e ainda estava `AGUARDANDO_OS` passa a `CONFIRMADO` |
 | `V11__Usuario_Motorista` | `usuarios.motorista_id` (único, `ON DELETE SET NULL`) para a HU07 (ADR-0018) |
+| `V12__Passageiro_Documento_Hash` | `passageiros.documento_hash` (HMAC do documento) para recusar documento duplicado sem decifrar; os antigos são preenchidos pelo `DocumentoHashBackfill` |
 
 **Regra de ouro:** migration já aplicada **nunca** é editada (quebra o checksum do Flyway); mudanças viram
 uma migration nova. O Hibernate roda em `ddl-auto: validate`: só confere, nunca altera o schema.

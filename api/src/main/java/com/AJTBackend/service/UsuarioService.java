@@ -57,9 +57,10 @@ public class UsuarioService {
         if (dto.senha() == null || dto.senha().isBlank()) {
             throw new RegraNegocioException("Senha é obrigatória no cadastro");
         }
-        if (usuarioRepository.existsByUsername(dto.username())) {
-            log.warn("Tentativa de cadastro com username ja existente: {}", dto.username());
-            throw new UsernameJaCadastradoException(dto.username());
+        String username = dto.username();
+        if (usuarioRepository.existsByUsername(username)) {
+            log.warn("Tentativa de cadastro com username ja existente: {}", username);
+            throw new UsernameJaCadastradoException(username);
         }
 
         Usuario usuario = Usuario.builder()

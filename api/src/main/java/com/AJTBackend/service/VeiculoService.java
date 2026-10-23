@@ -42,9 +42,10 @@ public class VeiculoService {
 
     @Transactional
     public VeiculoResponseDTO criar(VeiculoRequestDTO dto) {
-        if (veiculoRepository.existsByPlaca(dto.placa())) {
-            log.warn("Tentativa de cadastro com placa ja existente: {}", dto.placa());
-            throw new PlacaJaCadastradaException(dto.placa());
+        String placa = dto.placa();
+        if (veiculoRepository.existsByPlaca(placa)) {
+            log.warn("Tentativa de cadastro com placa ja existente: {}", placa);
+            throw new PlacaJaCadastradaException(placa);
         }
 
         Veiculo veiculo = Veiculo.builder()

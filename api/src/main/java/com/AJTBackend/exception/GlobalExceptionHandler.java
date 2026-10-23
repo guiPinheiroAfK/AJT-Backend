@@ -171,7 +171,7 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(CotacaoIndisponivelException.class)
     public ResponseEntity<ErroResponseDTO> handleCotacaoIndisponivel(CotacaoIndisponivelException ex) {
         log.warn("Falha ao consultar API de cotacao: {}", ex.getMessage());
-        return resposta(HttpStatus.BAD_GATEWAY, "Servico externo indisponível", ex.getMessage(), null);
+        return resposta(HttpStatus.BAD_GATEWAY, "Serviço externo indisponível", ex.getMessage(), null);
     }
 
     // 500 - fallback genérico, pra qualquer coisa não prevista

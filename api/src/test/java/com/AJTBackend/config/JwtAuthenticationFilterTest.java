@@ -6,6 +6,9 @@ import com.AJTBackend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -118,32 +121,13 @@ class JwtAuthenticationFilterTest {
         assertThat(auth).isNull();
     }
 
-    @Test
-    void naoDeveConsultarOBanco_quandoTokenEhInvalido() throws Exception {
+    // sem header, com outro esquema (Basic) ou com token invalido: segue sem autenticar e sem ir ao banco
+    @ParameterizedTest(name = "Authorization = {0}")
+    @NullSource
+    @ValueSource(strings = {"Bearer token.invalido.xyz", "Basic YWRtaW46YWRtaW4="})
+    void deveSeguirSemAutenticarNemConsultarOBanco_quandoHeaderNaoTrazTokenValido(String header) throws Exception {
         // when
-        Authentication auth = filtrar("Bearer token.invalido.xyz");
-
-        // then
-        assertThat(auth).isNull();
-        verify(usuarioRepository, never()).findByUsername(anyString());
-        assertThat(chain.getRequest()).isNotNull();
-    }
-
-    @Test
-    void deveSeguirSemAutenticar_quandoNaoHaHeaderAuthorization() throws Exception {
-        // when
-        Authentication auth = filtrar(null);
-
-        // then
-        assertThat(auth).isNull();
-        verify(usuarioRepository, never()).findByUsername(anyString());
-        assertThat(chain.getRequest()).isNotNull();
-    }
-
-    @Test
-    void deveSeguirSemAutenticar_quandoHeaderNaoTemPrefixoBearer() throws Exception {
-        // when
-        Authentication auth = filtrar("Basic YWRtaW46YWRtaW4=");
+        Authentication auth = filtrar(header);
 
         // then
         assertThat(auth).isNull();
