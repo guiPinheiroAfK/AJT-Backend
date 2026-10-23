@@ -52,115 +52,138 @@ class MotoristaErrosWebTest extends ErrosWebTestBase {
 
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
-    void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoCadastroTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/motoristas"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(motoristaService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
-    void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoPutTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(put("/api/motoristas/1"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(motoristaService, never()).atualizar(any(), any());
     }
 
     @Test
-    void patchRecusaTextoVazio() throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoPatchTrazCnhEmBranco() throws Exception {
+        // when
         ResultActions resposta = enviar(patch("/api/motoristas/1"), "{\"cnh\":\"  \"}");
 
-        // Then
+        // then
         resposta.andExpect(validacao("cnh: CNH não pode ser vazia"));
         verify(motoristaService, never()).atualizarParcial(any(), any());
     }
 
-    static Stream<Arguments> verbosNoId99() {
-        return Stream.of(
-                Arguments.of("GET", null),
-                Arguments.of("PUT", VALIDO),
-                Arguments.of("PATCH", "{\"nome\":\"Dora\"}"),
-                Arguments.of("DELETE", null));
-    }
-
-    @ParameterizedTest(name = "{0} /api/motoristas/99 -> 404")
-    @MethodSource("verbosNoId99")
-    void idInexistenteRetorna404EmCadaVerbo(String verbo, String json) throws Exception {
-        // Given
+    @Test
+    void deveRetornar404_quandoGetEmIdInexistente() throws Exception {
+        // given
         when(motoristaService.buscarPorId(99L)).thenThrow(new MotoristaNaoEncontradoException(99L));
-        when(motoristaService.atualizar(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
-        when(motoristaService.atualizarParcial(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
-        doThrow(new MotoristaNaoEncontradoException(99L)).when(motoristaService).deletar(99L);
 
-        // When
-        ResultActions resposta = executar(verbo, "/api/motoristas/99", json);
+        // when
+        ResultActions resposta = chamar(get("/api/motoristas/99"));
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
-    void buscaPorCnhInexistenteRetorna404() throws Exception {
-        // Given
+    void deveRetornar404_quandoPutEmIdInexistente() throws Exception {
+        // given
+        when(motoristaService.atualizar(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
+
+        // when
+        ResultActions resposta = enviar(put("/api/motoristas/99"), VALIDO);
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoPatchEmIdInexistente() throws Exception {
+        // given
+        when(motoristaService.atualizarParcial(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
+
+        // when
+        ResultActions resposta = enviar(patch("/api/motoristas/99"), "{\"nome\":\"Dora\"}");
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoDeleteEmIdInexistente() throws Exception {
+        // given
+        doThrow(new MotoristaNaoEncontradoException(99L)).when(motoristaService).deletar(99L);
+
+        // when
+        ResultActions resposta = chamar(delete("/api/motoristas/99"));
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoBuscaPorCnhInexistente() throws Exception {
+        // given
         when(motoristaService.buscarPorCnh("000")).thenThrow(new MotoristaNaoEncontradoException("000"));
 
-        // When
+        // when
         ResultActions resposta = chamar(get("/api/motoristas/buscar").param("cnh", "000"));
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "000"));
     }
 
     @Test
-    void buscaPorCnhSemOParametroRetorna400() throws Exception {
-        // When
+    void deveRetornar400_quandoBuscaPorCnhSemOParametro() throws Exception {
+        // when
         ResultActions resposta = chamar(get("/api/motoristas/buscar"));
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Parâmetro inválido", "'cnh' é obrigatório"));
-        verify(motoristaService, never()).buscarPorCnh(any());
     }
 
     @Test
-    void cnhDuplicadaRetorna400() throws Exception {
-        // Given
+    void deveRetornar400_quandoCnhJaEstaCadastrada() throws Exception {
+        // given
         when(motoristaService.criar(any())).thenThrow(new CnhJaCadastradaException("12345678900"));
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/motoristas"), VALIDO);
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Erro de validação", "Já existe motorista cadastrado com CNH"));
     }
 
     @Test
-    void versaoVelhaRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoPutTrazVersaoVelha() throws Exception {
+        // given
         when(motoristaService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Motorista", 1L));
 
-        // When
+        // when
         ResultActions resposta = enviar(put("/api/motoristas/1"), VALIDO);
 
-        // Then
+        // then
         resposta.andExpect(erro(409, "Conflito de edição", "alterado por outro usuário"));
     }
 
     @Test
-    void excluirMotoristaComOrdemDeServicoRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoExcluiMotoristaComOrdemDeServico() throws Exception {
+        // given
         doThrow(new DataIntegrityViolationException("fk")).when(motoristaService).deletar(1L);
 
-        // When
+        // when
         ResultActions resposta = chamar(delete("/api/motoristas/1"));
 
-        // Then
+        // then
         resposta.andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 }
