@@ -6,10 +6,23 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.List;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
+/*
+ * o que testa: a cifra do documento do passageiro (CriptografiaConverter):
+ * ida e volta, iv aleatorio, valor legado sem prefixo, nulo, chave errada,
+ * dado adulterado e chave invalida na inicializacao.
+ *
+ * como rodar: teste unitario puro (sem spring, sem banco). "mvn test".
+ *
+ * por que existe: um erro aqui ou vaza o documento em texto puro (LGPD) ou
+ * deixa o dado gravado ilegivel. a gravacao real no postgres fica no
+ * PassageiroRepositoryTest; aqui ficam os casos de borda da cifra.
+ */
 class CriptografiaConverterTest {
 
     private static final String CHAVE = base64("0123456789abcdef0123456789abcdef");
@@ -20,143 +33,150 @@ class CriptografiaConverterTest {
     // ----- cifra e decifra -----
 
     @Test
-    void valorCifradoTemOPrefixoDaVersaoENaoExibeOTextoOriginal() {
-        // When
+    void deveGravarComPrefixoDeVersaoSemExibirOTexto_quandoCifraUmValor() {
+        // when
         String cifrado = converter.convertToDatabaseColumn(DOCUMENTO);
 
-        // Then
+        // then
         assertThat(cifrado).startsWith("v1:").doesNotContain(DOCUMENTO);
     }
 
     @Test
-    void decifrarOValorCifradoDevolveOOriginal() {
-        // Given
+    void deveDevolverOOriginal_quandoDecifraOValorCifrado() {
+        // given
         String cifrado = converter.convertToDatabaseColumn(DOCUMENTO);
 
-        // When
+        // when
         String decifrado = converter.convertToEntityAttribute(cifrado);
 
-        // Then
+        // then
         assertThat(decifrado).isEqualTo(DOCUMENTO);
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "ida e volta preserva \"{0}\"")
     @ValueSource(strings = {"A", "12345678900", "  com espacos  ", "Passaporte nº ÇÃÕ-ß-日本"})
-    void idaEVoltaPreservaQualquerTexto(String valor) {
-        // Given
+    void devePreservarOTexto_quandoCifraEDecifraQualquerValor(String valor) {
+        // given
         String cifrado = converter.convertToDatabaseColumn(valor);
 
-        // When
+        // when
         String decifrado = converter.convertToEntityAttribute(cifrado);
 
-        // Then
+        // then
         assertThat(decifrado).isEqualTo(valor);
     }
 
     @Test
-    void idaEVoltaPreservaUmTextoLongo() {
-        // Given
+    void devePreservarOTexto_quandoValorTemMilCaracteres() {
+        // given
         String longo = "a".repeat(1000);
         String cifrado = converter.convertToDatabaseColumn(longo);
 
-        // When
+        // when
         String decifrado = converter.convertToEntityAttribute(cifrado);
 
-        // Then
+        // then
         assertThat(decifrado).isEqualTo(longo).hasSize(1000);
     }
 
     @Test
-    void mesmoValorGeraCifrasDiferentes() {
-        // Given: IV aleatorio impede descobrir documentos iguais comparando o banco
-
-        // When
+    void deveGerarCifrasDiferentes_quandoCifraOMesmoValorDuasVezes() {
+        // given
+        // iv aleatorio impede descobrir documentos iguais comparando o banco
         String primeira = converter.convertToDatabaseColumn("123");
+
+        // when
         String segunda = converter.convertToDatabaseColumn("123");
 
-        // Then
+        // then
         assertThat(primeira).isNotEqualTo(segunda);
     }
 
     @Test
-    void cifrasDiferentesDoMesmoValorDeciframParaOMesmoTexto() {
-        // Given
+    void deveDecifrarParaOMesmoTexto_quandoCifrasDiferentesSaoDoMesmoValor() {
+        // given
         String primeira = converter.convertToDatabaseColumn("123");
         String segunda = converter.convertToDatabaseColumn("123");
 
-        // When
-        String decifradaPrimeira = converter.convertToEntityAttribute(primeira);
-        String decifradaSegunda = converter.convertToEntityAttribute(segunda);
+        // when
+        List<String> decifradas = Stream.of(primeira, segunda).map(converter::convertToEntityAttribute).toList();
 
-        // Then
-        assertThat(decifradaPrimeira).isEqualTo("123");
-        assertThat(decifradaSegunda).isEqualTo("123");
+        // then
+        assertThat(decifradas).containsExactly("123", "123");
     }
 
     @Test
-    void outraInstanciaComAMesmaChaveDecifraOQueFoiGravado() {
-        // Given: simula o servidor reiniciando e lendo o que ja estava no banco
+    void deveDecifrarOQueFoiGravado_quandoOutraInstanciaUsaAMesmaChave() {
+        // given
+        // simula o servidor reiniciando e lendo o que ja estava no banco
         String cifrado = converter.convertToDatabaseColumn(DOCUMENTO);
         CriptografiaConverter aposReinicio = new CriptografiaConverter(CHAVE);
 
-        // When
+        // when
         String decifrado = aposReinicio.convertToEntityAttribute(cifrado);
 
-        // Then
+        // then
         assertThat(decifrado).isEqualTo(DOCUMENTO);
     }
 
     // ----- nulo e valor legado -----
 
     @Test
-    void cifrarNuloDevolveNulo() {
-        // When
+    void deveDevolverNulo_quandoCifraNulo() {
+        // when
         String cifrado = converter.convertToDatabaseColumn(null);
 
-        // Then
+        // then
         assertThat(cifrado).isNull();
     }
 
     @Test
-    void decifrarNuloDevolveNulo() {
-        // When
+    void deveDevolverNulo_quandoDecifraNulo() {
+        // when
         String decifrado = converter.convertToEntityAttribute(null);
 
-        // Then
+        // then
         assertThat(decifrado).isNull();
     }
 
     @Test
-    void valorLegadoSemPrefixoEhLidoComoTextoPuro() {
-        // When
+    void deveLerComoTextoPuro_quandoValorLegadoNaoTemPrefixo() {
+        // when
         String lido = converter.convertToEntityAttribute("12345678900");
 
-        // Then
+        // then
         assertThat(lido).isEqualTo("12345678900");
     }
 
     // ----- falhas ao decifrar -----
 
     @Test
-    void falhaAoDecifrarComChaveDiferente() {
-        // Given
+    void deveFalharSemExporODocumento_quandoDecifraComOutraChave() {
+        // given
         String cifrado = converter.convertToDatabaseColumn(DOCUMENTO);
         CriptografiaConverter outraChave = new CriptografiaConverter(base64("fedcba9876543210fedcba9876543210"));
 
-        // When / Then
-        assertThatThrownBy(() -> outraChave.convertToEntityAttribute(cifrado))
+        // when
+        Throwable erro = catchThrowable(() -> outraChave.convertToEntityAttribute(cifrado));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageNotContaining(DOCUMENTO);
     }
 
     @Test
-    void falhaAoDecifrarDadoAdulterado() {
-        // Given: troca os ultimos 4 caracteres do valor gravado
+    void deveFalharSemExporODocumento_quandoDadoGravadoFoiAdulterado() {
+        // given
+        // troca os ultimos 4 caracteres do valor gravado
         String cifrado = converter.convertToDatabaseColumn(DOCUMENTO);
         String adulterado = cifrado.substring(0, cifrado.length() - 4) + "AAAA";
 
-        // When / Then
-        assertThatThrownBy(() -> converter.convertToEntityAttribute(adulterado))
+        // when
+        Throwable erro = catchThrowable(() -> converter.convertToEntityAttribute(adulterado));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageNotContaining(DOCUMENTO);
     }
@@ -164,20 +184,26 @@ class CriptografiaConverterTest {
     // ----- chave invalida -----
 
     @Test
-    void recusaChaveComTamanhoErrado() {
-        // Given
+    void deveRecusarAChave_quandoTamanhoNaoEh32Bytes() {
+        // given
         String chaveCurta = base64("curta");
 
-        // When / Then
-        assertThatThrownBy(() -> new CriptografiaConverter(chaveCurta))
+        // when
+        Throwable erro = catchThrowable(() -> new CriptografiaConverter(chaveCurta));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("32 bytes");
     }
 
     @Test
-    void recusaChaveQueNaoEhBase64() {
-        // When / Then
-        assertThatThrownBy(() -> new CriptografiaConverter("###"))
+    void deveRecusarAChave_quandoNaoEhBase64() {
+        // when
+        Throwable erro = catchThrowable(() -> new CriptografiaConverter("###"));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Base64");
     }
