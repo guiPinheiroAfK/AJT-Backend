@@ -4,29 +4,39 @@ import com.AJTBackend.config.JwtService;
 import com.AJTBackend.model.Usuario;
 import com.AJTBackend.model.enums.Role;
 import com.AJTBackend.repository.UsuarioRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.containers.PostgreSQLContainer;
 import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /*
- * classe base dos testes de integracao (AutenticacaoIntegrationTest,
- * PersistenciaIntegrationTest, CotacaoIntegrationTest e as demais
- * *IntegrationTest). sobe a aplicacao inteira, de verdade, contra um
+ * classe base dos testes de integracao (todas as classes de integracao/).
+ * sobe a aplicacao inteira, de verdade, contra um
  * PostgreSQL 16 real via testcontainers — rodando todas as migrations do
- * flyway (V1 a V6) com ddl-auto=validate — e simula a api de cambio com
+ * flyway (V1 a V11) com ddl-auto=validate — e simula a api de cambio com
  * wiremock, sem sair pra internet.
  *
  * como rodar: precisa do docker desktop (ou outro engine docker) rodando
@@ -88,9 +98,59 @@ abstract class IntegracaoTestBase {
     @Autowired
     protected JwtService jwtService;
 
-    /** Cria um usuario ativo com o perfil informado e devolve o header Authorization. */
+    @Autowired
+    protected ObjectMapper objectMapper;
+
+    // cria um usuario ativo com o perfil informado e devolve o header Authorization
     protected String bearer(Role role) {
         return "Bearer " + jwtService.gerarToken(criarUsuario(role, "senha-teste-123").getUsername(), role);
+    }
+
+    /*
+     * atalhos pro "when" dos testes: cada um dispara a requisicao com o header
+     * Authorization e devolve o ResultActions, pra o "then" fazer os andExpect.
+     * o "authorization" e o header inteiro: bearer(Role.X) ou "Bearer " + token.
+     */
+
+    protected ResultActions executar(MockHttpServletRequestBuilder requisicao, String authorization) throws Exception {
+        return mockMvc.perform(requisicao.header("Authorization", authorization));
+    }
+
+    protected ResultActions getComo(String url, String authorization) throws Exception {
+        return executar(get(url), authorization);
+    }
+
+    protected ResultActions deleteComo(String url, String authorization) throws Exception {
+        return executar(delete(url), authorization);
+    }
+
+    protected ResultActions postJson(String url, String authorization, String json) throws Exception {
+        return executar(post(url).contentType(MediaType.APPLICATION_JSON).content(json), authorization);
+    }
+
+    protected ResultActions putJson(String url, String authorization, String json) throws Exception {
+        return executar(put(url).contentType(MediaType.APPLICATION_JSON).content(json), authorization);
+    }
+
+    protected ResultActions patchJson(String url, String authorization, String json) throws Exception {
+        return executar(patch(url).contentType(MediaType.APPLICATION_JSON).content(json), authorization);
+    }
+
+    // le o "id" do corpo json da resposta
+    protected long idDe(ResultActions resposta) throws Exception {
+        return corpoDe(resposta).get("id").asLong();
+    }
+
+    protected JsonNode corpoDe(ResultActions resposta) throws Exception {
+        return objectMapper.readTree(resposta.andReturn().getResponse().getContentAsString());
+    }
+
+    // preparo pela api: cria o registro e devolve o id. confere o 201 aqui pra, se o
+    // preparo quebrar, o teste falhar no lugar certo e nao numa assercao la na frente
+    protected long criarPelaApi(String url, String authorization, String json) throws Exception {
+        ResultActions resposta = postJson(url, authorization, json);
+        resposta.andExpect(status().isCreated());
+        return idDe(resposta);
     }
 
     protected Usuario criarUsuario(Role role, String senha) {

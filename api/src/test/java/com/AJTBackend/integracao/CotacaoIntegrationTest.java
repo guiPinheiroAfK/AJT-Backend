@@ -5,8 +5,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
+
+import java.util.List;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -14,7 +15,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -46,90 +46,87 @@ class CotacaoIntegrationTest extends IntegracaoTestBase {
         COTACAO_API.resetAll();
     }
 
-    private ResultActions consultarCotacao(String de, String para) throws Exception {
-        return mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/cotacao")
-                .param("de", de).param("para", para)
-                .header("Authorization", bearer(Role.ATENDENTE)));
+    private ResultActions cotacao(String de, String para) throws Exception {
+        return getComo("/api/cotacao?de=" + de + "&para=" + para, bearer(Role.ATENDENTE));
     }
 
-    private ResultActions criarTransfer(String valorOriginal, String moeda) throws Exception {
-        return mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\","
-                        + "\"valorOriginal\":" + valorOriginal + ",\"moedaOrigem\":\"" + moeda + "\"}"));
+    private static String transferEm(String moeda, String valorOriginal) {
+        return "{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\","
+                + "\"valorOriginal\":" + valorOriginal + ",\"moedaOrigem\":\"" + moeda + "\"}";
     }
 
     @Test
-    void consultaApiExternaUmaVezEUsaCacheNasSeguintes() throws Exception {
-        // Given: duas consultas anteriores do mesmo par de moedas
+    void deveChamarAApiUmaVezSo_quandoAMesmaCotacaoEhPedidaTresVezes() throws Exception {
+        // given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest"))
                 .withQueryParam("base", equalTo("USD"))
                 .withQueryParam("symbols", equalTo("BRL"))
                 .willReturn(okJson("{\"amount\":1.0,\"base\":\"USD\",\"date\":\"2026-09-16\",\"rates\":{\"BRL\":5.4321}}")));
-        consultarCotacao("usd", "BRL");
-        consultarCotacao("USD", "brl");
 
-        // When
-        ResultActions resposta = consultarCotacao("usd", "BRL");
+        // when
+        List<ResultActions> respostas = List.of(cotacao("usd", "BRL"), cotacao("usd", "BRL"), cotacao("usd", "BRL"));
 
-        // Then
-        resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.taxa").value(5.4321))
-                .andExpect(jsonPath("$.data").value("2026-09-16"));
+        // then
+        for (ResultActions resposta : respostas) {
+            resposta.andExpect(status().isOk())
+                    .andExpect(jsonPath("$.taxa").value(5.4321))
+                    .andExpect(jsonPath("$.data").value("2026-09-16"));
+        }
         COTACAO_API.verify(1, getRequestedFor(urlPathEqualTo("/latest")));
     }
 
     @Test
-    void erroNaApiExternaRetorna502() throws Exception {
-        // Given
+    void deveRetornar502_quandoApiExternaDevolve500() throws Exception {
+        // given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest")).willReturn(aResponse().withStatus(500)));
 
-        // When
-        ResultActions resposta = consultarCotacao("EUR", "BRL");
+        // when
+        ResultActions resposta = cotacao("EUR", "BRL");
 
-        // Then
+        // then
         resposta.andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.status").value(502));
     }
 
     @Test
-    void apiLentaRespeitaTimeoutERetorna502() throws Exception {
-        // Given: read-timeout no profile test = 1s
+    void deveRetornar502PeloTimeout_quandoApiExternaEstaLenta() throws Exception {
+        // given
+        // read-timeout no profile test = 1s
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest"))
                 .willReturn(okJson("{\"rates\":{\"BRL\":7.0}}").withFixedDelay(3000)));
 
-        // When
-        ResultActions resposta = consultarCotacao("GBP", "BRL");
+        // when
+        ResultActions resposta = cotacao("GBP", "BRL");
 
-        // Then
+        // then
         resposta.andExpect(status().isBadGateway());
     }
 
     @Test
-    void transferEmMoedaEstrangeiraEhCriadoMesmoComApiForaDoAr() throws Exception {
-        // Given
+    void deveCriarSemValorBase_quandoApiDeCambioEstaForaDoAr() throws Exception {
+        // given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest")).willReturn(aResponse().withStatus(503)));
 
-        // When
-        ResultActions resposta = criarTransfer("100.00", "CHF");
+        // when
+        ResultActions resposta = postJson("/api/transfers", bearer(Role.ATENDENTE), transferEm("CHF", "100.00"));
 
-        // Then
+        // then
         resposta.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.valorOriginal").value(100.00))
                 .andExpect(jsonPath("$.valorBase").doesNotExist());
     }
 
     @Test
-    void transferEmMoedaEstrangeiraConverteParaReais() throws Exception {
-        // Given
+    void deveConverterParaReais_quandoApiDeCambioResponde() throws Exception {
+        // given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest"))
                 .withQueryParam("base", equalTo("ARS"))
                 .willReturn(okJson("{\"amount\":1.0,\"base\":\"ARS\",\"date\":\"2026-09-16\",\"rates\":{\"BRL\":0.0055}}")));
 
-        // When
-        ResultActions resposta = criarTransfer("10000.00", "ars");
+        // when
+        ResultActions resposta = postJson("/api/transfers", bearer(Role.ATENDENTE), transferEm("ars", "10000.00"));
 
-        // Then
+        // then
         resposta.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.moedaOrigem").value("ARS"))
                 .andExpect(jsonPath("$.valorBase").value(55.00));

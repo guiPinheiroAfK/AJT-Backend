@@ -2,17 +2,14 @@ package com.AJTBackend.integracao;
 
 import com.AJTBackend.model.enums.Role;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -31,37 +28,44 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
 
-    @Autowired private ObjectMapper objectMapper;
     @Autowired private JdbcTemplate jdbcTemplate;
 
-    private JsonNode json(String corpo) throws Exception {
-        return objectMapper.readTree(corpo);
-    }
+    private static final String PASSAGEIRO_ANA = "{\"nome\":\"Ana\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"V1\"}";
 
-    private JsonNode criar(String url, Role perfil, String corpo) throws Exception {
-        return json(mockMvc.perform(post(url).header("Authorization", bearer(perfil))
-                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString());
-    }
+    @Test
+    void deveNascerComVersaoZero_quandoPassageiroEhCriado() throws Exception {
+        // when
+        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
 
-    private ResultActions editar(String url, Role perfil, String corpo) throws Exception {
-        return mockMvc.perform(patch(url).header("Authorization", bearer(perfil))
-                .contentType(MediaType.APPLICATION_JSON).content(corpo));
+        // then
+        resposta.andExpect(status().isCreated())
+                .andExpect(jsonPath("$.versao").value(0));
     }
 
     @Test
-    void passageiroComVersaoVelhaRetorna409EPreservaQuemSalvouAntes() throws Exception {
-        // Given: a atendente e a gerente abrem o passageiro na versao 0, e a atendente salva primeiro
-        long id = criar("/api/passageiros", Role.ATENDENTE,
-                "{\"nome\":\"Ana\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"V1\"}").get("id").asLong();
-        editar("/api/passageiros/" + id, Role.ATENDENTE, "{\"nome\":\"Ana Maria\",\"versao\":0}")
+    void deveSalvarESubirAVersao_quandoPatchDePassageiroTrazAVersaoAtual() throws Exception {
+        // given
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+
+        // when
+        ResultActions resposta = patchJson("/api/passageiros/" + id, bearer(Role.ATENDENTE), "{\"nome\":\"Ana Maria\",\"versao\":0}");
+
+        // then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.versao").value(1));
+    }
 
-        // When: a gerente salva em cima da versao 0, que ja ficou velha
-        ResultActions resposta = editar("/api/passageiros/" + id, Role.GERENTE, "{\"nome\":\"Ana Paula\",\"versao\":0}");
+    @Test
+    void deveRetornar409_quandoPatchDePassageiroTrazVersaoQueJaFoiSalva() throws Exception {
+        // given
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+        patchJson("/api/passageiros/" + id, bearer(Role.ATENDENTE), "{\"nome\":\"Ana Maria\",\"versao\":0}")
+                .andExpect(status().isOk());
 
-        // Then
+        // when
+        ResultActions resposta = patchJson("/api/passageiros/" + id, bearer(Role.GERENTE), "{\"nome\":\"Ana Paula\",\"versao\":0}");
+
+        // then
         resposta.andExpect(status().isConflict())
                 .andExpect(jsonPath("$.erro").value("Conflito de edição"));
         assertThat(jdbcTemplate.queryForObject("SELECT nome FROM passageiros WHERE id = ?", String.class, id))
@@ -69,37 +73,57 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
     }
 
     @Test
-    void veiculoSemVersaoContinuaFuncionandoParaClienteAntigo() throws Exception {
-        // Given
+    void devePreservarQuemSalvouAntes_quandoAEdicaoSeguinteLevou409() throws Exception {
+        // given
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_ANA);
+        patchJson("/api/passageiros/" + id, bearer(Role.ATENDENTE), "{\"nome\":\"Ana Maria\",\"versao\":0}")
+                .andExpect(status().isOk());
+        patchJson("/api/passageiros/" + id, bearer(Role.GERENTE), "{\"nome\":\"Ana Paula\",\"versao\":0}")
+                .andExpect(status().isConflict());
+
+        // when
+        ResultActions resposta = getComo("/api/passageiros/" + id, bearer(Role.ATENDENTE));
+
+        // then
+        resposta.andExpect(jsonPath("$.nome").value("Ana Maria"));
+    }
+
+    @Test
+    void deveSalvarSemConferir_quandoClienteAntigoNaoMandaAVersao() throws Exception {
+        // given
         String placa = ("V" + UUID.randomUUID().toString().replace("-", "")).substring(0, 7).toUpperCase();
-        long id = criar("/api/veiculos", Role.GERENTE,
-                "{\"label\":\"Van\",\"placa\":\"" + placa + "\",\"capacidade\":10}").get("id").asLong();
+        long id = criarPelaApi("/api/veiculos", bearer(Role.GERENTE),
+                "{\"label\":\"Van\",\"placa\":\"" + placa + "\",\"capacidade\":10}");
 
-        // When: sem "versao" no corpo nao confere (cliente antigo), so grava
-        ResultActions resposta = editar("/api/veiculos/" + id, Role.GERENTE, "{\"capacidade\":12}");
+        // when
+        // sem "versao" no corpo: nao confere (cliente antigo), so grava e devolve a versao nova
+        ResultActions resposta = patchJson("/api/veiculos/" + id, bearer(Role.GERENTE), "{\"capacidade\":12}");
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.capacidade").value(12))
                 .andExpect(jsonPath("$.versao").value(1));
     }
 
     @Test
-    void loginNaoContaComoEdicaoDoUsuario() throws Exception {
-        // Given: o admin abre o cadastro e, antes de salvar, o proprio usuario faz login
+    void naoDeveContarComoEdicao_quandoOUsuarioFazLogin() throws Exception {
+        // given
         String username = "ver-" + UUID.randomUUID().toString().substring(0, 8);
-        JsonNode criado = criar("/api/usuarios", Role.ADMIN,
+        ResultActions criado = postJson("/api/usuarios", bearer(Role.ADMIN),
                 "{\"nome\":\"Teste\",\"username\":\"" + username + "\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\"}");
-        long id = criado.get("id").asLong();
-        long versao = criado.get("versao").asLong();
-        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+        criado.andExpect(status().isCreated());
+        JsonNode usuario = corpoDe(criado);
+        long versao = usuario.get("versao").asLong();
+        mockMvc.perform(post("/api/auth/login").contentType("application/json")
                         .content("{\"username\":\"" + username + "\",\"senha\":\"senha12345\"}"))
                 .andExpect(status().isOk());
 
-        // When
-        ResultActions resposta = editar("/api/usuarios/" + id, Role.ADMIN, "{\"nome\":\"Teste 2\",\"versao\":" + versao + "}");
+        // when
+        // o admin que abriu o cadastro antes do login ainda consegue salvar
+        ResultActions resposta = patchJson("/api/usuarios/" + usuario.get("id").asLong(), bearer(Role.ADMIN),
+                "{\"nome\":\"Teste 2\",\"versao\":" + versao + "}");
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.versao").value(versao + 1));
     }

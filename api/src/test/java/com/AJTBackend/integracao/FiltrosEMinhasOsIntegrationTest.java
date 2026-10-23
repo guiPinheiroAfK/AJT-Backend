@@ -8,12 +8,8 @@ import com.AJTBackend.model.enums.Role;
 import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.ParadaOsRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 
 import java.time.LocalDate;
@@ -29,7 +25,6 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -40,25 +35,34 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * vinculo usuario -> motorista da V11 decide o que o MOTORISTA enxerga.
  *
  * como rodar: herda IntegracaoTestBase (testcontainers); precisa do docker.
- * cada teste usa datas e textos so dele (ano 2032, nomes com UUID) pra nao
- * misturar com os registros dos outros testes no mesmo banco.
+ * cada teste usa datas e textos so dele (ano 2032 com um mes por teste, nomes
+ * com UUID) pra nao misturar com os registros dos outros testes no mesmo banco.
  *
  * por que existe: filtro errado nao quebra nada, so devolve a lista errada —
  * e motorista vendo OS de outro motorista e vazamento que ninguem percebe.
  */
 class FiltrosEMinhasOsIntegrationTest extends IntegracaoTestBase {
 
-    @Autowired private ObjectMapper objectMapper;
     @Autowired private MotoristaRepository motoristaRepository;
     @Autowired private OrdemServicoRepository ordemServicoRepository;
     @Autowired private ParadaOsRepository paradaOsRepository;
 
+    // cenario da HU07, montado por motoristaLigadoComOsDeHoje()
+    private Motorista eu;
+    private OrdemServico minha;
+    private OrdemServico deOutro;
+    private String tokenMotorista;
+
     private void criarTransfer(String data, String origem) throws Exception {
-        mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"" + data + "\",\"horaTransfer\":\"10:00:00\",\"origem\":\"" + origem
-                                + "\",\"destino\":\"Hotel\"}"))
-                .andExpect(status().isCreated());
+        criarPelaApi("/api/transfers", bearer(Role.ATENDENTE),
+                "{\"dataTransfer\":\"" + data + "\",\"horaTransfer\":\"10:00:00\",\"origem\":\"" + origem
+                        + "\",\"destino\":\"Hotel\"}");
+    }
+
+    private void tresTransfersNoMes(String anoMes, String origemDoDia2) throws Exception {
+        criarTransfer(anoMes + "-01", "Rodoviaria");
+        criarTransfer(anoMes + "-02", origemDoDia2);
+        criarTransfer(anoMes + "-03", "Aeroporto");
     }
 
     private Motorista motorista(String nome) {
@@ -66,271 +70,289 @@ class FiltrosEMinhasOsIntegrationTest extends IntegracaoTestBase {
                 .nome(nome).cnh(UUID.randomUUID().toString().substring(0, 11)).build());
     }
 
-    private ResultActions listar(String url, Role perfil, String... parametros) throws Exception {
-        var requisicao = get(url).header("Authorization", bearer(perfil));
-        for (int i = 0; i < parametros.length; i += 2) {
-            requisicao.param(parametros[i], parametros[i + 1]);
-        }
-        return mockMvc.perform(requisicao);
+    private ResultActions criarUsuarioMotorista(Long motoristaId) throws Exception {
+        return postJson("/api/usuarios", bearer(Role.ADMIN),
+                "{\"nome\":\"Eu\",\"username\":\"mot-" + UUID.randomUUID().toString().substring(0, 8)
+                        + "\",\"senha\":\"senha12345\",\"role\":\"MOTORISTA\",\"motoristaId\":" + motoristaId + "}");
     }
 
-    // ---------------- RF015: filtros das listagens ----------------
+    // duas OS de hoje (uma minha com parada, uma de outro motorista) e o usuario MOTORISTA ligado a mim
+    private void motoristaLigadoComOsDeHoje() throws Exception {
+        LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        eu = motorista("Eu Motorista");
+        Motorista outro = motorista("Outro Motorista");
+        minha = ordemServicoRepository.save(OrdemServico.builder().dataServico(hoje).motorista(eu).build());
+        deOutro = ordemServicoRepository.save(OrdemServico.builder().dataServico(hoje).motorista(outro).build());
+        paradaOsRepository.save(ParadaOs.builder().ordemServico(minha).ordemParada(1).localParada("Aeroporto").build());
+        ResultActions criado = criarUsuarioMotorista(eu.getId());
+        criado.andExpect(status().isCreated());
+        String username = corpoDe(criado).get("username").asText();
+        tokenMotorista = "Bearer " + jwtService.gerarToken(username, Role.MOTORISTA);
+    }
+
+    // ---------------- RF015 ----------------
 
     @Test
-    void transfersFiltramPorPeriodoIncluindoAsDuasPontas() throws Exception {
-        // Given
-        criarTransfer("2032-03-01", "Rodoviaria");
-        criarTransfer("2032-03-02", "Centro");
-        criarTransfer("2032-03-03", "Aeroporto");
+    void deveTrazerSoOsDoPeriodo_quandoFiltraTransfersPorDataInicioEFim() throws Exception {
+        // given
+        tresTransfersNoMes("2032-03", "Centro");
 
-        // When
-        ResultActions resposta = listar("/api/transfers", Role.ATENDENTE, "dataInicio", "2032-03-02", "dataFim", "2032-03-03");
+        // when
+        ResultActions resposta = executar(get("/api/transfers").param("dataInicio", "2032-03-02").param("dataFim", "2032-03-03"),
+                bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElementos").value(2))
                 .andExpect(jsonPath("$.conteudo[*].origem", containsInAnyOrder("Centro", "Aeroporto")));
     }
 
     @Test
-    void transfersFiltramPorParteDoTextoSemDiferenciarMaiusculas() throws Exception {
-        // Given
+    void deveAcharSemDiferenciarMaiusculas_quandoBuscaPorParteDaOrigem() throws Exception {
+        // given
         String marca = "Marina-" + UUID.randomUUID().toString().substring(0, 6);
-        criarTransfer("2032-03-10", marca);
-        criarTransfer("2032-03-10", "Rodoviaria");
+        tresTransfersNoMes("2032-05", marca);
 
-        // When
-        ResultActions resposta = listar("/api/transfers", Role.ATENDENTE,
-                "busca", marca.toUpperCase().substring(0, 9), "dataInicio", "2032-03-10");
+        // when
+        ResultActions resposta = executar(get("/api/transfers").param("busca", marca.toUpperCase().substring(0, 9))
+                .param("dataInicio", "2032-05-01"), bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(jsonPath("$.totalElementos").value(1))
                 .andExpect(jsonPath("$.conteudo[0].origem").value(marca));
     }
 
     @Test
-    void filtrosDeTransferSeSomam() throws Exception {
-        // Given: tres transfers sem OS no periodo, todos aguardando OS
-        criarTransfer("2032-05-01", "A");
-        criarTransfer("2032-05-02", "B");
-        criarTransfer("2032-05-03", "C");
+    void deveSomarOsFiltros_quandoPedeSemOsEStatusNoPeriodo() throws Exception {
+        // given
+        tresTransfersNoMes("2032-06", "Centro");
 
-        // When
-        ResultActions resposta = listar("/api/transfers", Role.ATENDENTE, "dataInicio", "2032-05-01", "dataFim", "2032-05-03",
-                "semOs", "true", "status", "AGUARDANDO_OS");
+        // when
+        ResultActions resposta = executar(get("/api/transfers").param("dataInicio", "2032-06-01").param("dataFim", "2032-06-03")
+                .param("semOs", "true").param("status", "AGUARDANDO_OS"), bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(jsonPath("$.totalElementos").value(3))
                 .andExpect(jsonPath("$.conteudo[*].osId", everyItem(nullValue())));
     }
 
     @Test
-    void periodoInvertidoNaListagemRetorna400() throws Exception {
-        // When
-        ResultActions resposta = listar("/api/transfers", Role.ATENDENTE, "dataInicio", "2032-03-05", "dataFim", "2032-03-01");
+    void deveRetornar400_quandoPeriodoDoFiltroEstaInvertido() throws Exception {
+        // when
+        ResultActions resposta = executar(get("/api/transfers").param("dataInicio", "2032-03-05").param("dataFim", "2032-03-01"),
+                bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem", containsString("depois da final")));
     }
 
     @Test
-    void passageirosFiltramPorParteDoNome() throws Exception {
-        // Given
+    void deveAcharOPassageiro_quandoFiltraPorParteDoNomeEmMinusculo() throws Exception {
+        // given
         String sobrenome = "Zq" + UUID.randomUUID().toString().substring(0, 6);
-        mockMvc.perform(post("/api/passageiros").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"nome\":\"Ana " + sobrenome + "\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"X1\","
-                                + "\"nacionalidade\":\"Argentina\"}"))
-                .andExpect(status().isCreated());
+        criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE),
+                "{\"nome\":\"Ana " + sobrenome + "\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"X1\","
+                        + "\"nacionalidade\":\"Argentina\"}");
 
-        // When
-        ResultActions resposta = listar("/api/passageiros", Role.ATENDENTE, "nome", sobrenome.toLowerCase());
+        // when
+        ResultActions resposta = executar(get("/api/passageiros").param("nome", sobrenome.toLowerCase()), bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(jsonPath("$.totalElementos").value(1))
                 .andExpect(jsonPath("$.conteudo[0].nacionalidade").value("Argentina"));
     }
 
     @Test
-    void motoristasFiltramPorParteDoNome() throws Exception {
-        // Given
+    void deveAcharOMotorista_quandoFiltraPorParteDoNome() throws Exception {
+        // given
         String sobrenome = "Zq" + UUID.randomUUID().toString().substring(0, 6);
         motorista("Carlos " + sobrenome);
 
-        // When
-        ResultActions resposta = listar("/api/motoristas", Role.GERENTE, "nome", sobrenome);
+        // when
+        ResultActions resposta = executar(get("/api/motoristas").param("nome", sobrenome), bearer(Role.GERENTE));
 
-        // Then
+        // then
         resposta.andExpect(jsonPath("$.totalElementos").value(1))
                 .andExpect(jsonPath("$.conteudo[0].nome").value("Carlos " + sobrenome));
     }
 
     @Test
-    void ordensDeServicoFiltramPorMotorista() throws Exception {
-        // Given
+    void deveTrazerSoAsDoMotorista_quandoFiltraOsPorMotorista() throws Exception {
+        // given
         Motorista carlos = motorista("Carlos");
         Motorista dora = motorista("Dora");
         ordemServicoRepository.save(OrdemServico.builder().dataServico(LocalDate.of(2032, 4, 1)).motorista(carlos).build());
         ordemServicoRepository.save(OrdemServico.builder().dataServico(LocalDate.of(2032, 4, 2)).motorista(carlos).build());
         ordemServicoRepository.save(OrdemServico.builder().dataServico(LocalDate.of(2032, 4, 1)).motorista(dora).build());
 
-        // When
-        ResultActions resposta = listar("/api/ordens-servico", Role.GERENTE, "motoristaId", String.valueOf(carlos.getId()));
+        // when
+        ResultActions resposta = executar(get("/api/ordens-servico").param("motoristaId", String.valueOf(carlos.getId())),
+                bearer(Role.GERENTE));
 
-        // Then
-        resposta.andExpect(jsonPath("$.totalElementos").value(2))
-                .andExpect(jsonPath("$.conteudo[*].motoristaId", everyItem(is(carlos.getId().intValue()))));
+        // then
+        resposta.andExpect(jsonPath("$.totalElementos").value(2));
     }
 
     @Test
-    void ordensDeServicoFiltramPorMotoristaEPeriodoJuntos() throws Exception {
-        // Given
+    void deveSomarMotoristaEPeriodo_quandoFiltraOsPelosDois() throws Exception {
+        // given
         Motorista carlos = motorista("Carlos");
         ordemServicoRepository.save(OrdemServico.builder().dataServico(LocalDate.of(2032, 4, 1)).motorista(carlos).build());
         ordemServicoRepository.save(OrdemServico.builder().dataServico(LocalDate.of(2032, 4, 2)).motorista(carlos).build());
 
-        // When
-        ResultActions resposta = listar("/api/ordens-servico", Role.GERENTE,
-                "motoristaId", String.valueOf(carlos.getId()), "dataInicio", "2032-04-02");
+        // when
+        ResultActions resposta = executar(get("/api/ordens-servico").param("motoristaId", String.valueOf(carlos.getId()))
+                .param("dataInicio", "2032-04-02"), bearer(Role.GERENTE));
 
-        // Then
+        // then
         resposta.andExpect(jsonPath("$.totalElementos").value(1))
                 .andExpect(jsonPath("$.conteudo[0].dataServico").value("2032-04-02"));
     }
 
-    // ---------------- HU07: o motorista so enxerga as proprias OS ----------------
+    // ---------------- HU07 ----------------
 
-    private record Cenario(String tokenMotorista, OrdemServico minha, OrdemServico deOutro) {}
+    @Test
+    void deveLigarOUsuarioAoCadastro_quandoAdminCriaUsuarioMotoristaComMotoristaId() throws Exception {
+        // given
+        Motorista carlos = motorista("Carlos");
 
-    // dois motoristas com OS hoje; o usuario "eu" e ligado ao cadastro pelo admin, via api
-    private Cenario motoristaLigadoComOsDeHoje() throws Exception {
-        LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
-        Motorista eu = motorista("Eu Motorista");
-        Motorista outro = motorista("Outro Motorista");
-        OrdemServico minha = ordemServicoRepository.save(OrdemServico.builder().dataServico(hoje).motorista(eu).build());
-        OrdemServico deOutro = ordemServicoRepository.save(OrdemServico.builder().dataServico(hoje).motorista(outro).build());
-        paradaOsRepository.save(ParadaOs.builder().ordemServico(minha).ordemParada(1).localParada("Aeroporto").build());
+        // when
+        ResultActions resposta = criarUsuarioMotorista(carlos.getId());
 
-        String json = mockMvc.perform(post("/api/usuarios").header("Authorization", bearer(Role.ADMIN))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"nome\":\"Eu\",\"username\":\"mot-" + UUID.randomUUID().toString().substring(0, 8)
-                                + "\",\"senha\":\"senha12345\",\"role\":\"MOTORISTA\",\"motoristaId\":" + eu.getId() + "}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        String username = objectMapper.readTree(json).get("username").asText();
-        return new Cenario("Bearer " + jwtService.gerarToken(username, Role.MOTORISTA), minha, deOutro);
+        // then
+        resposta.andExpect(status().isCreated())
+                .andExpect(jsonPath("$.motoristaId").value(carlos.getId()));
     }
 
     @Test
-    void motoristaListaSoAsPropriasOs() throws Exception {
-        // Given
-        Cenario cenario = motoristaLigadoComOsDeHoje();
+    void deveListarSoAsPropriasOs_quandoMotoristaListaAsOrdens() throws Exception {
+        // given
+        motoristaLigadoComOsDeHoje();
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico").param("size", "100")
-                .header("Authorization", cenario.tokenMotorista()));
+        // when
+        ResultActions resposta = executar(get("/api/ordens-servico").param("size", "100"), tokenMotorista);
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.conteudo[*].id", hasItem(cenario.minha().getId().intValue())))
-                .andExpect(jsonPath("$.conteudo[*].id", not(hasItem(cenario.deOutro().getId().intValue()))));
+                .andExpect(jsonPath("$.conteudo[*].motoristaId", everyItem(is(eu.getId().intValue()))))
+                .andExpect(jsonPath("$.conteudo[*].id", hasItem(minha.getId().intValue())))
+                .andExpect(jsonPath("$.conteudo[*].id", not(hasItem(deOutro.getId().intValue()))));
     }
 
-    @ParameterizedTest(name = "GET {0} da OS de outro motorista -> 404")
-    @ValueSource(strings = {"/api/ordens-servico/%d", "/api/ordens-servico/%d/pdf", "/api/paradas-os/ordem-servico/%d"})
-    void osDeOutroMotoristaNaoExisteParaEle(String rota) throws Exception {
-        // Given
-        Cenario cenario = motoristaLigadoComOsDeHoje();
+    @Test
+    void deveRetornar404_quandoMotoristaBuscaOsDeOutro() throws Exception {
+        // given
+        motoristaLigadoComOsDeHoje();
 
-        // When
-        ResultActions resposta = mockMvc.perform(get(String.format(rota, cenario.deOutro().getId()))
-                .header("Authorization", cenario.tokenMotorista()));
+        // when
+        // a OS do outro motorista "nao existe" pra ele
+        ResultActions resposta = getComo("/api/ordens-servico/" + deOutro.getId(), tokenMotorista);
 
-        // Then
+        // then
         resposta.andExpect(status().isNotFound());
     }
 
     @Test
-    void minhasDoDiaTrazAOsDeHojeComAsParadas() throws Exception {
-        // Given
-        Cenario cenario = motoristaLigadoComOsDeHoje();
+    void deveRetornar404_quandoMotoristaPedeOPdfDaOsDeOutro() throws Exception {
+        // given
+        motoristaLigadoComOsDeHoje();
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico/minhas").header("Authorization", cenario.tokenMotorista()));
+        // when
+        ResultActions resposta = getComo("/api/ordens-servico/" + deOutro.getId() + "/pdf", tokenMotorista);
 
-        // Then
+        // then
+        resposta.andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deveRetornar404_quandoMotoristaListaAsParadasDaOsDeOutro() throws Exception {
+        // given
+        motoristaLigadoComOsDeHoje();
+
+        // when
+        ResultActions resposta = getComo("/api/paradas-os/ordem-servico/" + deOutro.getId(), tokenMotorista);
+
+        // then
+        resposta.andExpect(status().isNotFound());
+    }
+
+    @Test
+    void deveTrazerAsOsDeHojeComParadas_quandoMotoristaPedeAsMinhas() throws Exception {
+        // given
+        motoristaLigadoComOsDeHoje();
+
+        // when
+        ResultActions resposta = getComo("/api/ordens-servico/minhas", tokenMotorista);
+
+        // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
-                .andExpect(jsonPath("$[0].ordem.id").value(cenario.minha().getId()))
+                .andExpect(jsonPath("$[0].ordem.id").value(minha.getId()))
                 .andExpect(jsonPath("$[0].paradas", hasSize(1)))
                 .andExpect(jsonPath("$[0].paradas[0].localParada").value("Aeroporto"));
     }
 
     @Test
-    void gerenteVeAOsDeQualquerMotorista() throws Exception {
-        // Given
-        Cenario cenario = motoristaLigadoComOsDeHoje();
+    void deveVerAOsDeQualquerMotorista_quandoGerenteBusca() throws Exception {
+        // given
+        motoristaLigadoComOsDeHoje();
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico/" + cenario.deOutro().getId())
-                .header("Authorization", bearer(Role.GERENTE)));
+        // when
+        ResultActions resposta = getComo("/api/ordens-servico/" + deOutro.getId(), bearer(Role.GERENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(cenario.deOutro().getId()));
+                .andExpect(jsonPath("$.id").value(deOutro.getId()));
     }
 
     @Test
-    void minhasDoDiaEhExclusivaDoMotorista() throws Exception {
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico/minhas").header("Authorization", bearer(Role.GERENTE)));
+    void deveRetornar403_quandoGerentePedeAsMinhas() throws Exception {
+        // when
+        // "minhas" e so do motorista
+        ResultActions resposta = getComo("/api/ordens-servico/minhas", bearer(Role.GERENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isForbidden());
     }
 
     @Test
-    void motoristaSemCadastroLigadoListaNenhumaOs() throws Exception {
-        // Given
+    void naoDeveVerNenhumaOs_quandoMotoristaSemCadastroLigadoListaAsOrdens() throws Exception {
+        // given
         Usuario semVinculo = criarUsuario(Role.MOTORISTA, "senha-teste-123");
         String token = "Bearer " + jwtService.gerarToken(semVinculo.getUsername(), Role.MOTORISTA);
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico").header("Authorization", token));
+        // when
+        ResultActions resposta = getComo("/api/ordens-servico", token);
 
-        // Then
-        resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.totalElementos").value(0));
+        // then
+        resposta.andExpect(jsonPath("$.totalElementos").value(0));
     }
 
     @Test
-    void motoristaSemCadastroLigadoNaoTemOsDoDia() throws Exception {
-        // Given
+    void deveDevolverListaVazia_quandoMotoristaSemCadastroLigadoPedeAsMinhas() throws Exception {
+        // given
         Usuario semVinculo = criarUsuario(Role.MOTORISTA, "senha-teste-123");
         String token = "Bearer " + jwtService.gerarToken(semVinculo.getUsername(), Role.MOTORISTA);
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico/minhas").header("Authorization", token));
+        // when
+        ResultActions resposta = getComo("/api/ordens-servico/minhas", token);
 
-        // Then
-        resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(0)));
+        // then
+        resposta.andExpect(jsonPath("$", hasSize(0)));
     }
 
     @Test
-    void naoLigaMotoristaAUsuarioDeOutroPerfil() throws Exception {
-        // Given
+    void deveRetornar400_quandoLigaMotoristaAUsuarioDeOutroPerfil() throws Exception {
+        // given
         Motorista carlos = motorista("Carlos");
-        String atendenteComMotorista = "{\"nome\":\"Ana\",\"username\":\"ana-" + UUID.randomUUID().toString().substring(0, 8)
-                + "\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\",\"motoristaId\":" + carlos.getId() + "}";
 
-        // When
-        ResultActions resposta = mockMvc.perform(post("/api/usuarios").header("Authorization", bearer(Role.ADMIN))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(atendenteComMotorista));
+        // when
+        ResultActions resposta = postJson("/api/usuarios", bearer(Role.ADMIN),
+                "{\"nome\":\"Ana\",\"username\":\"ana-" + UUID.randomUUID().toString().substring(0, 8)
+                        + "\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\",\"motoristaId\":" + carlos.getId() + "}");
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem", containsString("perfil Motorista")));
     }
