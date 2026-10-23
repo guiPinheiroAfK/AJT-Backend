@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
@@ -37,96 +38,134 @@ class AutenticacaoIntegrationTest extends IntegracaoTestBase {
 
     @Test
     void adminDoSeedPrecisaTrocarSenhaNoPrimeiroAcesso() throws Exception {
-        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"admin\",\"senha\":\"admin123\"}"))
-                .andExpect(status().isOk())
+        // When
+        ResultActions resposta = tentarLogin("admin", "admin123");
+
+        // Then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.tipo").value("Bearer"))
                 .andExpect(jsonPath("$.role").value("ADMIN"))
                 .andExpect(jsonPath("$.trocarSenha").value(true));
     }
 
     @Test
-    void loginMeETrocaDeSenhaInvalidandoTokenAntigo() throws Exception {
+    void meDevolveOUsuarioDoTokenComOUltimoLogin() throws Exception {
+        // Given
         Usuario usuario = criarUsuario(Role.ATENDENTE, "senha-inicial-1");
+        String token = login(usuario.getUsername(), "senha-inicial-1");
 
-        String tokenAntigo = login(usuario.getUsername(), "senha-inicial-1");
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + token));
 
-        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokenAntigo))
-                .andExpect(status().isOk())
+        // Then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.username").value(usuario.getUsername()))
                 .andExpect(jsonPath("$.ultimoLogin").isNotEmpty());
+    }
 
-        // garante segundo diferente entre emissao do token antigo e a troca (iat tem precisao de segundos)
-        Thread.sleep(1100);
+    @Test
+    void trocaDeSenhaInvalidaOTokenAntigo() throws Exception {
+        // Given
+        Usuario usuario = criarUsuario(Role.ATENDENTE, "senha-inicial-1");
+        String tokenAntigo = login(usuario.getUsername(), "senha-inicial-1");
+        trocarSenha(tokenAntigo, "senha-inicial-1", "senha-nova-123");
 
-        String resposta = mockMvc.perform(put("/api/auth/senha").header("Authorization", "Bearer " + tokenAntigo)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"senhaAtual\":\"senha-inicial-1\",\"novaSenha\":\"senha-nova-123\"}"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString();
-        String tokenNovo = objectMapper.readTree(resposta).get("token").asText();
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokenAntigo));
 
-        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokenAntigo))
-                .andExpect(status().isUnauthorized());
-        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokenNovo))
-                .andExpect(status().isOk());
+        // Then
+        resposta.andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void tokenDevolvidoNaTrocaDeSenhaJaValeNaHora() throws Exception {
+        // Given
+        Usuario usuario = criarUsuario(Role.ATENDENTE, "senha-inicial-1");
+        String tokenAntigo = login(usuario.getUsername(), "senha-inicial-1");
+        String tokenNovo = trocarSenha(tokenAntigo, "senha-inicial-1", "senha-nova-123");
+
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + tokenNovo));
+
+        // Then
+        resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$.username").value(usuario.getUsername()));
     }
 
     @Test
     void usuarioDesativadoPerdeAcessoNaHora() throws Exception {
+        // Given: o gerente logado e depois desativado pelo admin, com o token ainda dentro da validade
         Usuario usuario = criarUsuario(Role.GERENTE, "senha-inicial-1");
         String token = login(usuario.getUsername(), "senha-inicial-1");
+        alterarComoAdmin(usuario, "{\"ativo\":false}");
 
-        mockMvc.perform(get("/api/transfers").header("Authorization", "Bearer " + token))
-                .andExpect(status().isOk());
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/transfers").header("Authorization", "Bearer " + token));
 
-        mockMvc.perform(patch("/api/usuarios/" + usuario.getId()).header("Authorization", bearer(Role.ADMIN))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"ativo\":false}"))
-                .andExpect(status().isOk());
-
-        mockMvc.perform(get("/api/transfers").header("Authorization", "Bearer " + token))
-                .andExpect(status().isUnauthorized());
+        // Then
+        resposta.andExpect(status().isUnauthorized());
     }
 
     @Test
     void perfilAlteradoValeSemPrecisarDeNovoLogin() throws Exception {
+        // Given: o token ainda diz GERENTE, mas o banco agora diz MOTORISTA
         Usuario usuario = criarUsuario(Role.GERENTE, "senha-inicial-1");
         String token = login(usuario.getUsername(), "senha-inicial-1");
+        alterarComoAdmin(usuario, "{\"role\":\"MOTORISTA\"}");
 
-        mockMvc.perform(patch("/api/usuarios/" + usuario.getId()).header("Authorization", bearer(Role.ADMIN))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"role\":\"MOTORISTA\"}"))
-                .andExpect(status().isOk());
+        // When
+        ResultActions resposta = mockMvc.perform(post("/api/ordens-servico").header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dataServico\":\"2026-09-20\"}"));
 
-        // token ainda diz GERENTE, mas o banco diz MOTORISTA
-        mockMvc.perform(post("/api/ordens-servico").header("Authorization", "Bearer " + token)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataServico\":\"2026-09-20\"}"))
-                .andExpect(status().isForbidden());
+        // Then
+        resposta.andExpect(status().isForbidden());
     }
 
     @Test
-    void bloqueiaLoginAposTentativasErradas() throws Exception {
+    void bloqueiaOLoginAposTresSenhasErradasMesmoComASenhaCerta() throws Exception {
+        // Given: ajt.login.max-tentativas=3 no profile test
         Usuario usuario = criarUsuario(Role.ATENDENTE, "senha-certa-123");
-        String errado = "{\"username\":\"" + usuario.getUsername() + "\",\"senha\":\"errada\"}";
-
-        for (int i = 0; i < 3; i++) { // ajt.login.max-tentativas=3 no profile test
-            mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON).content(errado))
-                    .andExpect(status().isUnauthorized());
+        for (int i = 0; i < 3; i++) {
+            tentarLogin(usuario.getUsername(), "errada");
         }
 
-        mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + usuario.getUsername() + "\",\"senha\":\"senha-certa-123\"}"))
-                .andExpect(status().isTooManyRequests());
+        // When
+        ResultActions resposta = tentarLogin(usuario.getUsername(), "senha-certa-123");
+
+        // Then
+        resposta.andExpect(status().isTooManyRequests())
+                .andExpect(jsonPath("$.erro").value("Muitas tentativas"));
+    }
+
+    private ResultActions tentarLogin(String username, String senha) throws Exception {
+        return mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"username\":\"" + username + "\",\"senha\":\"" + senha + "\"}"));
     }
 
     private String login(String username, String senha) throws Exception {
-        String json = mockMvc.perform(post("/api/auth/login").contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"" + username + "\",\"senha\":\"" + senha + "\"}"))
+        String json = tentarLogin(username, senha)
                 .andExpect(status().isOk())
                 .andReturn().getResponse().getContentAsString();
         JsonNode node = objectMapper.readTree(json);
         return node.get("token").asText();
+    }
+
+    private String trocarSenha(String token, String senhaAtual, String novaSenha) throws Exception {
+        // garante segundo diferente entre a emissao do token e a troca (o iat do JWT tem precisao de segundos)
+        Thread.sleep(1100);
+        String json = mockMvc.perform(put("/api/auth/senha").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"senhaAtual\":\"" + senhaAtual + "\",\"novaSenha\":\"" + novaSenha + "\"}"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(json).get("token").asText();
+    }
+
+    private void alterarComoAdmin(Usuario usuario, String json) throws Exception {
+        mockMvc.perform(patch("/api/usuarios/" + usuario.getId()).header("Authorization", bearer(Role.ADMIN))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(json))
+                .andExpect(status().isOk());
     }
 }
