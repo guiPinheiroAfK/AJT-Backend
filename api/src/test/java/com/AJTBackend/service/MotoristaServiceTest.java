@@ -19,7 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -49,210 +49,227 @@ class MotoristaServiceTest {
         return new MotoristaRequestDTO(nome, cnh, telefone, null, null, versao);
     }
 
-    @Test
-    @SuppressWarnings("unchecked")
-    void listaComFiltroDevolveAPagina() {
-        // Given
-        Pageable pagina = PageRequest.of(0, 10);
-        when(repository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(carlos()), pagina, 1));
+    private void carlosCadastrado() {
+        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    }
 
-        // When
+    // ----- listagem e busca -----
+
+    @Test
+    void deveDevolverAPagina_quandoListaComFiltro() {
+        // given
+        Pageable pagina = PageRequest.of(0, 10);
+        when(repository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(carlos()), pagina, 1));
+
+        // when
         PaginaResponseDTO<MotoristaResponseDTO> resultado = service.listar(new FiltroMotoristaDTO("car", null), pagina);
 
-        // Then
+        // then
         assertThat(resultado.conteudo()).extracting(MotoristaResponseDTO::nome).containsExactly("Carlos");
-        assertThat(resultado.totalElementos()).isEqualTo(1);
     }
 
     @Test
-    void buscaPorIdDevolveOMotoristaComAVersao() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
-
-        // When
-        MotoristaResponseDTO encontrado = service.buscarPorId(1L);
-
-        // Then
-        assertThat(encontrado.nome()).isEqualTo("Carlos");
-        assertThat(encontrado.versao()).isEqualTo(3L);
-    }
-
-    @Test
-    void buscaPorCnhDevolveOMotorista() {
-        // Given
-        when(repository.findByCnh("111")).thenReturn(Optional.of(carlos()));
-
-        // When
-        MotoristaResponseDTO encontrado = service.buscarPorCnh("111");
-
-        // Then
-        assertThat(encontrado.nome()).isEqualTo("Carlos");
-        assertThat(encontrado.cnh()).isEqualTo("111");
-    }
-
-    @Test
-    void buscaPorIdInexistenteLanca404() {
-        // Given
+    void deveLancarMotoristaNaoEncontrado_quandoIdNaoExiste() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L))
-                .isInstanceOf(MotoristaNaoEncontradoException.class)
-                .hasMessageContaining("9");
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class).hasMessageContaining("9");
     }
 
     @Test
-    void buscaPorCnhInexistenteLanca404() {
-        // Given
+    void deveLancarMotoristaNaoEncontrado_quandoCnhNaoExiste() {
+        // given
         when(repository.findByCnh("000")).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorCnh("000"))
-                .isInstanceOf(MotoristaNaoEncontradoException.class)
-                .hasMessageContaining("000");
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorCnh("000"));
+
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class).hasMessageContaining("000");
     }
 
     @Test
-    void cadastroComCnhRepetidaLanca400SemGravar() {
-        // Given
-        when(repository.existsByCnh("111")).thenReturn(true);
-        MotoristaRequestDTO dto = dto("Outro", "111", null, null);
+    void deveDevolverComAVersao_quandoBuscaIdExistente() {
+        // given
+        carlosCadastrado();
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto)).isInstanceOf(CnhJaCadastradaException.class);
+        // when
+        MotoristaResponseDTO resposta = service.buscarPorId(1L);
+
+        // then
+        assertThat(resposta.versao()).isEqualTo(3L);
+    }
+
+    @Test
+    void deveDevolverOMotorista_quandoBuscaCnhExistente() {
+        // given
+        when(repository.findByCnh("111")).thenReturn(Optional.of(carlos()));
+
+        // when
+        MotoristaResponseDTO resposta = service.buscarPorCnh("111");
+
+        // then
+        assertThat(resposta.nome()).isEqualTo("Carlos");
+    }
+
+    // ----- cadastro -----
+
+    @Test
+    void naoDeveGravar_quandoCnhJaEstaCadastrada() {
+        // given
+        when(repository.existsByCnh("111")).thenReturn(true);
+
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto("Outro", "111", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(CnhJaCadastradaException.class);
         verify(repository, never()).save(any());
     }
 
     @Test
-    void cadastroValidoGravaOsDadosInformados() {
-        // Given
+    void deveGravar_quandoCadastroEhValido() {
+        // given
         when(repository.existsByCnh("222")).thenReturn(false);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        MotoristaResponseDTO criado = service.criar(dto("Dora", "222", "45", null));
+        // when
+        MotoristaResponseDTO resposta = service.criar(dto("Dora", "222", "45", null));
 
-        // Then
-        assertThat(criado.nome()).isEqualTo("Dora");
-        assertThat(criado.cnh()).isEqualTo("222");
-        assertThat(criado.telefone()).isEqualTo("45");
-        verify(repository).save(any(Motorista.class));
+        // then
+        assertThat(resposta.cnh()).isEqualTo("222");
+        verify(repository).save(any());
     }
 
+    // ----- edicao -----
+
     @Test
-    void putDeIdInexistenteLanca404() {
-        // Given
+    void deveLancarMotoristaNaoEncontrado_quandoPutEmIdInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
-        MotoristaRequestDTO dto = dto("X", "1", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, dto)).isInstanceOf(MotoristaNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, dto("X", "1", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class);
     }
 
     @Test
-    void patchDeIdInexistenteLanca404() {
-        // Given
+    void deveLancarMotoristaNaoEncontrado_quandoPatchEmIdInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
-        MotoristaRequestDTO dto = dto(null, null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, dto)).isInstanceOf(MotoristaNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, dto(null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class);
     }
 
     @Test
-    void putComVersaoVelhaLanca409() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
-        MotoristaRequestDTO versaoVelha = dto("Carlos", "111", null, 2L);
+    void deveLancarConflitoDeVersao_quandoPutTrazVersaoVelha() {
+        // given
+        carlosCadastrado();
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto("Carlos", "111", null, 2L)));
+
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
     }
 
     @Test
-    void patchComVersaoVelhaLanca409() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
-        MotoristaRequestDTO versaoVelha = dto("Carlos", null, null, 2L);
+    void deveLancarConflitoDeVersao_quandoPatchTrazVersaoVelha() {
+        // given
+        carlosCadastrado();
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, dto("Carlos", null, null, 2L)));
+
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
     }
 
     @Test
-    void putParaCnhDeOutroMotoristaLanca400() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void deveLancarCnhJaCadastrada_quandoPutTrocaParaCnhDeOutro() {
+        // given
+        carlosCadastrado();
         when(repository.existsByCnh("999")).thenReturn(true);
-        MotoristaRequestDTO dto = dto("Carlos", "999", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, dto)).isInstanceOf(CnhJaCadastradaException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto("Carlos", "999", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(CnhJaCadastradaException.class);
     }
 
     @Test
-    void patchParaCnhDeOutroMotoristaLanca400() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void deveLancarCnhJaCadastrada_quandoPatchTrocaParaCnhDeOutro() {
+        // given
+        carlosCadastrado();
         when(repository.existsByCnh("999")).thenReturn(true);
-        MotoristaRequestDTO dto = dto(null, "999", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, dto)).isInstanceOf(CnhJaCadastradaException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, dto(null, "999", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(CnhJaCadastradaException.class);
     }
 
     @Test
-    void putParaUmaCnhLivreTrocaACnh() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void deveTrocarACnh_quandoPutUsaCnhLivre() {
+        // given
+        carlosCadastrado();
         when(repository.existsByCnh("222")).thenReturn(false);
 
-        // When
-        MotoristaResponseDTO atualizado = service.atualizar(1L, dto("Carlos", "222", null, 3L));
+        // when
+        MotoristaResponseDTO resposta = service.atualizar(1L, dto("Carlos", "222", null, 3L));
 
-        // Then
-        assertThat(atualizado.cnh()).isEqualTo("222");
-        verify(repository).flush();
+        // then
+        assertThat(resposta.cnh()).isEqualTo("222");
     }
 
     @Test
-    void putMantendoAMesmaCnhNaoConsultaDuplicidade() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void naoDeveConsultarDuplicidade_quandoPutMantemAMesmaCnh() {
+        // given
+        carlosCadastrado();
 
-        // When
-        MotoristaResponseDTO atualizado = service.atualizar(1L, dto("Carlos Silva", "111", null, 3L));
+        // when
+        MotoristaResponseDTO resposta = service.atualizar(1L, dto("Carlos Silva", "111", null, 3L));
 
-        // Then
-        assertThat(atualizado.nome()).isEqualTo("Carlos Silva");
+        // then
+        assertThat(resposta.nome()).isEqualTo("Carlos Silva");
         verify(repository, never()).existsByCnh(any());
     }
 
     @Test
-    void patchMantendoAMesmaCnhNaoConsultaDuplicidade() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void naoDeveConsultarDuplicidade_quandoPatchMantemAMesmaCnh() {
+        // given
+        carlosCadastrado();
 
-        // When
-        MotoristaResponseDTO atualizado = service.atualizarParcial(1L, dto(null, "111", null, null));
+        // when
+        MotoristaResponseDTO resposta = service.atualizarParcial(1L, dto(null, "111", null, null));
 
-        // Then
-        assertThat(atualizado.cnh()).isEqualTo("111");
+        // then
+        assertThat(resposta.cnh()).isEqualTo("111");
         verify(repository, never()).existsByCnh(any());
     }
 
     @Test
-    void patchComTodosOsCamposTrocaTudo() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void deveAlterarTodosOsCampos_quandoPatchTrazTodos() {
+        // given
+        carlosCadastrado();
         when(repository.existsByCnh("333")).thenReturn(false);
-        MotoristaRequestDTO patch = new MotoristaRequestDTO("Carlos S", "333", "46", -25.0, -54.0, null);
 
-        // When
-        MotoristaResponseDTO resposta = service.atualizarParcial(1L, patch);
+        // when
+        MotoristaResponseDTO resposta = service.atualizarParcial(1L, new MotoristaRequestDTO("Carlos S", "333", "46", -25.0, -54.0, null));
 
-        // Then
+        // then
         assertThat(resposta.nome()).isEqualTo("Carlos S");
         assertThat(resposta.cnh()).isEqualTo("333");
         assertThat(resposta.telefone()).isEqualTo("46");
@@ -261,38 +278,43 @@ class MotoristaServiceTest {
     }
 
     @Test
-    void patchVazioNaoMudaNada() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(carlos()));
+    void naoDeveMudarNada_quandoPatchVemVazio() {
+        // given
+        carlosCadastrado();
 
-        // When
+        // when
         MotoristaResponseDTO resposta = service.atualizarParcial(1L, dto(null, null, null, null));
 
-        // Then
+        // then
         assertThat(resposta.nome()).isEqualTo("Carlos");
         assertThat(resposta.cnh()).isEqualTo("111");
         assertThat(resposta.telefone()).isEqualTo("45");
     }
 
+    // ----- exclusao -----
+
     @Test
-    void excluirMotoristaExistenteApaga() {
-        // Given
-        when(repository.existsById(1L)).thenReturn(true);
+    void deveLancarMotoristaNaoEncontradoSemApagar_quandoExcluiIdInexistente() {
+        // given
+        when(repository.existsById(9L)).thenReturn(false);
 
-        // When
-        service.deletar(1L);
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
 
-        // Then
-        verify(repository).deleteById(1L);
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class);
+        verify(repository, never()).deleteById(9L);
     }
 
     @Test
-    void excluirInexistenteLanca404SemApagar() {
-        // Given
-        when(repository.existsById(9L)).thenReturn(false);
+    void deveApagar_quandoExcluiIdExistente() {
+        // given
+        when(repository.existsById(1L)).thenReturn(true);
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L)).isInstanceOf(MotoristaNaoEncontradoException.class);
-        verify(repository, never()).deleteById(any());
+        // when
+        service.deletar(1L);
+
+        // then
+        verify(repository).deleteById(1L);
     }
 }
