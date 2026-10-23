@@ -85,3 +85,13 @@ Registro append-only: a decisão original acima continua valendo; abaixo, o que 
   em vez de ler o `SecurityContextHolder` diretamente. Comportamento idêntico.
 - `GET /api/transfers/{id}/passageiros` ([ADR-0010](0010-passageiros-no-transfer-e-os-como-relacionamento.md))
   é leitura e segue a regra geral de GET (qualquer perfil autenticado).
+- **2026-10-22 ([ADR-0019](0019-painel-de-resumo-e-visibilidade-do-faturamento.md)):** `GET /api/painel/resumo`
+  segue a regra geral de GET (qualquer perfil). O faturamento é filtrado no service: só ADMIN e GERENTE o
+  recebem, os outros recebem `null`. Linha nova da matriz: `painel/resumo | todos | — | —`.
+- **2026-10-22 ([ADR-0018](0018-acesso-do-motorista-as-proprias-os.md)):** `GET /api/ordens-servico/minhas` é
+  só do MOTORISTA (`hasRole(MOTORISTA)`, regra antes da geral de GET). Além da rota, o MOTORISTA passou a ver
+  só as OS e paradas do cadastro de motorista ligado ao usuário (`AcessoMotorista`); nas outras recebe 404.
+- **2026-10-22 ([ADR-0021](0021-estrategia-de-testes-v2-slices-e-bdd.md)):** o teste da matriz em
+  `AutorizacaoWebTest` virou dois parametrizados, `deveRetornarSucesso_quandoPerfilTemPermissaoNaRota` e
+  `deveRetornar403SemChegarNoService_quandoPerfilNaoTemPermissaoNaRota`. A mesma matriz roda com login de
+  verdade em `scripts/api/test-permissoes.sh`.
