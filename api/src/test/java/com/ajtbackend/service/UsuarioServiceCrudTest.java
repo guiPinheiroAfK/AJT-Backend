@@ -312,6 +312,21 @@ class UsuarioServiceCrudTest {
     }
 
     @Test
+    void deveManterASituacao_quandoPutNaoInformaAtivo() {
+        // given: usuaria desativada
+        Usuario inativa = maria();
+        inativa.setAtivo(false);
+        when(repository.findById(2L)).thenReturn(Optional.of(inativa));
+
+        // when
+        UsuarioResponseDTO salvo = service.atualizar(2L, dto("Maria Souza", "maria", null, Role.ATENDENTE, null, null, null));
+
+        // then: sem "ativo" no corpo, o PUT nao reativa nem desativa
+        assertThat(salvo.ativo()).isFalse();
+        assertThat(salvo.nome()).isEqualTo("Maria Souza");
+    }
+
+    @Test
     void deveApagar_quandoExcluiOutroUsuario() {
         // given
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));

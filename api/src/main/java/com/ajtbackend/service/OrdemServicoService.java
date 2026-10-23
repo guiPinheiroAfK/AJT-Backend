@@ -183,9 +183,10 @@ public class OrdemServicoService {
         }
     }
 
-    // a OS agrupa os transfers de um dia (RF009): com transfers dentro, mudar a data deixaria os dois fora de sincronia
+    // a OS agrupa os transfers de um dia (RF009): com transfers dentro, mudar a data deixaria os dois fora de sincronia.
+    // novaData nunca e nula aqui: o PUT exige a data (@NotNull) e o PATCH so chama quando ela veio
     private static void conferirMudancaDeData(OrdemServico ordemServico, LocalDate novaData) {
-        if (novaData != null && !novaData.equals(ordemServico.getDataServico()) && !ordemServico.getTransfers().isEmpty()) {
+        if (!novaData.equals(ordemServico.getDataServico()) && !ordemServico.getTransfers().isEmpty()) {
             throw new RegraNegocioException("A ordem de serviço #" + ordemServico.getId() + " tem "
                     + ordemServico.getTransfers().size() + " transfer(s) do dia dela. Desvincule-os antes de mudar a data.");
         }
