@@ -81,10 +81,10 @@ class AuditoriaServiceTest {
     @Test
     void semUsuarioAutenticadoRegistraComoSistema() {
         // When
-        service.registrar("ordens_servico", 1L, "Ordem de servico criada");
+        service.registrar("ordens_servico", 1L, "Ordem de serviço criada");
 
         // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Ordem de servico criada (por sistema)");
+        assertThat(gravado().getMensagem()).isEqualTo("Ordem de serviço criada (por sistema)");
     }
 
     @Test
