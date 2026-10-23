@@ -208,7 +208,7 @@ class TransferErrosWebTest extends ErrosWebTestBase {
         ResultActions resposta = enviar(post("/api/transfers"), "{" + BASE + ",\"valorOriginal\":100,\"moedaOrigem\":\"USD\"}");
 
         // Then
-        resposta.andExpect(erro(502, "Servico externo indisponível", "USD"));
+        resposta.andExpect(erro(502, "Serviço externo indisponível", "USD"));
     }
 
     @Test
