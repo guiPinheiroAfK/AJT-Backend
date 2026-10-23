@@ -83,3 +83,16 @@ dados reais migrando V6→V7, e o **stack completo em containers** (`docker comp
 - Cobertura: plugin `jacoco-maven-plugin` em `api/pom.xml`
 - Demonstração: `postman/` e `scripts/smoke-test.sh` (na raiz do repositório)
 - Como rodar tudo: seção *Testes* do `README.md` do projeto
+
+## Atualizações posteriores
+
+- **2026-10-22 — quarto nível: slice de repositório.** Consultas próprias dos repositórios (`@Query` JPQL,
+  `@EntityGraph`, agregações do painel, escape do `LIKE` nas `Especificacoes`) passam a ser testadas com
+  `@DataJpaTest` em `api/src/test/java/com/AJTBackend/repository/*RepositoryTest.java`, contra o PostgreSQL real
+  (`@AutoConfigureTestDatabase(replace = NONE)`). Esse slice sobe só JPA, Flyway e o banco, e cada teste roda numa
+  transação desfeita no fim. O `@SpringBootTest` fica restrito aos `*IntegrationTest`, que precisam da aplicação
+  inteira (HTTP, segurança, câmbio). Como a integração, esse nível precisa de Docker.
+- **2026-10-22 — estrutura dos testes:** todo teste segue o padrão Given/When/Then com os comentários
+  `// Given`, `// When` e `// Then` (ou `// When / Then` quando a execução é a própria verificação, como em
+  `assertThatThrownBy`). Execução e verificação ficam em linhas separadas, e nos testes web o `perform(...)`
+  vai para uma variável `ResultActions resposta` antes do `andExpect`.

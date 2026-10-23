@@ -173,13 +173,14 @@ Um handler cobre a classe-mãe: criar uma nova `XNaoEncontrada` **não** exige n
 **Regra de ouro:** migration já aplicada **nunca** é editada (quebra o checksum do Flyway); mudanças viram
 uma migration nova. O Hibernate roda em `ddl-auto: validate`: só confere, nunca altera o schema.
 
-## 5. Testes (149) e onde ficam
+## 5. Testes (551 métodos, 829 execuções) e onde ficam
 
 | Nível | Pasta | Roda sem Docker |
 |---|---|:---:|
 | Unitário | `service/*Test`, `config/*Test` | sim |
-| Camada web | `web/` | sim |
-| Integração (PostgreSQL real) | `integracao/` | não |
+| Camada web (`@WebMvcTest`) | `web/` | sim |
+| Repositório (`@DataJpaTest`, PostgreSQL real) | `repository/*RepositoryTest` | não |
+| Integração (`@SpringBootTest`, PostgreSQL real) | `integracao/` | não |
 
 Detalhes e justificativas: [ADR-0014](adr/0014-estrategia-de-testes-e-demonstracao.md).
 

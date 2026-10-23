@@ -85,3 +85,11 @@ na prática ao rodar em Windows com Docker Desktop:
   `api/src/test/java/com/AJTBackend/integracao/AutenticacaoIntegrationTest.java`,
   `PersistenciaIntegrationTest.java`, `PerformanceIntegrationTest.java`,
   `CotacaoIntegrationTest.java`
+
+## Atualizações posteriores
+
+- **2026-10-22 — segundo uso do padrão, no slice de repositório:** o `PerformanceIntegrationTest` saiu (virou o
+  `ParadaOsRepositoryTest`, ver [ADR-0007](0007-correcao-do-n-mais-1-nas-paradas.md)). Os testes de repositório
+  com `@DataJpaTest` herdam de `api/src/test/java/com/AJTBackend/repository/RepositorioTestBase.java`, que usa o
+  mesmo container singleton (`static { POSTGRES.start(); }`) e a mesma imagem `postgres:16`. É um container
+  separado do da integração, porque o `@DataJpaTest` monta outro contexto do Spring.
