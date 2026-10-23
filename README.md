@@ -53,10 +53,12 @@ AJT-Backend/
 │   │   └── service/        # regras de negócio e transações
 │   ├── src/main/resources/
 │   │   ├── application.yml
-│   │   └── db/migration/   # migrações Flyway (V1 a V7)
-│   ├── src/test/           # testes unitários, de camada web e de integração
+│   │   └── db/migration/   # migrações Flyway (V1 a V11)
+│   ├── src/test/           # testes: unitários, repository (@DataJpaTest), web (@WebMvcTest) e integração
 │   └── pom.xml
-├── scripts/smoke-test.sh    # dispara todas as requisições da API e confere os status
+├── scripts/
+│   ├── smoke-test.sh        # dispara a sequência da demonstração e confere os status
+│   └── api/                 # um script por recurso (test-*.sh) + common.sh + run-all.sh
 ├── postman/                 # coleção Postman/Insomnia pronta para a demonstração
 ├── docker-compose.yml       # PostgreSQL + API + front (nginx)
 └── .env.example
@@ -152,6 +154,7 @@ mvn test
 ```
 
 - **Unitários e de camada web** (services, JWT, criptografia, matriz de permissões, validação): rodam sem dependências externas.
+- **Repository** (`repository/*RepositoryTest`, `@DataJpaTest`): só a camada JPA contra um PostgreSQL 16 real via Testcontainers. **Precisam do Docker rodando**; sem Docker são pulados.
 - **Integração** (`integracao/*IntegrationTest`): sobem um PostgreSQL 16 real via Testcontainers e simulam a API de câmbio com WireMock. **Precisam do Docker rodando**; sem Docker são pulados.
 - Cobertura: `api/target/site/jacoco/index.html` após `mvn test`.
 
@@ -159,6 +162,14 @@ mvn test
 
 ```bash
 AJT_PASS=<senha do admin> bash scripts/smoke-test.sh
+```
+
+**Scripts por recurso** (`scripts/api/`, só `bash` + `curl`, rodam no Git Bash): cada `test-*.sh` cobre os endpoints de um recurso, caminho feliz e triste (400/401/403/404/409), cria dados com sufixo único e apaga tudo no fim, então pode rodar duas vezes seguidas. O `run-all.sh` roda todos, mostra o resumo de cada um e sai com código 1 se algum falhar.
+
+```bash
+bash scripts/api/run-all.sh                                   # API local em http://localhost:8080
+AJT_URL=http://localhost:9090 AJT_PASS=<senha do admin> bash scripts/api/run-all.sh   # API do compose
+bash scripts/api/test-permissoes.sh                           # um recurso só
 ```
 
 **Demonstração no Postman/Insomnia:** importe `postman/AJT-Backend.postman_collection.json`. Rode *Autenticação → Login* primeiro: o token e os ids criados ficam salvos em variáveis para as requisições seguintes.
