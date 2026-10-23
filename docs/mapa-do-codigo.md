@@ -169,6 +169,11 @@ Um handler cobre a classe-mãe: criar uma nova `XNaoEncontrada` **não** exige n
 | `V5__Seed_Admin` | usuário `admin` inicial |
 | `V6__Seguranca_E_Indices` | `trocar_senha`, `senha_alterada_em`, índices; marca o admin do seed para trocar a senha |
 | `V7__Auditoria_Bigint` | `BIGINT` na auditoria + índice por tabela/data |
+| `V8__Auditoria_Por_Registro` | índice por tabela + registro (histórico de um registro só, HU11) |
+| `V9__Versao_Concorrencia` | coluna `versao` nas tabelas editáveis (lock otimista, 409 — RNF008) |
+| `V10__Status_Transfer_Com_Os` | corrige transfers já vinculados a OS que ainda estavam `AGUARDANDO_OS` |
+| `V11__Usuario_Motorista` | `usuarios.motorista_id`: liga o login do motorista ao cadastro dele (HU07) |
+| `V12__Passageiro_Documento_Hash` | `passageiros.documento_hash` (HMAC do documento) pra recusar documento duplicado sem decifrar; os antigos são preenchidos pelo `DocumentoHashBackfill` |
 
 **Regra de ouro:** migration já aplicada **nunca** é editada (quebra o checksum do Flyway); mudanças viram
 uma migration nova. O Hibernate roda em `ddl-auto: validate`: só confere, nunca altera o schema.

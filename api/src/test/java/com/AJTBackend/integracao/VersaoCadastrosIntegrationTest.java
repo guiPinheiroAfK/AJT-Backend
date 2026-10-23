@@ -71,7 +71,8 @@ class VersaoCadastrosIntegrationTest extends IntegracaoTestBase {
     @Test
     void veiculoSemVersaoContinuaFuncionandoParaClienteAntigo() throws Exception {
         // Given
-        String placa = ("V" + UUID.randomUUID().toString().replace("-", "")).substring(0, 7).toUpperCase();
+        // placa valida (ABC1234) e unica entre execucoes: 3 letras fixas + 4 digitos aleatorios
+        String placa = "VRS" + String.format("%04d", Math.floorMod(UUID.randomUUID().hashCode(), 10000));
         long id = criar("/api/veiculos", Role.GERENTE,
                 "{\"label\":\"Van\",\"placa\":\"" + placa + "\",\"capacidade\":10}").get("id").asLong();
 

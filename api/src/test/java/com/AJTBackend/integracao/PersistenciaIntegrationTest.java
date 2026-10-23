@@ -45,8 +45,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 class PersistenciaIntegrationTest extends IntegracaoTestBase {
 
-    private static final String PASSAGEIRO =
-            "{\"nome\":\"John Doe\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"XP9988776\",\"nacionalidade\":\"Americana\"}";
+    // documento proprio por teste: o banco e compartilhado e documento repetido e recusado (V12)
+    private static String passageiro(String documento) {
+        return "{\"nome\":\"John Doe\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"" + documento
+                + "\",\"nacionalidade\":\"Americana\"}";
+    }
 
     @Autowired private JdbcTemplate jdbcTemplate;
     @Autowired private ObjectMapper objectMapper;
@@ -54,20 +57,20 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
     @Autowired private VeiculoRepository veiculoRepository;
     @Autowired private OrdemServicoRepository ordemServicoRepository;
 
-    private ResultActions cadastrarPassageiro() throws Exception {
+    private ResultActions cadastrarPassageiro(String documento) throws Exception {
         return mockMvc.perform(post("/api/passageiros").header("Authorization", bearer(Role.ATENDENTE))
-                .contentType(MediaType.APPLICATION_JSON).content(PASSAGEIRO));
+                .contentType(MediaType.APPLICATION_JSON).content(passageiro(documento)));
     }
 
-    private long idDoPassageiroCadastrado() throws Exception {
-        String json = cadastrarPassageiro().andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+    private long idDoPassageiroCadastrado(String documento) throws Exception {
+        String json = cadastrarPassageiro(documento).andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(json).get("id").asLong();
     }
 
     @Test
     void documentoDoPassageiroFicaCifradoNoBanco() throws Exception {
         // When
-        ResultActions resposta = cadastrarPassageiro();
+        ResultActions resposta = cadastrarPassageiro("XP9988776");
 
         // Then
         long id = objectMapper.readTree(resposta.andReturn().getResponse().getContentAsString()).get("id").asLong();
@@ -78,22 +81,43 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
     }
 
     @Test
+    void mesmoCpfComOutraPontuacaoERecusadoEOHashNaoRevelaONumero() throws Exception {
+        // Given: um CPF gravado sem pontuacao
+        String primeiro = "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"10000000108\"}";
+        String json = mockMvc.perform(post("/api/passageiros").header("Authorization", bearer(Role.ATENDENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content(primeiro))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long id = objectMapper.readTree(json).get("id").asLong();
+
+        // When: outro passageiro com o mesmo CPF, agora com pontuacao
+        ResultActions resposta = mockMvc.perform(post("/api/passageiros").header("Authorization", bearer(Role.ATENDENTE))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Bia\",\"tipoDocumento\":\"CPF\",\"documento\":\"100.000.001-08\"}"));
+
+        // Then
+        resposta.andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("Já existe passageiro cadastrado com este CPF."));
+        String hash = jdbcTemplate.queryForObject("SELECT documento_hash FROM passageiros WHERE id = ?", String.class, id);
+        assertThat(hash).hasSize(64).doesNotContain("10000000108");
+    }
+
+    @Test
     void documentoDoPassageiroVoltaLegivelNaApiParaOAtendente() throws Exception {
         // Given
-        long id = idDoPassageiroCadastrado();
+        long id = idDoPassageiroCadastrado("XP1122334");
 
         // When
         ResultActions resposta = mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.ATENDENTE)));
 
         // Then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.documento").value("XP9988776"));
+                .andExpect(jsonPath("$.documento").value("XP1122334"));
     }
 
     @Test
     void motoristaNaoLeOCadastroDePassageiros() throws Exception {
         // Given: LGPD, o motorista so ve os passageiros dos transfers da OS dele, com documento mascarado
-        long id = idDoPassageiroCadastrado();
+        long id = idDoPassageiroCadastrado("XP5566778");
 
         // When
         ResultActions resposta = mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.MOTORISTA)));

@@ -76,9 +76,10 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         return objectMapper.readTree(json).get("id").asLong();
     }
 
-    private long transferComAnaEBia() throws Exception {
-        long ana = criarPassageiro("Ana", "AA111");
-        long bia = criarPassageiro("Bia", "BB222");
+    // cada teste passa documentos proprios: o banco e compartilhado e documento repetido e recusado (V12)
+    private long transferComAnaEBia(String documentoAna, String documentoBia) throws Exception {
+        long ana = criarPassageiro("Ana", documentoAna);
+        long bia = criarPassageiro("Bia", documentoBia);
         return criarTransfer(",\"passageiroIds\":[" + bia + "," + ana + "]");
     }
 
@@ -108,8 +109,8 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void transferGuardaPassageirosNaTabelaDeJuncao() throws Exception {
         // Given
-        long ana = criarPassageiro("Ana", "AA111");
-        long bia = criarPassageiro("Bia", "BB222");
+        long ana = criarPassageiro("Ana", "AA777");
+        long bia = criarPassageiro("Bia", "BB888");
 
         // When
         ResultActions resposta = enviarTransfer(",\"passageiroIds\":[" + ana + "," + bia + "]");
@@ -124,7 +125,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void motoristaVePassageirosDoTransferPorNomeEComDocumentoMascarado() throws Exception {
         // Given
-        long transferId = transferComAnaEBia();
+        long transferId = transferComAnaEBia("AA111", "BB222");
 
         // When
         ResultActions resposta = mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
@@ -141,7 +142,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     @Test
     void atendenteVeODocumentoDosPassageirosDoTransferDecifrado() throws Exception {
         // Given
-        long transferId = transferComAnaEBia();
+        long transferId = transferComAnaEBia("AA555", "BB666");
 
         // When
         ResultActions resposta = mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
@@ -149,8 +150,8 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
 
         // Then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].documento").value("AA111"))
-                .andExpect(jsonPath("$[1].documento").value("BB222"));
+                .andExpect(jsonPath("$[0].documento").value("AA555"))
+                .andExpect(jsonPath("$[1].documento").value("BB666"));
     }
 
     @Test
