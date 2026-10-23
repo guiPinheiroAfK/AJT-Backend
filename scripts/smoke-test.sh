@@ -114,7 +114,8 @@ req "Buscar por ID" 200 GET "/api/ordens-servico/$OS_ID"
 req "Buscar por status" 200 GET "/api/ordens-servico/buscar?status=ABERTA&page=0&size=10"
 req "Ligar o transfer a OS (PATCH osId)" 200 PATCH "/api/transfers/$TRANSFER_ID" "{\"osId\":$OS_ID}"
 echo "       osId do transfer: $(echo "$LAST_BODY" | jq -r '.osId')"
-req "Atualizar (PUT)" 200 PUT "/api/ordens-servico/$OS_ID" "{\"dataServico\":\"2026-09-26\",\"motoristaId\":$MOTORISTA_ID,\"veiculoId\":$VEICULO_ID,\"status\":\"EM_ANDAMENTO\"}"
+# mesma data: OS com transfer nao muda de dia (a API responde 400 pedindo pra desvincular antes)
+req "Atualizar (PUT)" 200 PUT "/api/ordens-servico/$OS_ID" "{\"dataServico\":\"2026-09-25\",\"motoristaId\":$MOTORISTA_ID,\"veiculoId\":$VEICULO_ID,\"status\":\"EM_ANDAMENTO\"}"
 req "Atualizar parcial (PATCH) - finalizar" 200 PATCH "/api/ordens-servico/$OS_ID" '{"status":"FINALIZADA"}'
 
 echo "=================== PARADAS DE OS ==================="
