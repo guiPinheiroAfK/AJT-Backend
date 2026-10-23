@@ -50,9 +50,10 @@ public class MotoristaService {
 
     @Transactional
     public MotoristaResponseDTO criar(MotoristaRequestDTO dto) {
-        if (motoristaRepository.existsByCnh(dto.cnh())) {
-            log.warn("Tentativa de cadastro com CNH ja existente: {}", dto.cnh());
-            throw new CnhJaCadastradaException(dto.cnh());
+        String cnh = dto.cnh();
+        if (motoristaRepository.existsByCnh(cnh)) {
+            log.warn("Tentativa de cadastro com CNH ja existente: {}", cnh);
+            throw new CnhJaCadastradaException(cnh);
         }
 
         Motorista motorista = Motorista.builder()

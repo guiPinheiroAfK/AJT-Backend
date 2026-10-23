@@ -48,10 +48,8 @@ public class OrdemServicoService {
     private final AcessoMotorista acessoMotorista;
     private final ParadaOsService paradaOsService;
 
-    /*
-     * leitura: RF015 (filtros opcionais, somados) + HU07 (o MOTORISTA so ve as OS dele;
-     * o motoristaId que vier no filtro e trocado pelo dele, e sem vinculo ele nao ve nenhuma)
-     */
+    // leitura: RF015 (filtros opcionais, somados) e HU07 (o MOTORISTA so ve as OS dele:
+    // o motorista do filtro e trocado pelo dele, e sem vinculo ele nao ve nenhuma)
     public PaginaResponseDTO<OrdemServicoResponseDTO> listar(FiltroOrdemServicoDTO filtro, Pageable pageable) {
         Especificacoes.validarPeriodo(filtro.dataInicio(), filtro.dataFim());
         Specification<OrdemServico> spec = Specification.allOf(
