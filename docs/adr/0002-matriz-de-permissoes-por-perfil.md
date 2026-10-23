@@ -63,15 +63,15 @@ campo (regra de negócio no service).
 
 ## Onde encontrar no código
 
-- Regra de rota: `api/src/main/java/com/AJTBackend/config/SecurityConfig.java`
+- Regra de rota: `api/src/main/java/com/ajtbackend/config/SecurityConfig.java`
   (a mesma tabela acima está no javadoc da classe)
 - Regra de campo do MOTORISTA em paradas: `service/ParadaOsService.java`, método
   `validarAlteracaoPorMotorista`
 - Filtro que injeta o perfil vindo do banco (não do token) em cada requisição:
   `config/JwtAuthenticationFilter.java` — ver ADR-0004 para o porquê disso
-- Teste da matriz inteira: `api/src/test/java/com/AJTBackend/web/AutorizacaoWebTest.java`,
+- Teste da matriz inteira: `api/src/test/java/com/ajtbackend/web/AutorizacaoWebTest.java`,
   método `matrizDePermissoes`
-- Teste da restrição de campo do motorista: `api/src/test/java/com/AJTBackend/service/ParadaOsServiceTest.java`
+- Teste da restrição de campo do motorista: `api/src/test/java/com/ajtbackend/service/ParadaOsServiceTest.java`
 
 ## Atualizações posteriores
 

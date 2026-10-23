@@ -42,7 +42,7 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 ```
 AJT-Backend/
 ├── api/
-│   ├── src/main/java/com/AJTBackend/
+│   ├── src/main/java/com/ajtbackend/
 │   │   ├── client/         # Feign Client da API de câmbio
 │   │   ├── config/         # segurança, JWT, CORS, criptografia, OpenAPI
 │   │   ├── controller/     # controllers REST por domínio

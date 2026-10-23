@@ -4,8 +4,8 @@ Guia para quem precisa **entender ou alterar** o AJT-Backend. Responde "onde est
 classe?" e "o que faço para adicionar um recurso novo?". As decisões e os porquês estão nas ADRs
 ([índice](README.md)); aqui está o **mapa**.
 
-Todos os caminhos abaixo são relativos a `api/src/main/java/com/AJTBackend/` (código) ou
-`api/src/test/java/com/AJTBackend/` (testes), salvo indicação.
+Todos os caminhos abaixo são relativos a `api/src/main/java/com/ajtbackend/` (código) ou
+`api/src/test/java/com/ajtbackend/` (testes), salvo indicação.
 
 ## 1. Como uma requisição percorre o código
 
