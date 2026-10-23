@@ -1,36 +1,48 @@
-#!/bin/bash
+#!/usr/bin/env bash
+# o que testa: CRUD de /api/usuarios (POST, GET lista, GET id, GET buscar por username,
+# PUT, PATCH, DELETE e GET depois do delete) e os erros: 400 corpo invalido, 400 username
+# duplicado, 400 ao tentar se excluir, 404 id e username inexistentes.
+# como rodar: bash scripts/api/test-usuarios.sh (api de pe; ver common.sh). so ADMIN usa esta rota.
+# por que existe: e quem controla o acesso a todo o resto do sistema.
 source "$(dirname "$0")/common.sh"
 echo "=== Usuarios ==="
 
-RESP=$(curl -s -w "\n%{http_code}" -X POST "$BASE_URL/usuarios" \
-  -H "Content-Type: application/json" -H "$AUTH_HEADER" \
-  -d '{"nome":"Usuario Teste","username":"usuario.teste","senha":"senha123","role":"GERENTE"}')
-STATUS=$(echo "$RESP" | tail -n1)
-BODY=$(echo "$RESP" | sed '$d')
-check_status "POST /usuarios" 201 "$STATUS"
-ID=$(echo "$BODY" | grep -o '"id":[0-9]*' | head -1 | grep -o '[0-9]*')
+USERNAME="maria.$SUFIXO"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "$AUTH_HEADER" "$BASE_URL/usuarios")
-check_status "GET /usuarios" 200 "$STATUS"
+testar "POST /usuarios" 201 POST "/usuarios" "{\"nome\":\"Maria Souza\",\"username\":\"$USERNAME\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\"}"
+ID=$(id_de "$BODY")
+apagar_no_fim "/usuarios/$ID"
+check_valor "usuario novo precisa trocar a senha" "true" "$(valor_de "$BODY" trocarSenha)"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "$AUTH_HEADER" "$BASE_URL/usuarios/$ID")
-check_status "GET /usuarios/$ID" 200 "$STATUS"
+testar "GET /usuarios" 200 GET "/usuarios"
+testar "GET /usuarios/$ID" 200 GET "/usuarios/$ID"
+testar "GET /usuarios/buscar?username=" 200 GET "/usuarios/buscar?username=$USERNAME"
+check_valor "busca por username acha o usuario criado" "$ID" "$(id_de "$BODY")"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "$AUTH_HEADER" "$BASE_URL/usuarios/buscar?username=usuario.teste")
-check_status "GET /usuarios/buscar?username=" 200 "$STATUS"
+testar "PUT /usuarios/$ID" 200 PUT "/usuarios/$ID" "{\"nome\":\"Maria Souza Lima\",\"username\":\"$USERNAME\",\"role\":\"GERENTE\"}"
+check_valor "PUT troca o perfil" "GERENTE" "$(valor_de "$BODY" role)"
+testar "PATCH /usuarios/$ID (desativar)" 200 PATCH "/usuarios/$ID" '{"ativo":false}'
+check_valor "PATCH desativa" "false" "$(valor_de "$BODY" ativo)"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PUT "$BASE_URL/usuarios/$ID" \
-  -H "Content-Type: application/json" -H "$AUTH_HEADER" \
-  -d '{"nome":"Usuario Teste 2","username":"usuario.teste","senha":"senha123","role":"GERENTE"}')
-check_status "PUT /usuarios/$ID" 200 "$STATUS"
+# caminhos tristes
+testar "POST /usuarios (username com espaco) -> 400" 400 POST "/usuarios" '{"nome":"X","username":"a b","senha":"senha12345","role":"ATENDENTE"}'
+testar "POST /usuarios (senha curta) -> 400" 400 POST "/usuarios" "{\"nome\":\"X\",\"username\":\"x.$SUFIXO\",\"senha\":\"curta\",\"role\":\"ATENDENTE\"}"
+testar "POST /usuarios (perfil fora do enum) -> 400" 400 POST "/usuarios" "{\"nome\":\"X\",\"username\":\"y.$SUFIXO\",\"senha\":\"senha12345\",\"role\":\"SUPERUSER\"}"
+testar "POST /usuarios (sem senha) -> 400" 400 POST "/usuarios" "{\"nome\":\"X\",\"username\":\"z.$SUFIXO\",\"role\":\"ATENDENTE\"}"
+testar "POST /usuarios (username duplicado) -> 400" 400 POST "/usuarios" "{\"nome\":\"Outra\",\"username\":\"$USERNAME\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\"}"
+testar "GET /usuarios/999999999 -> 404" 404 GET "/usuarios/999999999"
+testar "PUT /usuarios/999999999 -> 404" 404 PUT "/usuarios/999999999" "{\"nome\":\"X\",\"username\":\"w.$SUFIXO\",\"role\":\"ATENDENTE\"}"
+testar "PATCH /usuarios/999999999 -> 404" 404 PATCH "/usuarios/999999999" '{"nome":"X"}'
+testar "DELETE /usuarios/999999999 -> 404" 404 DELETE "/usuarios/999999999"
+testar "GET /usuarios/buscar?username=inexistente -> 404" 404 GET "/usuarios/buscar?username=ninguem-$SUFIXO"
+testar "GET /usuarios/buscar (sem username) -> 400" 400 GET "/usuarios/buscar"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X PATCH "$BASE_URL/usuarios/$ID" \
-  -H "Content-Type: application/json" -H "$AUTH_HEADER" -d '{"role":"ATENDENTE"}')
-check_status "PATCH /usuarios/$ID" 200 "$STATUS"
+# o admin nao pode excluir a si mesmo
+req GET "/auth/me"
+EU=$(id_de "$BODY")
+testar "DELETE /usuarios/$EU (o proprio admin) -> 400" 400 DELETE "/usuarios/$EU"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X DELETE -H "$AUTH_HEADER" "$BASE_URL/usuarios/$ID")
-check_status "DELETE /usuarios/$ID" 204 "$STATUS"
+testar "DELETE /usuarios/$ID" 204 DELETE "/usuarios/$ID"
+testar "GET /usuarios/$ID (depois do delete) -> 404" 404 GET "/usuarios/$ID"
 
-STATUS=$(curl -s -o /dev/null -w "%{http_code}" -H "$AUTH_HEADER" "$BASE_URL/usuarios/$ID")
-check_status "GET /usuarios/$ID (apos delete)" 404 "$STATUS"
-echo ""
+resumo
