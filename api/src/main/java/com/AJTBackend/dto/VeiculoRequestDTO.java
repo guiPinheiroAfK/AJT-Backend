@@ -19,6 +19,10 @@ public record VeiculoRequestDTO(
         @NotBlank(message = "Placa é obrigatória")
         @Pattern(regexp = "\\s*\\S.*", message = "Placa não pode ser vazia", groups = OnPatch.class)
         @Size(max = 10, message = "Placa deve ter no máximo 10 caracteres", groups = {Default.class, OnPatch.class})
+        // padrao antigo (ABC1234 ou ABC-1234) ou Mercosul (ABC1D23), maiuscula ou minuscula
+        @Pattern(regexp = "(?i)[A-Z]{3}-?[0-9][A-Z0-9][0-9]{2}",
+                message = "Placa inválida: use o formato ABC1234 ou ABC1D23 (Mercosul)",
+                groups = {Default.class, OnPatch.class})
         @Schema(example = "ABC1D23")
         String placa,
 
