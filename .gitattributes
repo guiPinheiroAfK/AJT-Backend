@@ -1,0 +1,2 @@
+# scripts bash sempre com LF: no windows o CRLF quebra o shebang e o "source"
+*.sh text eol=lf
