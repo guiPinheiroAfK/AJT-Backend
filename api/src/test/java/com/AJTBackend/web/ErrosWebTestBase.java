@@ -1,5 +1,6 @@
 package com.AJTBackend.web;
 
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.ResultMatcher;
@@ -9,6 +10,7 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -35,6 +37,12 @@ abstract class ErrosWebTestBase extends WebTestBase {
 
     protected ResultActions chamar(MockHttpServletRequestBuilder requisicao) throws Exception {
         return mockMvc.perform(requisicao.with(admin()));
+    }
+
+    /** pros testes parametrizados por verbo: com json envia o corpo, sem json so chama. */
+    protected ResultActions executar(String verbo, String url, String json) throws Exception {
+        MockHttpServletRequestBuilder requisicao = request(HttpMethod.valueOf(verbo), url);
+        return json == null ? chamar(requisicao) : enviar(requisicao, json);
     }
 
     /*

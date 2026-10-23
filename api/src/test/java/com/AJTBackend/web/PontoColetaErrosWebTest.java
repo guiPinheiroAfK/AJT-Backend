@@ -7,6 +7,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.stream.Stream;
 
@@ -16,7 +17,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -50,62 +50,106 @@ class PontoColetaErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        enviar(post("/api/pontos-coleta"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(post("/api/pontos-coleta"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(pontoColetaService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        enviar(put("/api/pontos-coleta/1"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(put("/api/pontos-coleta/1"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(pontoColetaService, never()).atualizar(any(), any());
     }
 
     @Test
     void horarioEmFormatoErradoRetorna400DeCorpoInvalido() throws Exception {
-        enviar(post("/api/pontos-coleta"),
-                        "{\"transferId\":1,\"localColeta\":\"P\",\"latitude\":0,\"longitude\":0,\"horarioPrevisto\":\"25:99\"}")
-                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+        // When
+        ResultActions resposta = enviar(post("/api/pontos-coleta"),
+                        "{\"transferId\":1,\"localColeta\":\"P\",\"latitude\":0,\"longitude\":0,\"horarioPrevisto\":\"25:99\"}");
+
+        // Then
+        resposta.andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
     }
 
-    @Test
-    void patchRecusaLocalVazioECoordenadaForaDaFaixa() throws Exception {
-        enviar(patch("/api/pontos-coleta/1"), "{\"localColeta\":\"\"}").andExpect(validacao("localColeta: Local de coleta não pode ser vazio"));
-        enviar(patch("/api/pontos-coleta/1"), "{\"latitude\":-90.01}").andExpect(validacao("latitude: Latitude inválida"));
+    static Stream<Arguments> patchesInvalidos() {
+        return Stream.of(
+                Arguments.of("{\"localColeta\":\"\"}", "localColeta: Local de coleta não pode ser vazio"),
+                Arguments.of("{\"latitude\":-90.01}", "latitude: Latitude inválida"));
+    }
+
+    @ParameterizedTest(name = "PATCH {0} -> 400")
+    @MethodSource("patchesInvalidos")
+    void patchComLocalVazioOuCoordenadaForaDaFaixaRetorna400(String json, String detalhe) throws Exception {
+        // When
+        ResultActions resposta = enviar(patch("/api/pontos-coleta/1"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(pontoColetaService, never()).atualizarParcial(any(), any());
     }
 
     @Test
     void transferInexistenteNoCadastroRetorna404() throws Exception {
+        // Given
         when(pontoColetaService.criar(any())).thenThrow(new TransferNaoEncontradoException(42L));
 
-        enviar(post("/api/pontos-coleta"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "42"));
+        // When
+        ResultActions resposta = enviar(post("/api/pontos-coleta"), VALIDO);
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "42"));
     }
 
-    @Test
-    void idInexistenteRetorna404NosQuatroVerbos() throws Exception {
+    static Stream<Arguments> verbosNoId99() {
+        return Stream.of(
+                Arguments.of("GET", null),
+                Arguments.of("PUT", VALIDO),
+                Arguments.of("PATCH", "{\"localColeta\":\"Outro\"}"),
+                Arguments.of("DELETE", null));
+    }
+
+    @ParameterizedTest(name = "{0} /api/pontos-coleta/99 -> 404")
+    @MethodSource("verbosNoId99")
+    void idInexistenteRetorna404EmCadaVerbo(String verbo, String json) throws Exception {
+        // Given
         when(pontoColetaService.buscarPorId(99L)).thenThrow(new PontoColetaNaoEncontradoException(99L));
         when(pontoColetaService.atualizar(eq(99L), any())).thenThrow(new PontoColetaNaoEncontradoException(99L));
         when(pontoColetaService.atualizarParcial(eq(99L), any())).thenThrow(new PontoColetaNaoEncontradoException(99L));
         doThrow(new PontoColetaNaoEncontradoException(99L)).when(pontoColetaService).deletar(99L);
 
-        chamar(get("/api/pontos-coleta/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(put("/api/pontos-coleta/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(patch("/api/pontos-coleta/99"), "{\"localColeta\":\"Outro\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
-        chamar(delete("/api/pontos-coleta/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
-        verify(pontoColetaService).buscarPorId(99L);
-        verify(pontoColetaService).deletar(99L);
+        // When
+        ResultActions resposta = executar(verbo, "/api/pontos-coleta/99", json);
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
     void transferComTipoErradoNaUrlRetorna400() throws Exception {
-        chamar(get("/api/pontos-coleta/transfer/xyz")).andExpect(erro(400, "Parâmetro inválido", "transferId"));
+        // When
+        ResultActions resposta = chamar(get("/api/pontos-coleta/transfer/xyz"));
+
+        // Then
+        resposta.andExpect(erro(400, "Parâmetro inválido", "transferId"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
+        // Given
         when(pontoColetaService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Ponto de coleta", 1L));
 
-        enviar(put("/api/pontos-coleta/1"), VALIDO).andExpect(erro(409, "Conflito de edição", "Ponto de coleta 1"));
+        // When
+        ResultActions resposta = enviar(put("/api/pontos-coleta/1"), VALIDO);
+
+        // Then
+        resposta.andExpect(erro(409, "Conflito de edição", "Ponto de coleta 1"));
     }
 }

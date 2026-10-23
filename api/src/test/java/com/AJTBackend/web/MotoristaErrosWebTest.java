@@ -8,6 +8,7 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.stream.Stream;
 
@@ -52,62 +53,114 @@ class MotoristaErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        enviar(post("/api/motoristas"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(post("/api/motoristas"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(motoristaService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        enviar(put("/api/motoristas/1"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(put("/api/motoristas/1"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(motoristaService, never()).atualizar(any(), any());
     }
 
     @Test
     void patchRecusaTextoVazio() throws Exception {
-        enviar(patch("/api/motoristas/1"), "{\"cnh\":\"  \"}").andExpect(validacao("cnh: CNH não pode ser vazia"));
+        // When
+        ResultActions resposta = enviar(patch("/api/motoristas/1"), "{\"cnh\":\"  \"}");
+
+        // Then
+        resposta.andExpect(validacao("cnh: CNH não pode ser vazia"));
         verify(motoristaService, never()).atualizarParcial(any(), any());
     }
 
-    @Test
-    void idInexistenteRetorna404NosQuatroVerbos() throws Exception {
+    static Stream<Arguments> verbosNoId99() {
+        return Stream.of(
+                Arguments.of("GET", null),
+                Arguments.of("PUT", VALIDO),
+                Arguments.of("PATCH", "{\"nome\":\"Dora\"}"),
+                Arguments.of("DELETE", null));
+    }
+
+    @ParameterizedTest(name = "{0} /api/motoristas/99 -> 404")
+    @MethodSource("verbosNoId99")
+    void idInexistenteRetorna404EmCadaVerbo(String verbo, String json) throws Exception {
+        // Given
         when(motoristaService.buscarPorId(99L)).thenThrow(new MotoristaNaoEncontradoException(99L));
         when(motoristaService.atualizar(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
         when(motoristaService.atualizarParcial(eq(99L), any())).thenThrow(new MotoristaNaoEncontradoException(99L));
         doThrow(new MotoristaNaoEncontradoException(99L)).when(motoristaService).deletar(99L);
 
-        chamar(get("/api/motoristas/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(put("/api/motoristas/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(patch("/api/motoristas/99"), "{\"nome\":\"Dora\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
-        chamar(delete("/api/motoristas/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        // When
+        ResultActions resposta = executar(verbo, "/api/motoristas/99", json);
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
-    void buscaPorCnhInexistenteRetorna404ESemParametroRetorna400() throws Exception {
+    void buscaPorCnhInexistenteRetorna404() throws Exception {
+        // Given
         when(motoristaService.buscarPorCnh("000")).thenThrow(new MotoristaNaoEncontradoException("000"));
 
-        chamar(get("/api/motoristas/buscar").param("cnh", "000")).andExpect(erro(404, "Recurso não encontrado", "000"));
-        chamar(get("/api/motoristas/buscar")).andExpect(erro(400, "Parâmetro inválido", "'cnh' é obrigatório"));
+        // When
+        ResultActions resposta = chamar(get("/api/motoristas/buscar").param("cnh", "000"));
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "000"));
+    }
+
+    @Test
+    void buscaPorCnhSemOParametroRetorna400() throws Exception {
+        // When
+        ResultActions resposta = chamar(get("/api/motoristas/buscar"));
+
+        // Then
+        resposta.andExpect(erro(400, "Parâmetro inválido", "'cnh' é obrigatório"));
+        verify(motoristaService, never()).buscarPorCnh(any());
     }
 
     @Test
     void cnhDuplicadaRetorna400() throws Exception {
+        // Given
         when(motoristaService.criar(any())).thenThrow(new CnhJaCadastradaException("12345678900"));
 
-        enviar(post("/api/motoristas"), VALIDO).andExpect(erro(400, "Erro de validação", "Já existe motorista cadastrado com CNH"));
+        // When
+        ResultActions resposta = enviar(post("/api/motoristas"), VALIDO);
+
+        // Then
+        resposta.andExpect(erro(400, "Erro de validação", "Já existe motorista cadastrado com CNH"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
+        // Given
         when(motoristaService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Motorista", 1L));
 
-        enviar(put("/api/motoristas/1"), VALIDO).andExpect(erro(409, "Conflito de edição", "alterado por outro usuário"));
+        // When
+        ResultActions resposta = enviar(put("/api/motoristas/1"), VALIDO);
+
+        // Then
+        resposta.andExpect(erro(409, "Conflito de edição", "alterado por outro usuário"));
     }
 
     @Test
     void excluirMotoristaComOrdemDeServicoRetorna409() throws Exception {
+        // Given
         doThrow(new DataIntegrityViolationException("fk")).when(motoristaService).deletar(1L);
 
-        chamar(delete("/api/motoristas/1")).andExpect(erro(409, "Conflito de dados", "em uso"));
+        // When
+        ResultActions resposta = chamar(delete("/api/motoristas/1"));
+
+        // Then
+        resposta.andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 }

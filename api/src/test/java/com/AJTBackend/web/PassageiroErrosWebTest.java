@@ -6,7 +6,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.stream.Stream;
 
@@ -51,60 +53,107 @@ class PassageiroErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        enviar(post("/api/passageiros"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(post("/api/passageiros"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(passageiroService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        enviar(put("/api/passageiros/1"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(put("/api/passageiros/1"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(passageiroService, never()).atualizar(any(), any());
     }
 
-    @Test
-    void patchRecusaTextoVazioMasAceitaCampoAusente() throws Exception {
-        enviar(patch("/api/passageiros/1"), "{\"nome\":\"\"}").andExpect(validacao("nome: Nome não pode ser vazio"));
-        enviar(patch("/api/passageiros/1"), "{\"documento\":\" \"}").andExpect(validacao("documento: Documento não pode ser vazio"));
+    static Stream<Arguments> patchesComTextoVazio() {
+        return Stream.of(
+                Arguments.of("{\"nome\":\"\"}", "nome: Nome não pode ser vazio"),
+                Arguments.of("{\"documento\":\" \"}", "documento: Documento não pode ser vazio"));
+    }
+
+    @ParameterizedTest(name = "PATCH {0} -> 400")
+    @MethodSource("patchesComTextoVazio")
+    void patchComTextoVazioRetorna400SemChamarOService(String json, String detalhe) throws Exception {
+        // When
+        ResultActions resposta = enviar(patch("/api/passageiros/1"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(passageiroService, never()).atualizarParcial(any(), any());
     }
 
-    @Test
-    void corpoAusenteOuMalformadoRetorna400() throws Exception {
-        enviar(post("/api/passageiros"), "").andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
-        enviar(post("/api/passageiros"), "{\"nome\":").andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+    @ParameterizedTest(name = "corpo [{0}] -> 400")
+    @ValueSource(strings = {"", "{\"nome\":"})
+    void corpoAusenteOuMalformadoRetorna400(String corpo) throws Exception {
+        // When
+        ResultActions resposta = enviar(post("/api/passageiros"), corpo);
+
+        // Then
+        resposta.andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+        verify(passageiroService, never()).criar(any());
     }
 
-    @Test
-    void idInexistenteRetorna404NosQuatroVerbos() throws Exception {
+    static Stream<Arguments> verbosNoId99() {
+        return Stream.of(
+                Arguments.of("GET", null),
+                Arguments.of("PUT", VALIDO),
+                Arguments.of("PATCH", "{\"nome\":\"Bia\"}"),
+                Arguments.of("DELETE", null));
+    }
+
+    @ParameterizedTest(name = "{0} /api/passageiros/99 -> 404")
+    @MethodSource("verbosNoId99")
+    void idInexistenteRetorna404EmCadaVerbo(String verbo, String json) throws Exception {
+        // Given
         when(passageiroService.buscarPorId(99L)).thenThrow(new PassageiroNaoEncontradoException(99L));
         when(passageiroService.atualizar(eq(99L), any())).thenThrow(new PassageiroNaoEncontradoException(99L));
         when(passageiroService.atualizarParcial(eq(99L), any())).thenThrow(new PassageiroNaoEncontradoException(99L));
         doThrow(new PassageiroNaoEncontradoException(99L)).when(passageiroService).deletar(99L);
 
-        chamar(get("/api/passageiros/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(put("/api/passageiros/99"), VALIDO).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(patch("/api/passageiros/99"), "{\"nome\":\"Bia\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
-        chamar(delete("/api/passageiros/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        // When
+        ResultActions resposta = executar(verbo, "/api/passageiros/99", json);
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
     void cpfInvalidoRetorna400DeRegraDeNegocio() throws Exception {
+        // Given
         when(passageiroService.criar(any())).thenThrow(new RegraNegocioException("CPF inválido: confira os 11 dígitos."));
 
-        enviar(post("/api/passageiros"), "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"123\"}")
-                .andExpect(erro(400, "Regra de negócio", "CPF inválido"));
+        // When
+        ResultActions resposta = enviar(post("/api/passageiros"), "{\"nome\":\"Ana\",\"tipoDocumento\":\"CPF\",\"documento\":\"123\"}");
+
+        // Then
+        resposta.andExpect(erro(400, "Regra de negócio", "CPF inválido"));
     }
 
     @Test
     void excluirPassageiroEmUsoRetorna409() throws Exception {
+        // Given
         doThrow(new DataIntegrityViolationException("fk")).when(passageiroService).deletar(1L);
 
-        chamar(delete("/api/passageiros/1")).andExpect(erro(409, "Conflito de dados", "em uso"));
+        // When
+        ResultActions resposta = chamar(delete("/api/passageiros/1"));
+
+        // Then
+        resposta.andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 
     @Test
     void idComTipoErradoRetorna400() throws Exception {
-        chamar(get("/api/passageiros/abc")).andExpect(erro(400, "Parâmetro inválido", "id"));
+        // When
+        ResultActions resposta = chamar(get("/api/passageiros/abc"));
+
+        // Then
+        resposta.andExpect(erro(400, "Parâmetro inválido", "id"));
     }
 }
