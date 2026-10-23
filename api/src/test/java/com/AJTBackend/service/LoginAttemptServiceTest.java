@@ -19,54 +19,91 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class LoginAttemptServiceTest {
 
+    private static final String IP = "10.0.0.1";
+
     private final LoginAttemptService service = new LoginAttemptService(3, 15);
 
-    @Test
-    void bloqueiaAposAtingirOLimiteDeFalhas() {
-        service.registrarFalha("10.0.0.1", "admin");
-        service.registrarFalha("10.0.0.1", "admin");
-        assertThat(service.bloqueado("10.0.0.1", "admin")).isFalse();
-
-        service.registrarFalha("10.0.0.1", "admin");
-        assertThat(service.bloqueado("10.0.0.1", "admin")).isTrue();
-    }
-
-    @Test
-    void sucessoZeraAsFalhas() {
-        service.registrarFalha("10.0.0.1", "admin");
-        service.registrarFalha("10.0.0.1", "admin");
-        service.registrarSucesso("10.0.0.1", "admin");
-        service.registrarFalha("10.0.0.1", "admin");
-
-        assertThat(service.bloqueado("10.0.0.1", "admin")).isFalse();
-    }
-
-    @Test
-    void bloqueioEhPorIpEUsername() {
-        for (int i = 0; i < 3; i++) {
-            service.registrarFalha("10.0.0.1", "admin");
+    private void falhar(String ip, String username, int vezes) {
+        for (int i = 0; i < vezes; i++) {
+            service.registrarFalha(ip, username);
         }
+    }
 
-        assertThat(service.bloqueado("10.0.0.2", "admin")).isFalse(); // outro IP
-        assertThat(service.bloqueado("10.0.0.1", "maria")).isFalse(); // outro usuario
+    @Test
+    void duasFalhasAindaNaoBloqueiamOLogin() {
+        // Given
+        falhar(IP, "admin", 2);
+
+        // When
+        boolean bloqueado = service.bloqueado(IP, "admin");
+
+        // Then
+        assertThat(bloqueado).isFalse();
+    }
+
+    @Test
+    void terceiraFalhaSeguidaBloqueiaOLogin() {
+        // Given
+        falhar(IP, "admin", 3);
+
+        // When
+        boolean bloqueado = service.bloqueado(IP, "admin");
+
+        // Then
+        assertThat(bloqueado).isTrue();
+    }
+
+    @Test
+    void loginComSucessoZeraAsFalhasAnteriores() {
+        // Given
+        falhar(IP, "admin", 2);
+        service.registrarSucesso(IP, "admin");
+        falhar(IP, "admin", 1);
+
+        // When
+        boolean bloqueado = service.bloqueado(IP, "admin");
+
+        // Then
+        assertThat(bloqueado).isFalse();
+    }
+
+    @Test
+    void bloqueioNaoAtingeOutroIpNemOutroUsuario() {
+        // Given
+        falhar(IP, "admin", 3);
+
+        // When
+        boolean outroIp = service.bloqueado("10.0.0.2", "admin");
+        boolean outroUsuario = service.bloqueado(IP, "maria");
+
+        // Then
+        assertThat(outroIp).isFalse();
+        assertThat(outroUsuario).isFalse();
     }
 
     @Test
     void usernameAusenteTemContadorProprio() {
-        for (int i = 0; i < 3; i++) {
-            service.registrarFalha("10.0.0.1", null);
-        }
+        // Given
+        falhar(IP, null, 3);
 
-        assertThat(service.bloqueado("10.0.0.1", null)).isTrue();
-        assertThat(service.bloqueado("10.0.0.1", "admin")).isFalse();
+        // When
+        boolean semUsername = service.bloqueado(IP, null);
+        boolean admin = service.bloqueado(IP, "admin");
+
+        // Then
+        assertThat(semUsername).isTrue();
+        assertThat(admin).isFalse();
     }
 
     @Test
     void usernameNaoDiferenciaMaiusculas() {
-        for (int i = 0; i < 3; i++) {
-            service.registrarFalha("10.0.0.1", "Admin");
-        }
+        // Given
+        falhar(IP, "Admin", 3);
 
-        assertThat(service.bloqueado("10.0.0.1", "ADMIN")).isTrue();
+        // When
+        boolean bloqueado = service.bloqueado(IP, "ADMIN");
+
+        // Then
+        assertThat(bloqueado).isTrue();
     }
 }

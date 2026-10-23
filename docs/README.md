@@ -52,6 +52,7 @@ do dia 20 de cada mês — o conteúdo acumulado aqui é mergeado na `main`, e a
 | [0012](adr/0012-documentacao-da-api-com-openapi.md) | Documentação da API com OpenAPI / Swagger anotado | Aceito |
 | [0013](adr/0013-organizacao-do-codigo-e-tamanho-das-classes.md) | Organização em camadas e regras de tamanho de classe | Aceito |
 | [0014](adr/0014-estrategia-de-testes-e-demonstracao.md) | Estratégia de testes em três níveis e artefatos de demonstração | Aceito |
+| [0015](adr/0015-csrf-desligado-em-api-stateless.md) | CSRF desligado na API stateless com token Bearer | Aceito |
 
 ## Para quem está estudando o projeto agora
 
@@ -61,8 +62,8 @@ Ordem de leitura sugerida:
 2. [ADR-0013](adr/0013-organizacao-do-codigo-e-tamanho-das-classes.md) — como o código é organizado e por quê.
 3. [ADR-0001](adr/0001-enums-em-vez-de-strings-livres.md), [ADR-0010](adr/0010-passageiros-no-transfer-e-os-como-relacionamento.md)
    e [ADR-0002](adr/0002-matriz-de-permissoes-por-perfil.md) — modelo de dados e quem pode fazer o quê.
-4. [ADR-0004](adr/0004-seguranca-de-login-e-sessao.md) e [ADR-0003](adr/0003-criptografia-documento-passageiro.md)
-   — login, sessão, tokens e o campo cifrado.
+4. [ADR-0004](adr/0004-seguranca-de-login-e-sessao.md), [ADR-0015](adr/0015-csrf-desligado-em-api-stateless.md)
+   e [ADR-0003](adr/0003-criptografia-documento-passageiro.md) — login, sessão, tokens, CSRF e o campo cifrado.
 5. [ADR-0005](adr/0005-paginacao-padrao-nas-listagens.md), [ADR-0006](adr/0006-cache-e-timeout-da-cotacao-de-cambio.md)
    e [ADR-0007](adr/0007-correcao-do-n-mais-1-nas-paradas.md) — decisões de performance.
 6. [ADR-0011](adr/0011-auditoria-de-escritas.md) e [ADR-0012](adr/0012-documentacao-da-api-com-openapi.md)

@@ -9,6 +9,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -50,6 +51,7 @@ public class SecurityConfig {
     private static final String GERENTE = "GERENTE";
     private static final String ATENDENTE = "ATENDENTE";
     private static final String MOTORISTA = "MOTORISTA";
+    private static final String API = "/api/**";
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JsonAuthErrorHandler jsonAuthErrorHandler;
@@ -65,7 +67,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // API stateless com Bearer token, sem cookie de sessao
+                .csrf(SecurityConfig::semCsrf) // API stateless com Bearer token, sem cookie de sessao
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -78,13 +80,13 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/usuarios/**").hasRole(ADMIN)
                         .requestMatchers("/api/auditoria/**").hasAnyRole(ADMIN, GERENTE)
-                        .requestMatchers(HttpMethod.DELETE, "/api/**").hasAnyRole(ADMIN, GERENTE)
+                        .requestMatchers(HttpMethod.DELETE, API).hasAnyRole(ADMIN, GERENTE)
                         // cadastro de passageiros tem documento (LGPD): motorista nao lista. os passageiros
                         // da OS dele chegam por /api/transfers/{id}/passageiros, com o documento mascarado
                         .requestMatchers(HttpMethod.GET, "/api/passageiros/**").hasAnyRole(ADMIN, GERENTE, ATENDENTE)
                         // "minhas OS do dia" (HU07) so faz sentido pro motorista
                         .requestMatchers(HttpMethod.GET, "/api/ordens-servico/minhas").hasRole(MOTORISTA)
-                        .requestMatchers(HttpMethod.GET, "/api/**").authenticated()
+                        .requestMatchers(HttpMethod.GET, API).authenticated()
 
                         .requestMatchers("/api/motoristas/**", "/api/veiculos/**", "/api/ordens-servico/**")
                             .hasAnyRole(ADMIN, GERENTE)
@@ -104,6 +106,19 @@ public class SecurityConfig {
         return http.build();
     }
 
+    /**
+     * CSRF so explora credencial que o navegador anexa sozinho (cookie de sessao, login basic do navegador).
+     * Esta API nao tem nenhuma: e STATELESS, o login devolve o JWT no corpo e o cliente manda o token no
+     * header Authorization, que um site de terceiros nao consegue fazer o navegador enviar (e o CORS nao
+     * libera credenciais). Ligar o CSRF obrigaria cada cliente a buscar e reenviar um token extra sem
+     * proteger nada. Decisao e premissas: ADR-0015. AutenticacaoIntegrationTest falha se a API passar a
+     * abrir sessao, devolver cookie ou aceitar cookie no lugar do token.
+     */
+    @SuppressWarnings("java:S4502")
+    private static void semCsrf(CsrfConfigurer<HttpSecurity> csrf) {
+        csrf.disable();
+    }
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
@@ -114,7 +129,7 @@ public class SecurityConfig {
         config.setMaxAge(3600L);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration(API, config);
         return source;
     }
 

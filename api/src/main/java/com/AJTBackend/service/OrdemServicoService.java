@@ -39,6 +39,7 @@ public class OrdemServicoService {
     private static final Logger log = LoggerFactory.getLogger(OrdemServicoService.class);
     private static final StatusOrdemServico STATUS_PADRAO = StatusOrdemServico.ABERTA;
     private static final String TABELA = "ordens_servico";
+    private static final String CAMPO_MOTORISTA = "motorista.id";
 
     private final OrdemServicoRepository ordemServicoRepository;
     private final MotoristaRepository motoristaRepository;
@@ -56,7 +57,7 @@ public class OrdemServicoService {
         Specification<OrdemServico> spec = Specification.allOf(
                 Especificacoes.igual("status", filtro.status()),
                 Especificacoes.dataEntre("dataServico", filtro.dataInicio(), filtro.dataFim()),
-                Especificacoes.igual("motorista.id", acessoMotorista.restrito() ? null : filtro.motoristaId()),
+                Especificacoes.igual(CAMPO_MOTORISTA, acessoMotorista.restrito() ? null : filtro.motoristaId()),
                 Especificacoes.igual("veiculo.id", filtro.veiculoId()),
                 restricaoDoMotorista());
         return PaginaResponseDTO.de(ordemServicoRepository.findAll(spec, pageable), this::toResponseDTO);
@@ -82,7 +83,7 @@ public class OrdemServicoService {
             return List.of();
         }
         Specification<OrdemServico> spec = Specification.allOf(
-                Especificacoes.igual("motorista.id", motoristaId),
+                Especificacoes.igual(CAMPO_MOTORISTA, motoristaId),
                 Especificacoes.igual("dataServico", dia));
         return ordemServicoRepository.findAll(spec, Sort.by("id")).stream()
                 .map(os -> new OrdemServicoDoDiaDTO(toResponseDTO(os), paradaOsService.listarPorOrdemServico(os.getId())))
@@ -104,7 +105,7 @@ public class OrdemServicoService {
             return null;
         }
         return acessoMotorista.motoristaId()
-                .<Specification<OrdemServico>>map(id -> Especificacoes.igual("motorista.id", id))
+                .<Specification<OrdemServico>>map(id -> Especificacoes.igual(CAMPO_MOTORISTA, id))
                 .orElseGet(Especificacoes::nenhum);
     }
 

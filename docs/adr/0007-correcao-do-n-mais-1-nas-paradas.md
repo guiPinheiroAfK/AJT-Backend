@@ -77,3 +77,8 @@ um loop — outro N+1, desta vez de escrita.
 - **2026-09-18 — [ADR-0010](0010-passageiros-no-transfer-e-os-como-relacionamento.md):** a coleção
   `Transfer.passageiros` (lazy) também é carregada em lote pelo mesmo `default_batch_fetch_size: 50`, então
   listar transfers com `passageiroIds` não gera uma query por transfer.
+- **2026-10-22 — teste de regressão no slice de repositório:** o `PerformanceIntegrationTest` (que subia a
+  aplicação inteira com `@SpringBootTest` só para contar queries) foi substituído pelo
+  `api/src/test/java/com/AJTBackend/repository/ParadaOsRepositoryTest.java`, com `@DataJpaTest`. Ele conta as
+  queries direto no `ParadaOsRepository`: a lista de paradas da OS tem que sair em **1** query, e a paginada em
+  no máximo 3 (página, contagem e um lote de transfers). Removendo o `@EntityGraph`, o teste falha.

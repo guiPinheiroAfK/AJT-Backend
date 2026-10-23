@@ -124,9 +124,10 @@ class PontoColetaServiceTest {
     void atualizarParcialInexistenteLanca404SemGravar() {
         // Given
         when(repository.findById(9L)).thenReturn(Optional.empty());
+        PontoColetaRequestDTO patch = patchVazio();
 
         // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, patchVazio()))
+        assertThatThrownBy(() -> service.atualizarParcial(9L, patch))
                 .isInstanceOf(PontoColetaNaoEncontradoException.class)
                 .hasMessageContaining("9");
         verify(repository, never()).flush();

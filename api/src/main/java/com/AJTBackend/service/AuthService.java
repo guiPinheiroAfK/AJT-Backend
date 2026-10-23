@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -45,8 +46,9 @@ public class AuthService {
     // sem @Transactional de proposito: o BCrypt (~100ms) nao deve segurar uma conexao do pool.
     // so o save() do ultimoLogin abre uma transacao curta.
     public LoginResponseDTO login(LoginRequestDTO dto, String ip) {
+        String usuarioNoLog = sanitizar(dto.username());
         if (loginAttemptService.bloqueado(ip, dto.username())) {
-            log.warn("Login bloqueado por excesso de tentativas: usuario={}, ip={}", sanitizar(dto.username()), ip);
+            log.warn("Login bloqueado por excesso de tentativas: usuario={}, ip={}", usuarioNoLog, ip);
             throw new MuitasTentativasException();
         }
 
@@ -56,14 +58,14 @@ public class AuthService {
 
         if (encontrado.isEmpty() || !senhaConfere || !Boolean.TRUE.equals(encontrado.get().getAtivo())) {
             loginAttemptService.registrarFalha(ip, dto.username());
-            log.warn("Falha de login: usuario={}, ip={}, motivo={}", sanitizar(dto.username()), ip,
-                    encontrado.isEmpty() ? "inexistente" : !senhaConfere ? "senha incorreta" : "inativo");
+            String motivo = motivoDaFalha(encontrado.isPresent(), senhaConfere);
+            log.warn("Falha de login: usuario={}, ip={}, motivo={}", usuarioNoLog, ip, motivo);
             throw new CredenciaisInvalidasException();
         }
 
         Usuario usuario = encontrado.get();
         loginAttemptService.registrarSucesso(ip, dto.username());
-        usuario.setUltimoLogin(LocalDateTime.now());
+        usuario.setUltimoLogin(LocalDateTime.now(ZoneId.systemDefault()));
         usuarioRepository.save(usuario);
 
         log.info("Login bem-sucedido: usuario={}, role={}", usuario.getUsername(), usuario.getRole());
@@ -89,7 +91,7 @@ public class AuthService {
 
         usuario.setSenha(passwordEncoder.encode(dto.novaSenha()));
         usuario.setTrocarSenha(false);
-        usuario.setSenhaAlteradaEm(LocalDateTime.now());
+        usuario.setSenhaAlteradaEm(LocalDateTime.now(ZoneId.systemDefault()));
 
         log.info("Senha alterada pelo proprio usuario: {}", username);
         return gerarResposta(usuario);
@@ -104,6 +106,13 @@ public class AuthService {
                 usuario.getRole(),
                 Boolean.TRUE.equals(usuario.getTrocarSenha())
         );
+    }
+
+    private static String motivoDaFalha(boolean usuarioExiste, boolean senhaConfere) {
+        if (!usuarioExiste) {
+            return "inexistente";
+        }
+        return senhaConfere ? "inativo" : "senha incorreta";
     }
 
     // evita log injection (quebra de linha forjando entradas no log)

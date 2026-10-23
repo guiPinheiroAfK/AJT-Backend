@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cache.CacheManager;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -45,70 +46,91 @@ class CotacaoIntegrationTest extends IntegracaoTestBase {
         COTACAO_API.resetAll();
     }
 
+    private ResultActions consultarCotacao(String de, String para) throws Exception {
+        return mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/cotacao")
+                .param("de", de).param("para", para)
+                .header("Authorization", bearer(Role.ATENDENTE)));
+    }
+
+    private ResultActions criarTransfer(String valorOriginal, String moeda) throws Exception {
+        return mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\","
+                        + "\"valorOriginal\":" + valorOriginal + ",\"moedaOrigem\":\"" + moeda + "\"}"));
+    }
+
     @Test
     void consultaApiExternaUmaVezEUsaCacheNasSeguintes() throws Exception {
+        // Given: duas consultas anteriores do mesmo par de moedas
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest"))
                 .withQueryParam("base", equalTo("USD"))
                 .withQueryParam("symbols", equalTo("BRL"))
                 .willReturn(okJson("{\"amount\":1.0,\"base\":\"USD\",\"date\":\"2026-09-16\",\"rates\":{\"BRL\":5.4321}}")));
+        consultarCotacao("usd", "BRL");
+        consultarCotacao("USD", "brl");
 
-        for (int i = 0; i < 3; i++) {
-            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/cotacao")
-                            .param("de", "usd").param("para", "BRL")
-                            .header("Authorization", bearer(Role.ATENDENTE)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.taxa").value(5.4321))
-                    .andExpect(jsonPath("$.data").value("2026-09-16"));
-        }
+        // When
+        ResultActions resposta = consultarCotacao("usd", "BRL");
 
+        // Then
+        resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$.taxa").value(5.4321))
+                .andExpect(jsonPath("$.data").value("2026-09-16"));
         COTACAO_API.verify(1, getRequestedFor(urlPathEqualTo("/latest")));
     }
 
     @Test
     void erroNaApiExternaRetorna502() throws Exception {
+        // Given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest")).willReturn(aResponse().withStatus(500)));
 
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/cotacao")
-                        .param("de", "EUR").param("para", "BRL")
-                        .header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(status().isBadGateway())
+        // When
+        ResultActions resposta = consultarCotacao("EUR", "BRL");
+
+        // Then
+        resposta.andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.status").value(502));
     }
 
     @Test
     void apiLentaRespeitaTimeoutERetorna502() throws Exception {
-        // read-timeout no profile test = 1s
+        // Given: read-timeout no profile test = 1s
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest"))
                 .willReturn(okJson("{\"rates\":{\"BRL\":7.0}}").withFixedDelay(3000)));
 
-        mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get("/api/cotacao")
-                        .param("de", "GBP").param("para", "BRL")
-                        .header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(status().isBadGateway());
+        // When
+        ResultActions resposta = consultarCotacao("GBP", "BRL");
+
+        // Then
+        resposta.andExpect(status().isBadGateway());
     }
 
     @Test
     void transferEmMoedaEstrangeiraEhCriadoMesmoComApiForaDoAr() throws Exception {
+        // Given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest")).willReturn(aResponse().withStatus(503)));
 
-        mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"valorOriginal\":100.00,\"moedaOrigem\":\"CHF\"}"))
-                .andExpect(status().isCreated())
+        // When
+        ResultActions resposta = criarTransfer("100.00", "CHF");
+
+        // Then
+        resposta.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.valorOriginal").value(100.00))
                 .andExpect(jsonPath("$.valorBase").doesNotExist());
     }
 
     @Test
     void transferEmMoedaEstrangeiraConverteParaReais() throws Exception {
+        // Given
         COTACAO_API.stubFor(get(urlPathEqualTo("/latest"))
                 .withQueryParam("base", equalTo("ARS"))
                 .willReturn(okJson("{\"amount\":1.0,\"base\":\"ARS\",\"date\":\"2026-09-16\",\"rates\":{\"BRL\":0.0055}}")));
 
-        mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"valorOriginal\":10000.00,\"moedaOrigem\":\"ars\"}"))
-                .andExpect(status().isCreated())
+        // When
+        ResultActions resposta = criarTransfer("10000.00", "ars");
+
+        // Then
+        resposta.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.moedaOrigem").value("ARS"))
                 .andExpect(jsonPath("$.valorBase").value(55.00));
     }

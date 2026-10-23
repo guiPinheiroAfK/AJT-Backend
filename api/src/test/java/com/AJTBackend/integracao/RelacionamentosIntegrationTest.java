@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.List;
 
@@ -53,167 +54,250 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         return objectMapper.readTree(json).get("id").asLong();
     }
 
+    private ResultActions enviarTransfer(String extra) throws Exception {
+        return mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"dataTransfer\":\"2026-09-25\",\"horaTransfer\":\"14:30:00\",\"origem\":\"GRU\","
+                        + "\"destino\":\"Hotel\"" + extra + "}"));
+    }
+
     private long criarTransfer(String extra) throws Exception {
-        String json = mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"2026-09-25\",\"horaTransfer\":\"14:30:00\",\"origem\":\"GRU\","
-                                + "\"destino\":\"Hotel\"" + extra + "}"))
+        String json = enviarTransfer(extra)
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
         return objectMapper.readTree(json).get("id").asLong();
     }
 
-    @Test
-    void transferGuardaPassageirosNaTabelaDeJuncao() throws Exception {
+    private long criarOs(String corpo) throws Exception {
+        String json = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
+                        .contentType(MediaType.APPLICATION_JSON).content(corpo))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        return objectMapper.readTree(json).get("id").asLong();
+    }
+
+    private long transferComAnaEBia() throws Exception {
         long ana = criarPassageiro("Ana", "AA111");
         long bia = criarPassageiro("Bia", "BB222");
+        return criarTransfer(",\"passageiroIds\":[" + bia + "," + ana + "]");
+    }
 
-        long transferId = criarTransfer(",\"passageiroIds\":[" + ana + "," + bia + "]");
+    private ResultActions alterarTransfer(long transferId, Role perfil, String corpo) throws Exception {
+        return mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(perfil))
+                .contentType(MediaType.APPLICATION_JSON).content(corpo));
+    }
 
-        Integer vinculos = jdbcTemplate.queryForObject(
+    private int vinculosDoTransfer(long transferId) {
+        return jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transfer_passageiros WHERE transfer_id = ?", Integer.class, transferId);
-        assertThat(vinculos).isEqualTo(2);
+    }
 
-        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.MOTORISTA)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.passageiroIds", hasSize(2)));
+    private Long osDoTransferNoBanco(long transferId) {
+        return jdbcTemplate.queryForObject("SELECT os_id FROM transfers WHERE id = ?", Long.class, transferId);
+    }
 
-        mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
-                        .header("Authorization", bearer(Role.MOTORISTA)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSize(2)))
-                .andExpect(jsonPath("$[0].nome").value("Ana"))   // ordenado por nome
-                .andExpect(jsonPath("$[1].nome").value("Bia"))
-                .andExpect(jsonPath("$[0].documento").value("***11")); // motorista ve so o final
+    private String statusDoTransferNoBanco(long transferId) {
+        return jdbcTemplate.queryForObject("SELECT status FROM transfers WHERE id = ?", String.class, transferId);
+    }
 
-        mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
-                        .header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(jsonPath("$[0].documento").value("AA111")); // atendente ve decifrado
+    private int logsDeTransfers() {
+        return jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM logs_transfers WHERE tabela_afetada = 'transfers'", Integer.class);
     }
 
     @Test
-    void patchSubstituiEEnviarListaVaziaLimpaOsPassageiros() throws Exception {
+    void transferGuardaPassageirosNaTabelaDeJuncao() throws Exception {
+        // Given
+        long ana = criarPassageiro("Ana", "AA111");
+        long bia = criarPassageiro("Bia", "BB222");
+
+        // When
+        ResultActions resposta = enviarTransfer(",\"passageiroIds\":[" + ana + "," + bia + "]");
+
+        // Then
+        resposta.andExpect(status().isCreated())
+                .andExpect(jsonPath("$.passageiroIds", hasSize(2)));
+        long transferId = objectMapper.readTree(resposta.andReturn().getResponse().getContentAsString()).get("id").asLong();
+        assertThat(vinculosDoTransfer(transferId)).isEqualTo(2);
+    }
+
+    @Test
+    void motoristaVePassageirosDoTransferPorNomeEComDocumentoMascarado() throws Exception {
+        // Given
+        long transferId = transferComAnaEBia();
+
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
+                .header("Authorization", bearer(Role.MOTORISTA)));
+
+        // Then: ordenado por nome, e o motorista ve so o final do documento
+        resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].nome").value("Ana"))
+                .andExpect(jsonPath("$[1].nome").value("Bia"))
+                .andExpect(jsonPath("$[0].documento").value("***11"));
+    }
+
+    @Test
+    void atendenteVeODocumentoDosPassageirosDoTransferDecifrado() throws Exception {
+        // Given
+        long transferId = transferComAnaEBia();
+
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
+                .header("Authorization", bearer(Role.ATENDENTE)));
+
+        // Then
+        resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].documento").value("AA111"))
+                .andExpect(jsonPath("$[1].documento").value("BB222"));
+    }
+
+    @Test
+    void patchComListaVaziaLimpaOsPassageiros() throws Exception {
+        // Given
         long ana = criarPassageiro("Ana", "AA333");
         long transferId = criarTransfer(",\"passageiroIds\":[" + ana + "]");
 
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"passageiroIds\":[]}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.passageiroIds", hasSize(0)));
+        // When
+        ResultActions resposta = alterarTransfer(transferId, Role.ATENDENTE, "{\"passageiroIds\":[]}");
 
-        mockMvc.perform(get("/api/transfers/" + transferId + "/passageiros")
-                        .header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(jsonPath("$", hasSize(0)));
+        // Then
+        resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$.passageiroIds", hasSize(0)));
+        assertThat(vinculosDoTransfer(transferId)).isZero();
     }
 
     @Test
     void passageiroInexistenteRetorna404() throws Exception {
-        mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"2026-09-25\",\"horaTransfer\":\"14:30:00\",\"origem\":\"A\","
-                                + "\"destino\":\"B\",\"passageiroIds\":[999999]}"))
-                .andExpect(status().isNotFound())
+        // When
+        ResultActions resposta = enviarTransfer(",\"passageiroIds\":[999999]");
+
+        // Then
+        resposta.andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.mensagem", containsString("999999")));
     }
 
     @Test
     void excluirPassageiroVinculadoRemoveSoOVinculo() throws Exception {
+        // Given
         long ana = criarPassageiro("Ana", "AA444");
         long transferId = criarTransfer(",\"passageiroIds\":[" + ana + "]");
 
-        mockMvc.perform(delete("/api/passageiros/" + ana).header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(status().isNoContent());
+        // When
+        ResultActions resposta = mockMvc.perform(delete("/api/passageiros/" + ana)
+                .header("Authorization", bearer(Role.GERENTE)));
 
-        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.passageiroIds", hasSize(0)));
+        // Then: o transfer continua existindo, so sem o passageiro
+        resposta.andExpect(status().isNoContent());
+        assertThat(vinculosDoTransfer(transferId)).isZero();
+        assertThat(statusDoTransferNoBanco(transferId)).isEqualTo("AGUARDANDO_OS");
     }
 
     @Test
-    void transferLigadoAUmaOrdemDeServico() throws Exception {
-        String os = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-25\"}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        long osId = objectMapper.readTree(os).get("id").asLong();
+    void transferLigadoAUmaOrdemDeServicoJaNasceConfirmado() throws Exception {
+        // Given
+        long osId = criarOs("{\"dataServico\":\"2026-09-25\"}");
 
-        long transferId = criarTransfer(",\"osId\":" + osId);
+        // When
+        ResultActions resposta = enviarTransfer(",\"osId\":" + osId);
 
-        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
+        // Then: com OS nao fica "aguardando OS", e a chave estrangeira vai pro banco
+        resposta.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.osId").value(osId))
-                .andExpect(jsonPath("$.status").value("CONFIRMADO")); // com OS nao fica "aguardando OS"
+                .andExpect(jsonPath("$.status").value("CONFIRMADO"));
+        long transferId = objectMapper.readTree(resposta.andReturn().getResponse().getContentAsString()).get("id").asLong();
+        assertThat(osDoTransferNoBanco(transferId)).isEqualTo(osId);
+    }
 
-        Long fk = jdbcTemplate.queryForObject("SELECT os_id FROM transfers WHERE id = ?", Long.class, transferId);
-        assertThat(fk).isEqualTo(osId);
+    @Test
+    void ordemDeServicoComTransferDentroNaoMudaDeDia() throws Exception {
+        // Given: os dois sairiam de sincronia
+        long osId = criarOs("{\"dataServico\":\"2026-09-25\"}");
+        criarTransfer(",\"osId\":" + osId);
 
-        // com transfer dentro, a OS nao muda de dia (os dois sairiam de sincronia)
-        mockMvc.perform(patch("/api/ordens-servico/" + osId).header("Authorization", bearer(Role.GERENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-26\"}"))
-                .andExpect(status().isBadRequest())
+        // When
+        ResultActions resposta = mockMvc.perform(patch("/api/ordens-servico/" + osId)
+                .header("Authorization", bearer(Role.GERENTE))
+                .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-26\"}"));
+
+        // Then
+        resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem", containsString("Desvincule")));
     }
 
     @Test
-    void transferNaoEntraEmOsDeOutroDiaNemEmOsCancelada() throws Exception {
-        String os = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-26\"}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        long osOutroDia = objectMapper.readTree(os).get("id").asLong();
-        long transferId = criarTransfer(""); // dia 25
+    void transferNaoEntraEmOsDeOutroDia() throws Exception {
+        // Given: transfer do dia 25 e OS do dia 26
+        long osOutroDia = criarOs("{\"dataServico\":\"2026-09-26\"}");
+        long transferId = criarTransfer("");
 
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"osId\":" + osOutroDia + "}"))
-                .andExpect(status().isBadRequest())
+        // When
+        ResultActions resposta = alterarTransfer(transferId, Role.ATENDENTE, "{\"osId\":" + osOutroDia + "}");
+
+        // Then
+        resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem", containsString("mesmo dia")));
-
-        String cancelada = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataServico\":\"2026-09-25\",\"status\":\"CANCELADA\"}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        long osCancelada = objectMapper.readTree(cancelada).get("id").asLong();
-
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"osId\":" + osCancelada + "}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.mensagem", containsString("CANCELADA")));
-
-        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(jsonPath("$.osId").value(org.hamcrest.Matchers.nullValue()))
-                .andExpect(jsonPath("$.status").value("AGUARDANDO_OS"));
+        assertThat(osDoTransferNoBanco(transferId)).isNull();
     }
 
     @Test
-    void auditoriaRegistraCriacaoEMudancaDeStatusEsoGerenteEAdminConsultam() throws Exception {
+    void transferNaoEntraEmOsCancelada() throws Exception {
+        // Given
+        long osCancelada = criarOs("{\"dataServico\":\"2026-09-25\",\"status\":\"CANCELADA\"}");
         long transferId = criarTransfer("");
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"CONFIRMADO\"}"))
-                .andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/auditoria").param("tabela", "transfers").param("size", "100")
-                        .header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(status().isOk())
+        // When
+        ResultActions resposta = alterarTransfer(transferId, Role.ATENDENTE, "{\"osId\":" + osCancelada + "}");
+
+        // Then
+        resposta.andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem", containsString("CANCELADA")));
+        assertThat(osDoTransferNoBanco(transferId)).isNull();
+        assertThat(statusDoTransferNoBanco(transferId)).isEqualTo("AGUARDANDO_OS");
+    }
+
+    @Test
+    void auditoriaRegistraCriacaoEMudancaDeStatusDoTransfer() throws Exception {
+        // Given
+        long transferId = criarTransfer("");
+        alterarTransfer(transferId, Role.ATENDENTE, "{\"status\":\"CONFIRMADO\"}").andExpect(status().isOk());
+
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/auditoria").param("tabela", "transfers").param("size", "100")
+                .header("Authorization", bearer(Role.GERENTE)));
+
+        // Then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.conteudo[?(@.registroId == " + transferId + ")].mensagem",
                         org.hamcrest.Matchers.hasItem(containsString("AGUARDANDO_OS -> CONFIRMADO"))))
                 .andExpect(jsonPath("$.conteudo[?(@.registroId == " + transferId + ")].mensagem",
                         org.hamcrest.Matchers.hasItem(containsString("Transfer criado"))));
+    }
 
-        mockMvc.perform(get("/api/auditoria").header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(status().isForbidden());
+    @Test
+    void atendenteNaoConsultaAAuditoria() throws Exception {
+        // When: so gerente e admin consultam
+        ResultActions resposta = mockMvc.perform(get("/api/auditoria").header("Authorization", bearer(Role.ATENDENTE)));
+
+        // Then
+        resposta.andExpect(status().isForbidden());
     }
 
     @Test
     void auditoriaRegistraMudancaDeValorEFiltraPeloHistoricoDoTransfer() throws Exception {
+        // Given
         long transferId = criarTransfer(",\"valorBase\":150.00");
         long outroId = criarTransfer("");
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"valorBase\":180.00}"))
-                .andExpect(status().isOk());
+        alterarTransfer(transferId, Role.ATENDENTE, "{\"valorBase\":180.00}").andExpect(status().isOk());
 
-        mockMvc.perform(get("/api/auditoria").param("tabela", "transfers").param("registroId", String.valueOf(transferId))
-                        .header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(status().isOk())
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/auditoria").param("tabela", "transfers")
+                .param("registroId", String.valueOf(transferId))
+                .header("Authorization", bearer(Role.GERENTE)));
+
+        // Then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalElementos").value(2))
                 .andExpect(jsonPath("$.conteudo[*].mensagem",
                         org.hamcrest.Matchers.hasItem(containsString("valor 150.00 -> 180.00"))))
@@ -222,95 +306,109 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
 
     @Test
     void pdfDaOrdemDeServicoTrazPassageirosESemValores() throws Exception {
-        String os = mockMvc.perform(post("/api/ordens-servico").header("Authorization", bearer(Role.GERENTE))
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"dataServico\":\"2026-09-25\"}"))
-                .andExpect(status().isCreated())
-                .andReturn().getResponse().getContentAsString();
-        long osId = objectMapper.readTree(os).get("id").asLong();
+        // Given
+        long osId = criarOs("{\"dataServico\":\"2026-09-25\"}");
         long ana = criarPassageiro("Ana Relatorio", "PDF111");
         criarTransfer(",\"osId\":" + osId + ",\"valorBase\":321.00,\"passageiroIds\":[" + ana + "]");
 
-        byte[] pdf = mockMvc.perform(get("/api/ordens-servico/" + osId + "/pdf")
-                        .header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(status().isOk())
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico/" + osId + "/pdf")
+                .header("Authorization", bearer(Role.ATENDENTE)));
+
+        // Then: nem valor nem documento no papel do motorista
+        resposta.andExpect(status().isOk())
                 .andExpect(header().string("Content-Type", "application/pdf"))
-                .andExpect(header().string("Content-Disposition", containsString("ordem-servico-" + osId + ".pdf")))
-                .andReturn().getResponse().getContentAsByteArray();
+                .andExpect(header().string("Content-Disposition", containsString("ordem-servico-" + osId + ".pdf")));
+        String texto;
+        try (PdfReader leitor = new PdfReader(resposta.andReturn().getResponse().getContentAsByteArray())) {
+            texto = new PdfTextExtractor(leitor).getTextFromPage(1);
+        }
+        assertThat(texto).contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU")
+                .doesNotContain("321", "PDF111");
+    }
 
-        PdfReader leitor = new PdfReader(pdf);
-        String texto = new PdfTextExtractor(leitor).getTextFromPage(1);
-        leitor.close();
-        assertThat(texto).contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU");
-        assertThat(texto).doesNotContain("321", "PDF111"); // nem valor nem documento no papel do motorista
+    @Test
+    void pdfDeOrdemDeServicoInexistenteRetorna404() throws Exception {
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/ordens-servico/999999/pdf")
+                .header("Authorization", bearer(Role.ATENDENTE)));
 
-        mockMvc.perform(get("/api/ordens-servico/999999/pdf").header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(status().isNotFound());
+        // Then
+        resposta.andExpect(status().isNotFound());
     }
 
     @Test
     void edicaoComVersaoVelhaRetorna409EPreservaAAlteracaoDoOutroUsuario() throws Exception {
+        // Given: a gerente e a atendente carregam a mesma versao, e a gerente salva primeiro
         long transferId = criarTransfer("");
         Long versao = jdbcTemplate.queryForObject("SELECT versao FROM transfers WHERE id = ?", Long.class, transferId);
-
-        // a gerente salva primeiro, em cima da versao que carregou
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"CONFIRMADO\",\"versao\":" + versao + "}"))
-                .andExpect(status().isOk())
+        alterarTransfer(transferId, Role.GERENTE, "{\"status\":\"CONFIRMADO\",\"versao\":" + versao + "}")
                 .andExpect(jsonPath("$.versao").value(versao + 1));
 
-        // a atendente tinha carregado a mesma versao e tenta salvar depois: 409, nada e sobrescrito
-        mockMvc.perform(patch("/api/transfers/" + transferId).header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"status\":\"CANCELADO\",\"versao\":" + versao + "}"))
-                .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.erro").value("Conflito de edição"));
+        // When: a atendente salva depois, em cima da versao que ja ficou velha
+        ResultActions resposta = alterarTransfer(transferId, Role.ATENDENTE,
+                "{\"status\":\"CANCELADO\",\"versao\":" + versao + "}");
 
-        mockMvc.perform(get("/api/transfers/" + transferId).header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(jsonPath("$.status").value("CONFIRMADO"));
+        // Then: nada e sobrescrito
+        resposta.andExpect(status().isConflict())
+                .andExpect(jsonPath("$.erro").value("Conflito de edição"));
+        assertThat(statusDoTransferNoBanco(transferId)).isEqualTo("CONFIRMADO");
     }
 
-    @Test
-    void painelContaODiaESomaOFaturamentoSemCancelados() throws Exception {
-        // data so deste teste, pra nao misturar com os transfers dos outros
-        String base = "{\"dataTransfer\":\"2031-01-15\",\"horaTransfer\":\"09:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\"";
+    private void criarTransfersDoPainel(String data) throws Exception {
+        // data so do teste, pra nao misturar com os transfers dos outros
+        String base = "{\"dataTransfer\":\"" + data + "\",\"horaTransfer\":\"09:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\"";
         for (String extra : List.of(",\"valorBase\":100.00}", ",\"valorBase\":50.50}",
                 ",\"valorBase\":999.00,\"status\":\"CANCELADO\"}")) {
             mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
                             .contentType(MediaType.APPLICATION_JSON).content(base + extra))
                     .andExpect(status().isCreated());
         }
+    }
 
-        mockMvc.perform(get("/api/painel/resumo").param("data", "2031-01-15")
-                        .header("Authorization", bearer(Role.GERENTE)))
-                .andExpect(status().isOk())
+    @Test
+    void painelContaODiaESomaOFaturamentoSemCancelados() throws Exception {
+        // Given
+        criarTransfersDoPainel("2031-01-15");
+
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/painel/resumo").param("data", "2031-01-15")
+                .header("Authorization", bearer(Role.GERENTE)));
+
+        // Then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalTransfers").value(3))
                 .andExpect(jsonPath("$.transfersPorStatus.AGUARDANDO_OS").value(2))
                 .andExpect(jsonPath("$.transfersPorStatus.CANCELADO").value(1))
                 .andExpect(jsonPath("$.faturamentoDia").value(150.50))
                 .andExpect(jsonPath("$.faturamentoMes").value(150.50));
+    }
 
-        mockMvc.perform(get("/api/painel/resumo").param("data", "2031-01-15")
-                        .header("Authorization", bearer(Role.ATENDENTE)))
-                .andExpect(status().isOk())
+    @Test
+    void atendenteVeOPainelSemOFaturamento() throws Exception {
+        // Given
+        criarTransfersDoPainel("2031-02-15");
+
+        // When
+        ResultActions resposta = mockMvc.perform(get("/api/painel/resumo").param("data", "2031-02-15")
+                .header("Authorization", bearer(Role.ATENDENTE)));
+
+        // Then
+        resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.totalTransfers").value(3))
                 .andExpect(jsonPath("$.faturamentoDia").value(org.hamcrest.Matchers.nullValue()));
     }
 
     @Test
     void auditoriaNaoSobraQuandoAOperacaoFalha() throws Exception {
-        Integer antes = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM logs_transfers WHERE tabela_afetada = 'transfers'", Integer.class);
+        // Given
+        int antes = logsDeTransfers();
 
-        // passageiro inexistente: a transacao de criacao aborta, entao nao pode sobrar log
-        mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"2026-09-25\",\"horaTransfer\":\"14:30:00\",\"origem\":\"A\","
-                                + "\"destino\":\"B\",\"passageiroIds\":[888888]}"))
-                .andExpect(status().isNotFound());
+        // When: passageiro inexistente, a transacao de criacao aborta
+        ResultActions resposta = enviarTransfer(",\"passageiroIds\":[888888]");
 
-        Integer depois = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM logs_transfers WHERE tabela_afetada = 'transfers'", Integer.class);
-        assertThat(depois).isEqualTo(antes);
+        // Then: entao nao pode sobrar log
+        resposta.andExpect(status().isNotFound());
+        assertThat(logsDeTransfers()).isEqualTo(antes);
     }
 }

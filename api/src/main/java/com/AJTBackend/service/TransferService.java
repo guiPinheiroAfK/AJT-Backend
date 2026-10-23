@@ -151,17 +151,7 @@ public class TransferService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TransferResponseDTO atualizarParcial(Long id, TransferRequestDTO dto) {
         String moedaDto = ValorTransferService.normalizarMoeda(dto.moedaOrigem());
-
-        // so consulta a cotacao se o valor em moeda estrangeira mudou e o valor base nao veio explicito
-        BigDecimal valorBaseRecalculado = null;
-        if (dto.valorBase() == null && (dto.valorOriginal() != null || moedaDto != null)) {
-            Transfer atual = transactionTemplate.execute(tx -> transferRepository.findById(id)
-                    .orElseThrow(() -> new TransferNaoEncontradoException(id)));
-            BigDecimal valorOriginal = dto.valorOriginal() != null ? dto.valorOriginal() : atual.getValorOriginal();
-            String moeda = moedaDto != null ? moedaDto : atual.getMoedaOrigem();
-            valorBaseRecalculado = valorTransferService.calcularValorBase(null, valorOriginal, moeda);
-        }
-        BigDecimal valorBaseFinal = dto.valorBase() != null ? dto.valorBase() : valorBaseRecalculado;
+        BigDecimal valorBaseFinal = dto.valorBase() != null ? dto.valorBase() : valorBaseRecalculado(id, dto, moedaDto);
 
         return transactionTemplate.execute(tx -> {
             Transfer transfer = transferRepository.findById(id)
@@ -172,36 +162,7 @@ public class TransferService {
             OrdemServico osAnterior = transfer.getOrdemServico();
             LocalDate dataAnterior = transfer.getDataTransfer();
 
-            if (dto.dataTransfer() != null) {
-                transfer.setDataTransfer(dto.dataTransfer());
-            }
-            if (dto.horaTransfer() != null) {
-                transfer.setHoraTransfer(dto.horaTransfer());
-            }
-            if (dto.origem() != null) {
-                transfer.setOrigem(dto.origem());
-            }
-            if (dto.destino() != null) {
-                transfer.setDestino(dto.destino());
-            }
-            if (dto.status() != null) {
-                transfer.setStatus(dto.status());
-            }
-            if (dto.valorOriginal() != null) {
-                transfer.setValorOriginal(dto.valorOriginal());
-            }
-            if (moedaDto != null) {
-                transfer.setMoedaOrigem(moedaDto);
-            }
-            if (valorBaseFinal != null) {
-                transfer.setValorBase(valorBaseFinal);
-            }
-            if (dto.osId() != null) {
-                transfer.setOrdemServico(buscarOrdemServico(dto.osId()));
-            }
-            if (dto.passageiroIds() != null) {
-                transfer.setPassageiros(buscarPassageiros(dto.passageiroIds()));
-            }
+            aplicarCamposEnviados(transfer, dto, moedaDto, valorBaseFinal);
             aplicarRegrasDaOs(transfer, osAnterior, dataAnterior);
 
             auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado",
@@ -209,6 +170,52 @@ public class TransferService {
             transferRepository.flush(); // grava agora pra resposta ja levar a versao nova
             return toResponseDTO(transfer);
         });
+    }
+
+    // so consulta a cotacao se o valor em moeda estrangeira mudou e o valor base nao veio explicito
+    private BigDecimal valorBaseRecalculado(Long id, TransferRequestDTO dto, String moedaDto) {
+        if (dto.valorOriginal() == null && moedaDto == null) {
+            return null;
+        }
+        Transfer atual = transactionTemplate.execute(tx -> transferRepository.findById(id)
+                .orElseThrow(() -> new TransferNaoEncontradoException(id)));
+        BigDecimal valorOriginal = dto.valorOriginal() != null ? dto.valorOriginal() : atual.getValorOriginal();
+        String moeda = moedaDto != null ? moedaDto : atual.getMoedaOrigem();
+        return valorTransferService.calcularValorBase(null, valorOriginal, moeda);
+    }
+
+    // PATCH: so muda o que veio no corpo
+    private void aplicarCamposEnviados(Transfer transfer, TransferRequestDTO dto, String moedaDto, BigDecimal valorBase) {
+        if (dto.dataTransfer() != null) {
+            transfer.setDataTransfer(dto.dataTransfer());
+        }
+        if (dto.horaTransfer() != null) {
+            transfer.setHoraTransfer(dto.horaTransfer());
+        }
+        if (dto.origem() != null) {
+            transfer.setOrigem(dto.origem());
+        }
+        if (dto.destino() != null) {
+            transfer.setDestino(dto.destino());
+        }
+        if (dto.status() != null) {
+            transfer.setStatus(dto.status());
+        }
+        if (dto.valorOriginal() != null) {
+            transfer.setValorOriginal(dto.valorOriginal());
+        }
+        if (moedaDto != null) {
+            transfer.setMoedaOrigem(moedaDto);
+        }
+        if (valorBase != null) {
+            transfer.setValorBase(valorBase);
+        }
+        if (dto.osId() != null) {
+            transfer.setOrdemServico(buscarOrdemServico(dto.osId()));
+        }
+        if (dto.passageiroIds() != null) {
+            transfer.setPassageiros(buscarPassageiros(dto.passageiroIds()));
+        }
     }
 
     @Transactional

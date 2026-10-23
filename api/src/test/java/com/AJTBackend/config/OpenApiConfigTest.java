@@ -24,18 +24,22 @@ class OpenApiConfigTest {
     private final OpenApiConfig config = new OpenApiConfig();
 
     @Test
-    void declaraOEsquemaBearerJwt() {
+    void declaraOEsquemaBearerJwtExigidoEmTodaAApi() {
+        // When
         OpenAPI openApi = config.customOpenAPI();
 
+        // Then
         SecurityScheme esquema = openApi.getComponents().getSecuritySchemes().get("bearerAuth");
         assertThat(esquema.getScheme()).isEqualTo("bearer");
         assertThat(esquema.getBearerFormat()).isEqualTo("JWT");
         assertThat(openApi.getInfo().getVersion()).isEqualTo("v1");
-        assertThat(openApi.getSecurity()).hasSize(1);
+        assertThat(openApi.getSecurity()).singleElement()
+                .satisfies(requisito -> assertThat(requisito).containsKey("bearerAuth"));
     }
 
     @Test
-    void acrescenta401E403EmTudoMenosNoLogin() {
+    void acrescenta401E403EmTodaOperacaoMenosNoLogin() {
+        // Given
         Operation login = new Operation().responses(new ApiResponses());
         Operation listar = new Operation().responses(new ApiResponses());
         Operation criar = new Operation().responses(new ApiResponses());
@@ -43,8 +47,10 @@ class OpenApiConfigTest {
                 .addPathItem("/api/auth/login", new PathItem().post(login))
                 .addPathItem("/api/motoristas", new PathItem().get(listar).post(criar)));
 
+        // When
         config.respostasDeSeguranca().customise(openApi);
 
+        // Then
         assertThat(login.getResponses()).doesNotContainKeys("401", "403");
         assertThat(listar.getResponses()).containsKeys("401", "403");
         assertThat(criar.getResponses()).containsKeys("401", "403");

@@ -9,7 +9,9 @@ import com.AJTBackend.exception.TransferNaoEncontradoException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
@@ -21,7 +23,6 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -63,84 +64,162 @@ class TransferErrosWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
     void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        enviar(post("/api/transfers"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(post("/api/transfers"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(transferService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
     void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        enviar(put("/api/transfers/1"), json).andExpect(validacao(detalhe));
+        // When
+        ResultActions resposta = enviar(put("/api/transfers/1"), json);
+
+        // Then
+        resposta.andExpect(validacao(detalhe));
         verify(transferService, never()).atualizar(any(), any());
     }
 
-    @Test
-    void dataOuHoraEmFormatoErradoRetorna400() throws Exception {
-        enviar(post("/api/transfers"), "{\"dataTransfer\":\"2026-02-30\",\"horaTransfer\":\"10:00:00\",\"origem\":\"A\",\"destino\":\"B\"}")
-                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
-        enviar(post("/api/transfers"), "{\"dataTransfer\":\"2026-10-21\",\"horaTransfer\":\"10h\",\"origem\":\"A\",\"destino\":\"B\"}")
-                .andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+    @ParameterizedTest(name = "{0} -> 400")
+    @CsvSource(delimiter = '|', value = {
+            "data inexistente (30/02) | \"dataTransfer\":\"2026-02-30\",\"horaTransfer\":\"10:00:00\"",
+            "hora fora do formato     | \"dataTransfer\":\"2026-10-21\",\"horaTransfer\":\"10h\""})
+    void dataOuHoraEmFormatoErradoRetorna400(String caso, String dataEHora) throws Exception {
+        // Given
+        String corpo = "{" + dataEHora + ",\"origem\":\"A\",\"destino\":\"B\"}";
+
+        // When
+        ResultActions resposta = enviar(post("/api/transfers"), corpo);
+
+        // Then
+        resposta.andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
+        verify(transferService, never()).criar(any());
     }
 
     @Test
-    void filtrosInvalidosRetornam400() throws Exception {
+    void filtroComPeriodoInvertidoRetorna400() throws Exception {
+        // Given
         when(transferService.listar(any(), any()))
                 .thenThrow(new RegraNegocioException("A data inicial (2026-10-30) é depois da final (2026-10-01)."));
 
-        chamar(get("/api/transfers").param("dataInicio", "2026-10-30").param("dataFim", "2026-10-01"))
-                .andExpect(erro(400, "Regra de negócio", "depois da final"));
-        chamar(get("/api/transfers").param("dataFim", "31/10/2026")).andExpect(validacao("dataFim"));
-        chamar(get("/api/transfers").param("status", "PERDIDO")).andExpect(validacao("status"));
-        chamar(get("/api/transfers").param("semOs", "talvez")).andExpect(validacao("semOs"));
+        // When
+        ResultActions resposta = chamar(get("/api/transfers").param("dataInicio", "2026-10-30").param("dataFim", "2026-10-01"));
+
+        // Then
+        resposta.andExpect(erro(400, "Regra de negócio", "depois da final"));
+    }
+
+    @ParameterizedTest(name = "{0}={1} -> 400")
+    @CsvSource({"dataFim, 31/10/2026", "status, PERDIDO", "semOs, talvez"})
+    void filtroComValorDeTipoErradoRetorna400(String parametro, String valor) throws Exception {
+        // When
+        ResultActions resposta = chamar(get("/api/transfers").param(parametro, valor));
+
+        // Then
+        resposta.andExpect(validacao(parametro));
+        verify(transferService, never()).listar(any(), any());
     }
 
     @Test
-    void regrasDoVinculoComAOsRetornam400() throws Exception {
-        when(transferService.atualizarParcial(eq(1L), any()))
-                .thenThrow(new RegraNegocioException("O transfer é do dia 21/10/2026 e a ordem de serviço #3 é do dia 22/10/2026. A OS agrupa os transfers de um mesmo dia."))
-                .thenThrow(new RegraNegocioException("A ordem de serviço #4 está CANCELADA e não recebe transfers. Use uma OS aberta ou em andamento."));
+    void vincularAOsDeOutroDiaRetorna400() throws Exception {
+        // Given
+        when(transferService.atualizarParcial(eq(1L), any())).thenThrow(new RegraNegocioException(
+                "O transfer é do dia 21/10/2026 e a ordem de serviço #3 é do dia 22/10/2026. A OS agrupa os transfers de um mesmo dia."));
 
-        enviar(patch("/api/transfers/1"), "{\"osId\":3}").andExpect(erro(400, "Regra de negócio", "mesmo dia"));
-        enviar(patch("/api/transfers/1"), "{\"osId\":4}").andExpect(erro(400, "Regra de negócio", "CANCELADA"));
+        // When
+        ResultActions resposta = enviar(patch("/api/transfers/1"), "{\"osId\":3}");
+
+        // Then
+        resposta.andExpect(erro(400, "Regra de negócio", "mesmo dia"));
     }
 
     @Test
-    void recursosRelacionadosInexistentesRetornam404() throws Exception {
-        when(transferService.criar(any()))
-                .thenThrow(new OrdemServicoNaoEncontradoException(30L))
-                .thenThrow(new PassageiroNaoEncontradoException(31L));
+    void vincularAOsCanceladaRetorna400() throws Exception {
+        // Given
+        when(transferService.atualizarParcial(eq(1L), any())).thenThrow(new RegraNegocioException(
+                "A ordem de serviço #4 está CANCELADA e não recebe transfers. Use uma OS aberta ou em andamento."));
 
-        enviar(post("/api/transfers"), "{" + BASE + ",\"osId\":30}").andExpect(erro(404, "Recurso não encontrado", "30"));
-        enviar(post("/api/transfers"), "{" + BASE + ",\"passageiroIds\":[31]}").andExpect(erro(404, "Recurso não encontrado", "31"));
+        // When
+        ResultActions resposta = enviar(patch("/api/transfers/1"), "{\"osId\":4}");
+
+        // Then
+        resposta.andExpect(erro(400, "Regra de negócio", "CANCELADA"));
     }
 
     @Test
-    void idInexistenteRetorna404NosVerbosENosPassageiros() throws Exception {
+    void cadastroComOsInexistenteRetorna404() throws Exception {
+        // Given
+        when(transferService.criar(any())).thenThrow(new OrdemServicoNaoEncontradoException(30L));
+
+        // When
+        ResultActions resposta = enviar(post("/api/transfers"), "{" + BASE + ",\"osId\":30}");
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "30"));
+    }
+
+    @Test
+    void cadastroComPassageiroInexistenteRetorna404() throws Exception {
+        // Given
+        when(transferService.criar(any())).thenThrow(new PassageiroNaoEncontradoException(31L));
+
+        // When
+        ResultActions resposta = enviar(post("/api/transfers"), "{" + BASE + ",\"passageiroIds\":[31]}");
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "31"));
+    }
+
+    static Stream<Arguments> requisicoesAoTransfer99() {
+        return Stream.of(
+                Arguments.of("GET", "/api/transfers/99", null),
+                Arguments.of("GET", "/api/transfers/99/passageiros", null),
+                Arguments.of("PUT", "/api/transfers/99", "{" + BASE + "}"),
+                Arguments.of("PATCH", "/api/transfers/99", "{\"origem\":\"C\"}"),
+                Arguments.of("DELETE", "/api/transfers/99", null));
+    }
+
+    @ParameterizedTest(name = "{0} {1} -> 404")
+    @MethodSource("requisicoesAoTransfer99")
+    void transferInexistenteRetorna404InclusiveNosPassageiros(String verbo, String url, String json) throws Exception {
+        // Given
         when(transferService.buscarPorId(99L)).thenThrow(new TransferNaoEncontradoException(99L));
         when(transferService.atualizar(eq(99L), any())).thenThrow(new TransferNaoEncontradoException(99L));
         when(transferService.atualizarParcial(eq(99L), any())).thenThrow(new TransferNaoEncontradoException(99L));
         doThrow(new TransferNaoEncontradoException(99L)).when(transferService).deletar(99L);
 
-        chamar(get("/api/transfers/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
-        chamar(get("/api/transfers/99/passageiros")).andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(put("/api/transfers/99"), "{" + BASE + "}").andExpect(erro(404, "Recurso não encontrado", "99"));
-        enviar(patch("/api/transfers/99"), "{\"origem\":\"C\"}").andExpect(erro(404, "Recurso não encontrado", "99"));
-        chamar(delete("/api/transfers/99")).andExpect(erro(404, "Recurso não encontrado", "99"));
+        // When
+        ResultActions resposta = executar(verbo, url, json);
+
+        // Then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
     void cambioForaDoArRetorna502() throws Exception {
+        // Given
         when(transferService.criar(any()))
                 .thenThrow(new CotacaoIndisponivelException("USD", "BRL", new RuntimeException("timeout")));
 
-        enviar(post("/api/transfers"), "{" + BASE + ",\"valorOriginal\":100,\"moedaOrigem\":\"USD\"}")
-                .andExpect(erro(502, "Servico externo indisponível", "USD"));
+        // When
+        ResultActions resposta = enviar(post("/api/transfers"), "{" + BASE + ",\"valorOriginal\":100,\"moedaOrigem\":\"USD\"}");
+
+        // Then
+        resposta.andExpect(erro(502, "Servico externo indisponível", "USD"));
     }
 
     @Test
     void versaoVelhaRetorna409() throws Exception {
+        // Given
         when(transferService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Transfer", 1L));
 
-        enviar(put("/api/transfers/1"), "{" + BASE + ",\"versao\":2}").andExpect(erro(409, "Conflito de edição", "Transfer 1"));
+        // When
+        ResultActions resposta = enviar(put("/api/transfers/1"), "{" + BASE + ",\"versao\":2}");
+
+        // Then
+        resposta.andExpect(erro(409, "Conflito de edição", "Transfer 1"));
     }
 }

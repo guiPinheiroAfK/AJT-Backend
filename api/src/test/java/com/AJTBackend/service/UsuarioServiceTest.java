@@ -273,9 +273,10 @@ class UsuarioServiceTest {
         logadoComo("admin");
         Usuario admin = usuario(1L, "admin", Role.ADMIN);
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
+        UsuarioRequestDTO rebaixar = patchRole(Role.ATENDENTE);
 
         // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patchRole(Role.ATENDENTE)))
+        assertThatThrownBy(() -> service.atualizarParcial(1L, rebaixar))
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("próprio perfil");
         assertThat(admin.getRole()).isEqualTo(Role.ADMIN);
@@ -317,9 +318,10 @@ class UsuarioServiceTest {
         logadoComo("admin");
         Usuario admin = usuario(1L, "admin", Role.ADMIN);
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
+        UsuarioRequestDTO desativar = patchAtivo(false);
 
         // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patchAtivo(false)))
+        assertThatThrownBy(() -> service.atualizarParcial(1L, desativar))
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("desativar");
         assertThat(admin.getAtivo()).isTrue();

@@ -4,7 +4,6 @@ import com.AJTBackend.dto.PainelResumoDTO;
 import com.AJTBackend.service.PainelService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -27,7 +26,8 @@ public class PainelController {
     @Operation(summary = "Resumo do dia: transfers e ordens de serviço por status, e faturamento",
             description = "Sem ?data usa o dia de hoje (fuso de São Paulo). "
                     + "O faturamento só vem preenchido para ADMIN e GERENTE; para os outros perfis vem null.")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Resumo devolvido"), @ApiResponse(responseCode = "400", description = "Data inválida (use AAAA-MM-DD)")})
+    @ApiResponse(responseCode = "200", description = "Resumo devolvido")
+    @ApiResponse(responseCode = "400", description = "Data inválida (use AAAA-MM-DD)")
     @GetMapping("/resumo")
     public ResponseEntity<PainelResumoDTO> resumo(
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data) {

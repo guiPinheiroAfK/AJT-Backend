@@ -9,10 +9,10 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.temporal.ChronoUnit;
-import java.util.Date;
 import javax.crypto.SecretKey;
 
 @Service
@@ -35,14 +35,14 @@ public class JwtService {
     }
 
     public String gerarToken(String username, Role role) {
-        Date agora = new Date();
-        Date expiracao = new Date(agora.getTime() + expiration);
+        Instant agora = Instant.now();
 
+        // iat e exp em segundos desde 1970, que e como o JWT guarda datas (RFC 7519)
         return Jwts.builder()
                 .subject(username)
                 .claim("role", role.name())
-                .issuedAt(agora)
-                .expiration(expiracao)
+                .claim(Claims.ISSUED_AT, agora.getEpochSecond())
+                .claim(Claims.EXPIRATION, agora.plusMillis(expiration).getEpochSecond())
                 .signWith(chave)
                 .compact();
     }
@@ -68,9 +68,9 @@ public class JwtService {
         if (instante == null || claims.getIssuedAt() == null) {
             return false;
         }
-        Date limite = Date.from(instante.truncatedTo(ChronoUnit.SECONDS)
-                .atZone(ZoneId.systemDefault()).toInstant());
-        return claims.getIssuedAt().before(limite);
+        Instant limite = instante.truncatedTo(ChronoUnit.SECONDS)
+                .atZone(ZoneId.systemDefault()).toInstant();
+        return claims.getIssuedAt().toInstant().isBefore(limite);
     }
 
     public long getExpiracaoSegundos() {

@@ -8,7 +8,6 @@ import com.AJTBackend.dto.validacao.OnPatch;
 import com.AJTBackend.service.MotoristaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
-import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +29,7 @@ public class MotoristaController {
 
     @Operation(summary = "Lista motoristas (paginado, com filtros opcionais)",
             description = "?nome= e ?cnh= buscam por parte do texto, sem diferenciar maiúsculas. Sem filtro, lista todos.")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Lista devolvida")})
+    @ApiResponse(responseCode = "200", description = "Lista devolvida")
     @GetMapping
     public ResponseEntity<PaginaResponseDTO<MotoristaResponseDTO>> listar(@ParameterObject FiltroMotoristaDTO filtro,
                                                                           @ParameterObject @PageableDefault(size = 20, sort = "id") Pageable pageable) {
@@ -38,21 +37,25 @@ public class MotoristaController {
     }
 
     @Operation(summary = "Busca motorista por ID")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Encontrado"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Encontrado")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @GetMapping("/{id}")
     public ResponseEntity<MotoristaResponseDTO> buscarPorId(@PathVariable Long id) {
         return ResponseEntity.ok(motoristaService.buscarPorId(id));
     }
 
     @Operation(summary = "Busca motorista por CNH")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Encontrado"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Encontrado")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @GetMapping("/buscar")
     public ResponseEntity<MotoristaResponseDTO> buscarPorCnh(@RequestParam String cnh) {
         return ResponseEntity.ok(motoristaService.buscarPorCnh(cnh));
     }
 
     @Operation(summary = "Cria motorista")
-    @ApiResponses({@ApiResponse(responseCode = "201", description = "Criado"), @ApiResponse(responseCode = "400", description = "Dados inválidos ou registro duplicado"), @ApiResponse(responseCode = "404", description = "Recurso relacionado não encontrado")})
+    @ApiResponse(responseCode = "201", description = "Criado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos ou registro duplicado")
+    @ApiResponse(responseCode = "404", description = "Recurso relacionado não encontrado")
     @PostMapping
     public ResponseEntity<MotoristaResponseDTO> criar(@Valid @RequestBody MotoristaRequestDTO dto) {
         MotoristaResponseDTO criado = motoristaService.criar(dto);
@@ -60,7 +63,9 @@ public class MotoristaController {
     }
 
     @Operation(summary = "Atualiza motorista (substituição total)")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Atualizado"), @ApiResponse(responseCode = "400", description = "Dados inválidos"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Atualizado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @PutMapping("/{id}")
     public ResponseEntity<MotoristaResponseDTO> atualizar(@PathVariable Long id,
                                                           @Valid @RequestBody MotoristaRequestDTO dto) {
@@ -68,7 +73,9 @@ public class MotoristaController {
     }
 
     @Operation(summary = "Atualiza motorista parcialmente (só os campos enviados)")
-    @ApiResponses({@ApiResponse(responseCode = "200", description = "Atualizado"), @ApiResponse(responseCode = "400", description = "Dados inválidos"), @ApiResponse(responseCode = "404", description = "Não encontrado")})
+    @ApiResponse(responseCode = "200", description = "Atualizado")
+    @ApiResponse(responseCode = "400", description = "Dados inválidos")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
     @PatchMapping("/{id}")
     public ResponseEntity<MotoristaResponseDTO> atualizarParcial(@PathVariable Long id,
                                                                  @Validated(OnPatch.class) @RequestBody MotoristaRequestDTO dto) {
@@ -76,7 +83,9 @@ public class MotoristaController {
     }
 
     @Operation(summary = "Exclui motorista", description = "Devolve 409 se o motorista estiver vinculado a uma ordem de serviço.")
-    @ApiResponses({@ApiResponse(responseCode = "204", description = "Excluído"), @ApiResponse(responseCode = "404", description = "Não encontrado"), @ApiResponse(responseCode = "409", description = "Registro em uso por outro recurso")})
+    @ApiResponse(responseCode = "204", description = "Excluído")
+    @ApiResponse(responseCode = "404", description = "Não encontrado")
+    @ApiResponse(responseCode = "409", description = "Registro em uso por outro recurso")
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletar(@PathVariable Long id) {
         motoristaService.deletar(id);

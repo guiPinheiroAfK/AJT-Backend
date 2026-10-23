@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Service
 @RequiredArgsConstructor
@@ -195,7 +196,7 @@ public class UsuarioService {
             return;
         }
         usuario.setSenha(passwordEncoder.encode(senha));
-        usuario.setSenhaAlteradaEm(LocalDateTime.now());
+        usuario.setSenhaAlteradaEm(LocalDateTime.now(ZoneId.systemDefault()));
         usuario.setTrocarSenha(!ehUsuarioLogado(usuario));
         log.info("Senha do usuario {} redefinida", usuario.getUsername());
     }

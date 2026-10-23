@@ -36,10 +36,13 @@ public class OpenApiConfig {
         return new OpenAPI()
                 .info(new Info()
                         .title("AJT Backend - Sistema Receptivo")
-                        .description("API REST da AJT Viagens e Turismo: passageiros, motoristas, veículos, transfers, ordens de serviço e paradas.\n\n" +
-                                "**Como testar aqui:** faça `POST /api/auth/login`, copie o `token` da resposta, clique em **Authorize** (cadeado) e cole o token. " +
-                                "Depois é só usar **Try it out** em qualquer endpoint.\n\n" +
-                                "**Perfis:** ADMIN, GERENTE, ATENDENTE e MOTORISTA — cada um enxerga e altera recursos diferentes (401 = sem token; 403 = sem permissão).")
+                        .description("""
+                                API REST da AJT Viagens e Turismo: passageiros, motoristas, veículos, transfers, ordens de serviço e paradas.
+
+                                **Como testar aqui:** faça `POST /api/auth/login`, copie o `token` da resposta, clique em **Authorize** (cadeado) e cole o token. \
+                                Depois é só usar **Try it out** em qualquer endpoint.
+
+                                **Perfis:** ADMIN, GERENTE, ATENDENTE e MOTORISTA — cada um enxerga e altera recursos diferentes (401 = sem token; 403 = sem permissão).""")
                         .version("v1"))
                 .addSecurityItem(new SecurityRequirement().addList(BEARER_SCHEME))
                 .components(new Components()

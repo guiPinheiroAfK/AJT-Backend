@@ -5,6 +5,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.ResultActions;
 
 import java.util.stream.Stream;
 
@@ -113,10 +114,16 @@ class ContratoSucessoWebTest extends ErrosWebTestBase {
     @ParameterizedTest(name = "{0} {1} -> {3}")
     @MethodSource("endpoints")
     void endpointRespondeComOStatusCombinado(String verbo, String url, String corpo, int esperado) throws Exception {
+        // Given
         var requisicao = request(HttpMethod.valueOf(verbo), url).with(admin());
         if (corpo != null) {
             requisicao.contentType(MediaType.APPLICATION_JSON).content(corpo);
         }
-        mockMvc.perform(requisicao).andExpect(status().is(esperado));
+
+        // When
+        ResultActions resposta = mockMvc.perform(requisicao);
+
+        // Then
+        resposta.andExpect(status().is(esperado));
     }
 }

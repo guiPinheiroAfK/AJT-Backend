@@ -23,8 +23,8 @@ import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMoc
 
 /*
  * classe base dos testes de integracao (AutenticacaoIntegrationTest,
- * PersistenciaIntegrationTest, PerformanceIntegrationTest,
- * CotacaoIntegrationTest). sobe a aplicacao inteira, de verdade, contra um
+ * PersistenciaIntegrationTest, CotacaoIntegrationTest e as demais
+ * *IntegrationTest). sobe a aplicacao inteira, de verdade, contra um
  * PostgreSQL 16 real via testcontainers — rodando todas as migrations do
  * flyway (V1 a V6) com ddl-auto=validate — e simula a api de cambio com
  * wiremock, sem sair pra internet.

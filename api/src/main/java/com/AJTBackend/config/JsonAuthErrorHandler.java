@@ -15,6 +15,7 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 /**
  * Padroniza as respostas 401/403 do Spring Security no mesmo formato
@@ -45,7 +46,7 @@ public class JsonAuthErrorHandler implements AuthenticationEntryPoint, AccessDen
     private void escrever(HttpServletResponse response, HttpStatus status, String erro, String mensagem)
             throws IOException {
         ErroResponseDTO corpo = new ErroResponseDTO(
-                LocalDateTime.now(),
+                LocalDateTime.now(ZoneId.systemDefault()),
                 status.value(),
                 erro,
                 mensagem,

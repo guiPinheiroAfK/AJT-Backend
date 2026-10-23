@@ -137,9 +137,10 @@ class ParadaOsServiceTest {
         usuarioLigadoAoMotorista(6L);
         ParadaOs parada = parada();
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
+        ParadaOsRequestDTO concluir = patch(null, StatusParada.CONCLUIDA, null);
 
         // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patch(null, StatusParada.CONCLUIDA, null)))
+        assertThatThrownBy(() -> service.atualizarParcial(1L, concluir))
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("1");
         assertThat(parada.getStatusParada()).isNotEqualTo(StatusParada.CONCLUIDA);

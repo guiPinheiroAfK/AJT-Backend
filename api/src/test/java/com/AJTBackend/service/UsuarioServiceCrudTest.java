@@ -1,9 +1,12 @@
 package com.AJTBackend.service;
 
 import com.AJTBackend.config.UsuarioLogado;
+import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.UsuarioRequestDTO;
+import com.AJTBackend.dto.UsuarioResponseDTO;
 import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
+import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.exception.UsuarioNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.Usuario;
@@ -12,6 +15,8 @@ import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -41,7 +46,7 @@ import static org.mockito.Mockito.when;
  * como rodar: teste unitario com repositorios mockados e BCrypt de verdade (custo baixo);
  * o usuario logado e simulado no SecurityContextHolder. sem spring, sem banco. "mvn test".
  *
- * por que existe: e a tela de quem controla o acesso a todo o resto do sistema.
+ * por que existe: e a tela de quem controla o acesso ao resto inteiro do sistema.
  */
 class UsuarioServiceCrudTest {
 
@@ -64,99 +69,185 @@ class UsuarioServiceCrudTest {
         return new UsuarioRequestDTO(nome, username, senha, role, ativo, motoristaId, versao);
     }
 
-    @Test
-    void cadastroRespeitaOAtivoInformado() {
-        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        assertThat(service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, true, null, null)).ativo()).isTrue();
-        assertThat(service.criar(dto("Bia", "bia", "senha12345", Role.ATENDENTE, false, null, null)).ativo()).isFalse();
+    private static void logadoComo(String username) {
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(username, null, List.of()));
     }
 
     @Test
-    void listaEBuscas() {
+    void listarTodosDevolveAPaginaConvertida() {
+        // Given
         var pagina = PageRequest.of(0, 5);
         when(repository.findAll(pagina)).thenReturn(new PageImpl<>(List.of(maria()), pagina, 1));
+
+        // When
+        PaginaResponseDTO<UsuarioResponseDTO> resultado = service.listarTodos(pagina);
+
+        // Then
+        assertThat(resultado.conteudo()).extracting(UsuarioResponseDTO::username).containsExactly("maria");
+    }
+
+    @Test
+    void buscaPorIdDevolveOUsuario() {
+        // Given
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
+
+        // When
+        UsuarioResponseDTO encontrado = service.buscarPorId(2L);
+
+        // Then
+        assertThat(encontrado.username()).isEqualTo("maria");
+        assertThat(encontrado.role()).isEqualTo(Role.ATENDENTE);
+    }
+
+    @Test
+    void buscaPorIdInexistenteLanca404() {
+        // Given
         when(repository.findById(9L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void buscaPorUsernameInexistenteLanca404ComOUsername() {
+        // Given
         when(repository.findByUsername("ninguem")).thenReturn(Optional.empty());
 
-        assertThat(service.listarTodos(pagina).conteudo()).hasSize(1);
-        assertThat(service.buscarPorId(2L).username()).isEqualTo("maria");
-        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(UsuarioNaoEncontradoException.class);
-        assertThatThrownBy(() -> service.buscarPorUsername("ninguem")).isInstanceOf(UsuarioNaoEncontradoException.class)
+        // When / Then
+        assertThatThrownBy(() -> service.buscarPorUsername("ninguem"))
+                .isInstanceOf(UsuarioNaoEncontradoException.class)
                 .hasMessageContaining("ninguem");
     }
 
     @Test
-    void cadastroComSenhaEmBrancoLanca400ESemAtivoNasceAtivo() {
-        assertThatThrownBy(() -> service.criar(dto("Ana", "ana", "   ", Role.ATENDENTE, null, null, null)))
-                .hasMessageContaining("Senha é obrigatória");
+    void cadastroComSenhaEmBrancoLanca400SemGravar() {
+        // Given
+        UsuarioRequestDTO semSenha = dto("Ana", "ana", "   ", Role.ATENDENTE, null, null, null);
 
+        // When / Then
+        assertThatThrownBy(() -> service.criar(semSenha))
+                .isInstanceOf(RegraNegocioException.class)
+                .hasMessageContaining("Senha é obrigatória");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void cadastroSemAtivoNasceAtivoEObrigaTrocarSenha() {
+        // Given
         when(repository.existsByUsername("ana")).thenReturn(false);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-        var criada = service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, null, null, null));
+
+        // When
+        UsuarioResponseDTO criada = service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, null, null, null));
+
+        // Then
         assertThat(criada.ativo()).isTrue();
         assertThat(criada.trocarSenha()).isTrue();
+    }
 
-        assertThat(service.criar(dto("Bia", "bia", "senha12345", Role.ATENDENTE, false, null, null)).ativo()).isFalse();
+    @ParameterizedTest
+    @ValueSource(booleans = {true, false})
+    void cadastroRespeitaOAtivoInformado(boolean ativo) {
+        // Given
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        UsuarioResponseDTO criado = service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, ativo, null, null));
+
+        // Then
+        assertThat(criado.ativo()).isEqualTo(ativo);
     }
 
     @Test
-    void edicaoDeUsuarioInexistenteLanca404() {
+    void putDeUsuarioInexistenteLanca404() {
+        // Given
+        when(repository.findById(9L)).thenReturn(Optional.empty());
+        UsuarioRequestDTO dto = dto("X", "x12", null, Role.ATENDENTE, null, null, null);
+
+        // When / Then
+        assertThatThrownBy(() -> service.atualizar(9L, dto)).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void patchDeUsuarioInexistenteLanca404() {
+        // Given
+        when(repository.findById(9L)).thenReturn(Optional.empty());
+        UsuarioRequestDTO dto = dto(null, null, null, null, null, null, null);
+
+        // When / Then
+        assertThatThrownBy(() -> service.atualizarParcial(9L, dto)).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void excluirUsuarioInexistenteLanca404() {
+        // Given
         when(repository.findById(9L)).thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> service.atualizar(9L, dto("X", "x12", null, Role.ATENDENTE, null, null, null)))
-                .isInstanceOf(UsuarioNaoEncontradoException.class);
-        assertThatThrownBy(() -> service.atualizarParcial(9L, dto(null, null, null, null, null, null, null)))
-                .isInstanceOf(UsuarioNaoEncontradoException.class);
+        // When / Then
         assertThatThrownBy(() -> service.deletar(9L)).isInstanceOf(UsuarioNaoEncontradoException.class);
+        verify(repository, never()).delete(any());
     }
 
     @Test
-    void versaoVelhaLanca409() {
+    void putComVersaoVelhaLanca409() {
+        // Given
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
+        UsuarioRequestDTO versaoVelha = dto("Maria", "maria", null, Role.ATENDENTE, null, null, 0L);
 
-        assertThatThrownBy(() -> service.atualizar(2L, dto("Maria", "maria", null, Role.ATENDENTE, null, null, 0L)))
-                .isInstanceOf(ConflitoDeVersaoException.class);
+        // When / Then
+        assertThatThrownBy(() -> service.atualizar(2L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
     }
 
     @Test
-    void putCompletoComMesmoUsernameMesmoPerfilESenhaEmBranco() {
+    void putComMesmoUsernameESenhaEmBrancoNaoMexeNaSenhaNemConsultaDuplicidade() {
+        // Given
         Usuario existente = maria();
         when(repository.findById(2L)).thenReturn(Optional.of(existente));
 
-        var salvo = service.atualizar(2L, dto("Maria Souza", "maria", "", Role.ATENDENTE, true, null, 1L));
+        // When
+        UsuarioResponseDTO salvo = service.atualizar(2L, dto("Maria Souza", "maria", "", Role.ATENDENTE, true, null, 1L));
 
+        // Then
         assertThat(salvo.nome()).isEqualTo("Maria Souza");
-        assertThat(existente.getSenha()).isEqualTo("hash"); // senha em branco nao mexe na atual
-        verify(repository, never()).existsByUsername(any()); // mesmo username: nem consulta
+        assertThat(existente.getSenha()).isEqualTo("hash");
+        verify(repository, never()).existsByUsername(any());
     }
 
     @Test
-    void putTrocandoPerfilEReativandoDeOutroUsuario() {
+    void putTrocandoPerfilUsernameESenhaDeOutroUsuarioObrigaTrocaNoProximoLogin() {
+        // Given
         Usuario inativo = maria();
         inativo.setAtivo(false);
         when(repository.findById(2L)).thenReturn(Optional.of(inativo));
         when(repository.existsByUsername("maria.s")).thenReturn(false);
 
-        var salvo = service.atualizar(2L, dto("Maria", "maria.s", "novasenha1", Role.GERENTE, true, null, null));
+        // When
+        UsuarioResponseDTO salvo = service.atualizar(2L, dto("Maria", "maria.s", "novasenha1", Role.GERENTE, true, null, null));
 
+        // Then
         assertThat(salvo.role()).isEqualTo(Role.GERENTE);
         assertThat(salvo.ativo()).isTrue();
         assertThat(salvo.username()).isEqualTo("maria.s");
-        assertThat(salvo.trocarSenha()).isTrue(); // senha definida pelo admin: troca no proximo login
+        assertThat(salvo.trocarSenha()).isTrue();
+        assertThat(encoder.matches("novasenha1", inativo.getSenha())).isTrue();
     }
 
     @Test
     void trocarAPropriaSenhaPelaTelaNaoObrigaTrocaDeNovo() {
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("maria", null, List.of()));
+        // Given
+        logadoComo("maria");
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
 
-        assertThat(service.atualizarParcial(2L, dto(null, null, "minhanova1", null, null, null, null)).trocarSenha()).isFalse();
+        // When
+        UsuarioResponseDTO salvo = service.atualizarParcial(2L, dto(null, null, "minhanova1", null, null, null, null));
+
+        // Then
+        assertThat(salvo.trocarSenha()).isFalse();
     }
 
     @Test
-    void patchDeUsernameEDeMotorista() {
+    void patchTrocaUsernameELigaAoCadastroDeMotorista() {
+        // Given
         Usuario motorista = maria();
         motorista.setRole(Role.MOTORISTA);
         when(repository.findById(2L)).thenReturn(Optional.of(motorista));
@@ -165,30 +256,51 @@ class UsuarioServiceCrudTest {
         // o mesmo usuario ja estava ligado a este motorista: religar nao e duplicidade
         when(repository.findByMotoristaId(5L)).thenReturn(Optional.of(motorista));
 
-        var salvo = service.atualizarParcial(2L, dto(null, "carlos", null, null, null, 5L, null));
+        // When
+        UsuarioResponseDTO salvo = service.atualizarParcial(2L, dto(null, "carlos", null, null, null, 5L, null));
 
+        // Then
         assertThat(salvo.username()).isEqualTo("carlos");
         assertThat(salvo.motoristaId()).isEqualTo(5L);
     }
 
     @Test
-    void motoristaInexistenteNoVinculoLanca404() {
+    void ligarAMotoristaInexistenteLanca404() {
+        // Given
         Usuario motorista = maria();
         motorista.setRole(Role.MOTORISTA);
         when(repository.findById(2L)).thenReturn(Optional.of(motorista));
         when(motoristaRepository.findById(77L)).thenReturn(Optional.empty());
+        UsuarioRequestDTO patch = dto(null, null, null, null, null, 77L, null);
 
-        assertThatThrownBy(() -> service.atualizarParcial(2L, dto(null, null, null, null, null, 77L, null)))
-                .isInstanceOf(MotoristaNaoEncontradoException.class);
+        // When / Then
+        assertThatThrownBy(() -> service.atualizarParcial(2L, patch)).isInstanceOf(MotoristaNaoEncontradoException.class);
     }
 
     @Test
-    void ativoIgualAoAtualNaoMudaNadaEExclusaoDeOutroApaga() {
+    void patchComAtivoEPerfilIguaisAosAtuaisNaoMudaNada() {
+        // Given
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
 
-        assertThat(service.atualizarParcial(2L, dto(null, null, null, Role.ATENDENTE, true, null, null)).ativo()).isTrue();
+        // When
+        UsuarioResponseDTO salvo = service.atualizarParcial(2L, dto(null, null, null, Role.ATENDENTE, true, null, null));
 
+        // Then
+        assertThat(salvo.ativo()).isTrue();
+        assertThat(salvo.role()).isEqualTo(Role.ATENDENTE);
+    }
+
+    @Test
+    void adminExcluiOutroUsuario() {
+        // Given
+        logadoComo("admin");
+        Usuario maria = maria();
+        when(repository.findById(2L)).thenReturn(Optional.of(maria));
+
+        // When
         service.deletar(2L);
-        verify(repository).delete(any(Usuario.class));
+
+        // Then
+        verify(repository).delete(maria);
     }
 }

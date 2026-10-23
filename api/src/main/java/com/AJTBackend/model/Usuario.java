@@ -6,6 +6,7 @@ import lombok.*;
 import org.hibernate.annotations.OptimisticLock;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 
 @Entity
 @Table(name = "usuarios")
@@ -63,5 +64,5 @@ public class Usuario {
 
     @Column(name = "criado_em", nullable = false, updatable = false)
     @Builder.Default
-    private LocalDateTime criadoEm = LocalDateTime.now();
+    private LocalDateTime criadoEm = LocalDateTime.now(ZoneId.systemDefault());
 }
