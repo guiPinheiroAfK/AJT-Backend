@@ -1,11 +1,13 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.config.DocumentoHash;
 import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.FiltroPassageiroDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
 import com.AJTBackend.exception.ConflitoDeVersaoException;
+import com.AJTBackend.exception.DocumentoJaCadastradoException;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.model.Passageiro;
@@ -38,7 +40,8 @@ import static org.mockito.Mockito.when;
 /*
  * o que testa: as regras do PassageiroService que nao sao so CRUD — validacao
  * do CPF (digitos verificadores, com ou sem pontuacao) no cadastro e no PATCH,
- * e o documento mascarado quando quem le e o MOTORISTA.
+ * documento ja cadastrado em outro passageiro (com ou sem pontuacao) no cadastro,
+ * no PUT e no PATCH, e o documento mascarado quando quem le e o MOTORISTA.
  *
  * como rodar: teste unitario com o repositorio mockado e o perfil simulado no
  * SecurityContextHolder. sem spring, sem banco. roda com "mvn test".
@@ -51,7 +54,9 @@ class PassageiroServiceTest {
     private static final String CPF_VALIDO = "529.982.247-25";
 
     private final PassageiroRepository repository = mock(PassageiroRepository.class);
-    private final PassageiroService service = new PassageiroService(repository, new UsuarioLogado());
+    // chave de teste (32 bytes em Base64), a mesma ideia da AJT_CRYPTO_KEY
+    private final DocumentoHash documentoHash = new DocumentoHash("MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=");
+    private final PassageiroService service = new PassageiroService(repository, new UsuarioLogado(), documentoHash);
 
     @AfterEach
     void limparContexto() {
@@ -178,6 +183,85 @@ class PassageiroServiceTest {
         Passageiro gravado = gravadoPeloSave();
         assertThat(gravado.getTipoDocumento()).isEqualTo("PASSAPORTE");
         assertThat(gravado.getDocumento()).isEqualTo("XP9988776");
+    }
+
+    // ----- documento duplicado -----
+
+    @Test
+    void cadastroComDocumentoDeOutroPassageiroRetorna400SemGravar() {
+        // Given: o mesmo CPF ja existe, gravado sem pontuacao
+        when(repository.existsByDocumentoHash(documentoHash.calcular("CPF", "52998224725"))).thenReturn(true);
+        PassageiroRequestDTO dto = new PassageiroRequestDTO("Outra", "CPF", CPF_VALIDO, null, null);
+
+        // When / Then
+        assertThatThrownBy(() -> service.criar(dto))
+                .isInstanceOf(DocumentoJaCadastradoException.class)
+                .hasMessage("Já existe passageiro cadastrado com este CPF.");
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void cadastroGravaOHashDoDocumento() {
+        // Given
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        // When
+        service.criar(new PassageiroRequestDTO("Ana", "CPF", CPF_VALIDO, null, null));
+
+        // Then
+        assertThat(gravadoPeloSave().getDocumentoHash()).isEqualTo(documentoHash.calcular("CPF", CPF_VALIDO));
+    }
+
+    @Test
+    void putComDocumentoDeOutroPassageiroRetorna400SemGravar() {
+        // Given
+        when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "RG", "12345")));
+        when(repository.existsByDocumentoHashAndIdNot(documentoHash.calcular("CPF", CPF_VALIDO), 1L)).thenReturn(true);
+        PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", CPF_VALIDO, null, null);
+
+        // When / Then
+        assertThatThrownBy(() -> service.atualizar(1L, dto)).isInstanceOf(DocumentoJaCadastradoException.class);
+        verify(repository, never()).flush();
+    }
+
+    @Test
+    void putMantendoOProprioDocumentoNaoContaComoDuplicado() {
+        // Given: so o proprio registro tem o documento (a consulta ignora o id 1)
+        Passageiro ana = passageiro(1L, null, "Ana", "CPF", CPF_VALIDO);
+        when(repository.findById(1L)).thenReturn(Optional.of(ana));
+
+        // When
+        service.atualizar(1L, new PassageiroRequestDTO("Ana Paula", "CPF", CPF_VALIDO, null, null));
+
+        // Then
+        verify(repository).existsByDocumentoHashAndIdNot(documentoHash.calcular("CPF", CPF_VALIDO), 1L);
+        assertThat(ana.getDocumentoHash()).isEqualTo(documentoHash.calcular("CPF", CPF_VALIDO));
+        verify(repository).flush();
+    }
+
+    @Test
+    void patchQueTrocaODocumentoPeloDeOutroPassageiroRetorna400() {
+        // Given
+        Passageiro ana = passageiro(1L, null, "Ana", "CPF", "100.000.001-08");
+        when(repository.findById(1L)).thenReturn(Optional.of(ana));
+        when(repository.existsByDocumentoHashAndIdNot(documentoHash.calcular("CPF", CPF_VALIDO), 1L)).thenReturn(true);
+
+        // When / Then
+        assertThatThrownBy(() -> service.atualizarParcial(1L, new PassageiroRequestDTO(null, null, CPF_VALIDO, null, null)))
+                .isInstanceOf(DocumentoJaCadastradoException.class);
+        verify(repository, never()).flush();
+    }
+
+    @Test
+    void patchSoDeNomeNemConsultaDuplicado() {
+        // Given
+        when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "CPF", CPF_VALIDO)));
+
+        // When
+        service.atualizarParcial(1L, new PassageiroRequestDTO("Ana Maria", null, null, null, null));
+
+        // Then
+        verify(repository, never()).existsByDocumentoHashAndIdNot(any(), any());
     }
 
     // ----- perfil: documento mascarado ou completo -----

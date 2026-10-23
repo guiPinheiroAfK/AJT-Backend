@@ -1,10 +1,12 @@
 package com.AJTBackend.service;
 
+import com.AJTBackend.config.DocumentoHash;
 import com.AJTBackend.config.UsuarioLogado;
 import com.AJTBackend.dto.FiltroPassageiroDTO;
 import com.AJTBackend.dto.PaginaResponseDTO;
 import com.AJTBackend.dto.PassageiroRequestDTO;
 import com.AJTBackend.dto.PassageiroResponseDTO;
+import com.AJTBackend.exception.DocumentoJaCadastradoException;
 import com.AJTBackend.exception.PassageiroNaoEncontradoException;
 import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.model.Passageiro;
@@ -31,6 +33,7 @@ public class PassageiroService {
 
     private final PassageiroRepository passageiroRepository;
     private final UsuarioLogado usuarioLogado;
+    private final DocumentoHash documentoHash;
 
     // RF015: nome e nacionalidade sao opcionais (contem, sem diferenciar maiusculas)
     public PaginaResponseDTO<PassageiroResponseDTO> listar(FiltroPassageiroDTO filtro, Pageable pageable) {
@@ -61,10 +64,15 @@ public class PassageiroService {
     @Transactional
     public PassageiroResponseDTO criar(PassageiroRequestDTO dto) {
         validarDocumento(dto.tipoDocumento(), dto.documento());
+        String hash = documentoHash.calcular(dto.tipoDocumento(), dto.documento());
+        if (passageiroRepository.existsByDocumentoHash(hash)) {
+            throw new DocumentoJaCadastradoException(dto.tipoDocumento());
+        }
         Passageiro passageiro = Passageiro.builder()
                 .nome(dto.nome())
                 .tipoDocumento(dto.tipoDocumento())
                 .documento(dto.documento())
+                .documentoHash(hash)
                 .nacionalidade(dto.nacionalidade())
                 .build();
 
@@ -84,6 +92,7 @@ public class PassageiroService {
         passageiro.setTipoDocumento(dto.tipoDocumento());
         passageiro.setDocumento(dto.documento());
         passageiro.setNacionalidade(dto.nacionalidade());
+        conferirDuplicado(passageiro);
 
         passageiroRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(passageiro);
@@ -110,6 +119,7 @@ public class PassageiroService {
         // valida o estado final: o PATCH pode trocar so o tipo ou so o numero
         if (dto.tipoDocumento() != null || dto.documento() != null) {
             validarDocumento(passageiro.getTipoDocumento(), passageiro.getDocumento());
+            conferirDuplicado(passageiro);
         }
 
         passageiroRepository.flush(); // grava agora pra resposta ja levar a versao nova
@@ -123,6 +133,15 @@ public class PassageiroService {
         }
         passageiroRepository.deleteById(id);
         log.info("Passageiro removido: id={}", id);
+    }
+
+    // recalcula o hash do estado final e recusa se outro passageiro ja tem o mesmo documento
+    private void conferirDuplicado(Passageiro passageiro) {
+        String hash = documentoHash.calcular(passageiro.getTipoDocumento(), passageiro.getDocumento());
+        if (passageiroRepository.existsByDocumentoHashAndIdNot(hash, passageiro.getId())) {
+            throw new DocumentoJaCadastradoException(passageiro.getTipoDocumento());
+        }
+        passageiro.setDocumentoHash(hash);
     }
 
     private PassageiroResponseDTO toResponseDTO(Passageiro p) {
