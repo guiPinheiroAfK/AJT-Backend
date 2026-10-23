@@ -8,6 +8,8 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /*
@@ -80,7 +82,11 @@ class DocumentoHashTest {
         PassageiroRepository repository = mock(PassageiroRepository.class);
         when(repository.findByDocumentoHashIsNull()).thenReturn(List.of());
 
-        // when / then: sem passageiros antigos, so consulta e sai
+        // when
         new DocumentoHashBackfill(repository, hash).run(null);
+
+        // then: sem passageiros antigos, so consulta e sai
+        verify(repository).findByDocumentoHashIsNull();
+        verifyNoMoreInteractions(repository);
     }
 }

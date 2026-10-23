@@ -380,8 +380,9 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         PdfReader leitor = new PdfReader(resposta.andReturn().getResponse().getContentAsByteArray());
         String texto = new PdfTextExtractor(leitor).getTextFromPage(1);
         leitor.close();
-        assertThat(texto).contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU");
-        assertThat(texto).doesNotContain("321", "PDF111"); // nem valor nem documento no papel do motorista
+        assertThat(texto)
+                .contains("Ordem de Serviço nº " + osId, "Ana Relatorio", "GRU")
+                .doesNotContain("321", "PDF111"); // nem valor nem documento no papel do motorista
     }
 
     @Test
