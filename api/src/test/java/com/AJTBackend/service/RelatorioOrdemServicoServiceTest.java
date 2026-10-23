@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /*
@@ -60,30 +61,45 @@ class RelatorioOrdemServicoServiceTest {
     }
 
     @Test
-    void osInexistenteOuDeOutroMotoristaLanca404() {
+    void osInexistenteLanca404() {
+        // Given
         when(ordemServicoRepository.findById(9L)).thenReturn(Optional.empty());
+
+        // When / Then
+        assertThatThrownBy(() -> service.gerar(9L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        verifyNoInteractions(paradaOsRepository);
+    }
+
+    @Test
+    void motoristaNaoImprimeOsDeOutroERecebe404() {
+        // Given
         when(ordemServicoRepository.findById(1L)).thenReturn(Optional.of(OrdemServico.builder().id(1L).build()));
         when(acessoMotorista.podeVer(any())).thenReturn(false);
 
-        assertThatThrownBy(() -> service.gerar(9L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        // When / Then
         assertThatThrownBy(() -> service.gerar(1L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        verifyNoInteractions(paradaOsRepository);
     }
 
     @Test
     void osVaziaSaiComAvisosEmVezDeNull() throws IOException {
+        // Given
         OrdemServico vazia = OrdemServico.builder().id(2L).dataServico(null).status(null).build();
         when(ordemServicoRepository.findById(2L)).thenReturn(Optional.of(vazia));
         when(acessoMotorista.podeVer(any())).thenReturn(true);
         when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(2L)).thenReturn(List.of());
 
+        // When
         String texto = texto(service.gerar(2L));
 
+        // Then
         assertThat(texto).contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado");
         assertThat(texto).doesNotContain("null");
     }
 
     @Test
     void osCompletaListaRoteiroETransfersComCamposVazios() throws IOException {
+        // Given
         Transfer comPassageiros = Transfer.builder().id(12L).horaTransfer(LocalTime.of(9, 0)).origem("Aeroporto").destino("Hotel")
                 .passageiros(Set.of(Passageiro.builder().id(1L).nome("Bia").build(), Passageiro.builder().id(2L).nome("Ana").build()))
                 .build();
@@ -101,8 +117,10 @@ class RelatorioOrdemServicoServiceTest {
         when(acessoMotorista.podeVer(any())).thenReturn(true);
         when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(3L)).thenReturn(List.of(comTudo, semNada));
 
+        // When
         String texto = texto(service.gerar(3L));
 
+        // Then
         assertThat(texto).contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares");
         assertThat(texto).doesNotContain("Tel."); // sem telefone, sem rotulo solto
         assertThat(texto).contains("08:45", "EMBARQUE", "#11, #12"); // transfers da parada em ordem de id
@@ -114,6 +132,7 @@ class RelatorioOrdemServicoServiceTest {
     // RNF007/LGPD: o papel fica com o motorista, entao o documento do passageiro nunca e impresso
     @Test
     void documentoDoPassageiroNaoSaiNoPapel() throws IOException {
+        // Given
         Transfer transfer = Transfer.builder().id(20L).horaTransfer(LocalTime.of(10, 0)).origem("GRU").destino("Hotel")
                 .passageiros(Set.of(
                         Passageiro.builder().id(1L).nome("Ana Lima").tipoDocumento("CPF").documento("529.982.247-25").build(),
@@ -125,8 +144,10 @@ class RelatorioOrdemServicoServiceTest {
         when(acessoMotorista.podeVer(any())).thenReturn(true);
         when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(4L)).thenReturn(List.of());
 
+        // When
         String texto = texto(service.gerar(4L));
 
+        // Then
         assertThat(texto).contains("Ana Lima", "John Doe");
         assertThat(texto).doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
     }
