@@ -29,58 +29,58 @@ class DocumentoHashTest {
     private final DocumentoHash hash = new DocumentoHash(CHAVE);
 
     @Test
-    void mesmoDocumentoComOuSemPontuacaoDaOMesmoHash() {
-        // When
+    void deveDarOMesmoHash_quandoODocumentoVemComOuSemPontuacao() {
+        // when
         String comPontuacao = hash.calcular("CPF", "529.982.247-25");
         String semPontuacao = hash.calcular("cpf", " 52998224725 ");
 
-        // Then
+        // then
         assertThat(comPontuacao).isEqualTo(semPontuacao).hasSize(64).doesNotContain("52998224725");
     }
 
     @Test
-    void passaporteIgnoraMaiusculas() {
-        // When / Then
+    void deveIgnorarMaiusculasEHifen_quandoDocumentoEhPassaporte() {
+        // when / then
         assertThat(hash.calcular("PASSAPORTE", "xp-998877")).isEqualTo(hash.calcular("PASSAPORTE", "XP998877"));
     }
 
     @Test
-    void tipoOuChaveDiferenteDaOutroHash() {
-        // Given
+    void deveDarOutroHash_quandoTipoOuChaveMudam() {
+        // given
         String cpf = hash.calcular("CPF", "52998224725");
 
-        // When / Then
+        // when / then
         assertThat(hash.calcular("RG", "52998224725")).isNotEqualTo(cpf);
         assertThat(new DocumentoHash(OUTRA_CHAVE).calcular("CPF", "52998224725")).isNotEqualTo(cpf);
     }
 
     @Test
-    void documentoNuloNaoQuebra() {
-        // When / Then
+    void naoDeveQuebrar_quandoTipoEDocumentoSaoNulos() {
+        // when / then
         assertThat(hash.calcular(null, null)).hasSize(64);
     }
 
     @Test
-    void backfillPreencheOsPassageirosAntigos() {
-        // Given
+    void devePreencherOHash_quandoBackfillAchaPassageiroAntigo() {
+        // given
         PassageiroRepository repository = mock(PassageiroRepository.class);
         Passageiro antigo = Passageiro.builder().id(1L).tipoDocumento("CPF").documento("529.982.247-25").build();
         when(repository.findByDocumentoHashIsNull()).thenReturn(List.of(antigo));
 
-        // When
+        // when
         new DocumentoHashBackfill(repository, hash).run(null);
 
-        // Then
+        // then
         assertThat(antigo.getDocumentoHash()).isEqualTo(hash.calcular("CPF", "52998224725"));
     }
 
     @Test
-    void backfillSemPendenciasNaoFazNada() {
-        // Given
+    void naoDeveFazerNada_quandoBackfillNaoAchaPendencias() {
+        // given
         PassageiroRepository repository = mock(PassageiroRepository.class);
         when(repository.findByDocumentoHashIsNull()).thenReturn(List.of());
 
-        // When / Then: sem passageiros antigos, so consulta e sai
+        // when / then: sem passageiros antigos, so consulta e sai
         new DocumentoHashBackfill(repository, hash).run(null);
     }
 }

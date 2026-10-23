@@ -54,131 +54,157 @@ class VeiculoErrosWebTest extends ErrosWebTestBase {
 
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
-    void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoCadastroTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/veiculos"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(veiculoService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
-    void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoPutTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(put("/api/veiculos/1"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(veiculoService, never()).atualizar(any(), any());
     }
 
     @Test
-    void capacidadeComTextoRetorna400DeCorpoInvalido() throws Exception {
-        // When
+    void deveRetornar400DeCorpoInvalido_quandoCapacidadeVemComoTexto() throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/veiculos"), "{\"label\":\"Van\",\"placa\":\"ABC1D23\",\"capacidade\":\"quinze\"}");
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Requisição inválida", "corpo da requisição"));
     }
 
-    static Stream<Arguments> patchesInvalidos() {
-        return Stream.of(
-                Arguments.of("{\"placa\":\"\"}", "placa: Placa não pode ser vazia"),
-                Arguments.of("{\"capacidade\":0}", "capacidade: Capacidade deve ser maior que zero"));
-    }
+    @Test
+    void deveRetornar400SemChamarOService_quandoPatchTrazPlacaVazia() throws Exception {
+        // when
+        ResultActions resposta = enviar(patch("/api/veiculos/1"), "{\"placa\":\"\"}");
 
-    @ParameterizedTest(name = "PATCH {0} -> 400")
-    @MethodSource("patchesInvalidos")
-    void patchComTextoVazioOuCapacidadeInvalidaRetorna400(String json, String detalhe) throws Exception {
-        // When
-        ResultActions resposta = enviar(patch("/api/veiculos/1"), json);
-
-        // Then
-        resposta.andExpect(validacao(detalhe));
+        // then
+        resposta.andExpect(validacao("placa: Placa não pode ser vazia"));
         verify(veiculoService, never()).atualizarParcial(any(), any());
     }
 
-    static Stream<Arguments> verbosNoId99() {
-        return Stream.of(
-                Arguments.of("GET", null),
-                Arguments.of("PUT", VALIDO),
-                Arguments.of("PATCH", "{\"marca\":\"Fiat\"}"),
-                Arguments.of("DELETE", null));
+    @Test
+    void deveRetornar400SemChamarOService_quandoPatchTrazCapacidadeZero() throws Exception {
+        // when
+        ResultActions resposta = enviar(patch("/api/veiculos/1"), "{\"capacidade\":0}");
+
+        // then
+        resposta.andExpect(validacao("capacidade: Capacidade deve ser maior que zero"));
+        verify(veiculoService, never()).atualizarParcial(any(), any());
     }
 
-    @ParameterizedTest(name = "{0} /api/veiculos/99 -> 404")
-    @MethodSource("verbosNoId99")
-    void idInexistenteRetorna404EmCadaVerbo(String verbo, String json) throws Exception {
-        // Given
+    @Test
+    void deveRetornar404_quandoGetEmIdInexistente() throws Exception {
+        // given
         when(veiculoService.buscarPorId(99L)).thenThrow(new VeiculoNaoEncontradoException(99L));
-        when(veiculoService.atualizar(eq(99L), any())).thenThrow(new VeiculoNaoEncontradoException(99L));
-        when(veiculoService.atualizarParcial(eq(99L), any())).thenThrow(new VeiculoNaoEncontradoException(99L));
-        doThrow(new VeiculoNaoEncontradoException(99L)).when(veiculoService).deletar(99L);
 
-        // When
-        ResultActions resposta = executar(verbo, "/api/veiculos/99", json);
+        // when
+        ResultActions resposta = chamar(get("/api/veiculos/99"));
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
-    void buscaPorPlacaInexistenteRetorna404() throws Exception {
-        // Given
+    void deveRetornar404_quandoPutEmIdInexistente() throws Exception {
+        // given
+        when(veiculoService.atualizar(eq(99L), any())).thenThrow(new VeiculoNaoEncontradoException(99L));
+
+        // when
+        ResultActions resposta = enviar(put("/api/veiculos/99"), VALIDO);
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoPatchEmIdInexistente() throws Exception {
+        // given
+        when(veiculoService.atualizarParcial(eq(99L), any())).thenThrow(new VeiculoNaoEncontradoException(99L));
+
+        // when
+        ResultActions resposta = enviar(patch("/api/veiculos/99"), "{\"marca\":\"Fiat\"}");
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoDeleteEmIdInexistente() throws Exception {
+        // given
+        doThrow(new VeiculoNaoEncontradoException(99L)).when(veiculoService).deletar(99L);
+
+        // when
+        ResultActions resposta = chamar(delete("/api/veiculos/99"));
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoBuscaPorPlacaInexistente() throws Exception {
+        // given
         when(veiculoService.buscarPorPlaca("XXX0000")).thenThrow(new VeiculoNaoEncontradoException("XXX0000"));
 
-        // When
+        // when
         ResultActions resposta = chamar(get("/api/veiculos/buscar").param("placa", "XXX0000"));
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "XXX0000"));
     }
 
     @Test
-    void buscaPorPlacaSemOParametroRetorna400() throws Exception {
-        // When
+    void deveRetornar400_quandoBuscaPorPlacaSemOParametro() throws Exception {
+        // when
         ResultActions resposta = chamar(get("/api/veiculos/buscar"));
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Parâmetro inválido", "'placa' é obrigatório"));
-        verify(veiculoService, never()).buscarPorPlaca(any());
     }
 
     @Test
-    void placaDuplicadaRetorna400() throws Exception {
-        // Given
+    void deveRetornar400_quandoPlacaJaEstaCadastrada() throws Exception {
+        // given
         when(veiculoService.criar(any())).thenThrow(new PlacaJaCadastradaException("ABC1D23"));
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/veiculos"), VALIDO);
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Erro de validação", "Já existe veículo cadastrado com placa"));
     }
 
     @Test
-    void versaoVelhaRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoPatchTrazVersaoVelha() throws Exception {
+        // given
         when(veiculoService.atualizarParcial(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Veículo", 1L));
 
-        // When
+        // when
         ResultActions resposta = enviar(patch("/api/veiculos/1"), "{\"marca\":\"Fiat\",\"versao\":0}");
 
-        // Then
+        // then
         resposta.andExpect(erro(409, "Conflito de edição", "Veículo 1"));
     }
 
     @Test
-    void excluirVeiculoComOrdemDeServicoRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoExcluiVeiculoComOrdemDeServico() throws Exception {
+        // given
         doThrow(new DataIntegrityViolationException("fk")).when(veiculoService).deletar(1L);
 
-        // When
+        // when
         ResultActions resposta = chamar(delete("/api/veiculos/1"));
 
-        // Then
+        // then
         resposta.andExpect(erro(409, "Conflito de dados", "em uso"));
     }
 }

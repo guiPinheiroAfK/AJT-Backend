@@ -6,6 +6,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.containsString;
@@ -23,6 +24,17 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+/*
+ * o que testa: a validacao na fronteira HTTP: campos obrigatorios e tamanho do
+ * transfer, enum invalido listando os aceitos, json malformado, PATCH aceitando
+ * campo ausente e recusando texto vazio, tipo errado na url, login sem campos e
+ * a paginacao padrao (20 por pagina, maximo 100, ordenada por id).
+ *
+ * como rodar: @WebMvcTest (WebTestBase), services mockados. sem banco. "mvn test".
+ *
+ * por que existe: dado invalido tem que parar no controller com 400 e o detalhe
+ * do campo, sem nunca chegar no service nem no banco.
+ */
 class ValidacaoWebTest extends WebTestBase {
 
     private static final String DATA_E_HORA = "\"dataTransfer\":\"2026-09-20\",\"horaTransfer\":\"14:30:00\"";
@@ -31,19 +43,25 @@ class ValidacaoWebTest extends WebTestBase {
         return "{" + DATA_E_HORA + "," + camposExtras + "}";
     }
 
+    // manda o json como ADMIN (aqui o que interessa e a validacao, nao o perfil)
+    private ResultActions enviarComoAdmin(MockHttpServletRequestBuilder requisicao, String json) throws Exception {
+        return mockMvc.perform(requisicao.with(user("t").roles("ADMIN"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(json));
+    }
+
     // ----- criacao de transfer: campos invalidos -----
 
     @Test
-    void camposObrigatoriosRetornam400ComDetalhes() throws Exception {
-        // Given: origem vazia e destino ausente
+    void deveRetornar400ComDetalhesSemChamarOService_quandoFaltamCamposObrigatorios() throws Exception {
+        // given
+        // origem vazia e destino ausente
         String corpo = corpoTransfer("\"origem\":\"\"");
 
-        // When
-        ResultActions resposta = mockMvc.perform(post("/api/transfers").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpo));
+        // when
+        ResultActions resposta = enviarComoAdmin(post("/api/transfers"), corpo);
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.erro").value("Erro de validação"))
@@ -53,17 +71,15 @@ class ValidacaoWebTest extends WebTestBase {
     }
 
     @Test
-    void campoMaiorQueOBancoRetorna400SemChamarOService() throws Exception {
-        // Given
+    void deveRetornar400SemChamarOService_quandoCampoEhMaiorQueOBanco() throws Exception {
+        // given
         String origemGigante = "x".repeat(101);
         String corpo = corpoTransfer("\"origem\":\"" + origemGigante + "\",\"destino\":\"Hotel\"");
 
-        // When
-        ResultActions resposta = mockMvc.perform(post("/api/transfers").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpo));
+        // when
+        ResultActions resposta = enviarComoAdmin(post("/api/transfers"), corpo);
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detalhes", hasItem(containsString("origem"))))
@@ -72,16 +88,14 @@ class ValidacaoWebTest extends WebTestBase {
     }
 
     @Test
-    void enumInvalidoListaValoresAceitos() throws Exception {
-        // Given
+    void deveListarOsValoresAceitos_quandoEnumEhInvalido() throws Exception {
+        // given
         String corpo = corpoTransfer("\"origem\":\"A\",\"destino\":\"B\",\"status\":\"XPTO\"");
 
-        // When
-        ResultActions resposta = mockMvc.perform(post("/api/transfers").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpo));
+        // when
+        ResultActions resposta = enviarComoAdmin(post("/api/transfers"), corpo);
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detalhes[0]", containsString("status")))
@@ -90,16 +104,14 @@ class ValidacaoWebTest extends WebTestBase {
     }
 
     @Test
-    void jsonMalformadoRetorna400SemChamarOService() throws Exception {
-        // Given
+    void deveRetornar400SemChamarOService_quandoJsonEstaMalformado() throws Exception {
+        // given
         String corpoInvalido = "{nao e json";
 
-        // When
-        ResultActions resposta = mockMvc.perform(post("/api/transfers").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpoInvalido));
+        // when
+        ResultActions resposta = enviarComoAdmin(post("/api/transfers"), corpoInvalido);
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.erro").value("Requisição inválida"));
@@ -109,31 +121,28 @@ class ValidacaoWebTest extends WebTestBase {
     // ----- PATCH -----
 
     @Test
-    void patchAceitaCamposAusentes() throws Exception {
-        // Given: so o status, sem nenhum outro campo
+    void deveAceitar_quandoPatchTrazSoUmCampo() throws Exception {
+        // given
+        // so o status, sem nenhum outro campo
         String corpo = "{\"status\":\"CONFIRMADO\"}";
 
-        // When
-        ResultActions resposta = mockMvc.perform(patch("/api/transfers/1").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpo));
+        // when
+        ResultActions resposta = enviarComoAdmin(patch("/api/transfers/1"), corpo);
 
-        // Then
+        // then
         resposta.andExpect(status().isOk());
         verify(transferService).atualizarParcial(eq(1L), any());
     }
 
     @Test
-    void patchRecusaTextoVazioComEspacos() throws Exception {
-        // Given
+    void deveRetornar400SemChamarOService_quandoPatchTrazTextoSoComEspacos() throws Exception {
+        // given
         String corpo = "{\"origem\":\"   \"}";
 
-        // When
-        ResultActions resposta = mockMvc.perform(patch("/api/transfers/1").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpo));
+        // when
+        ResultActions resposta = enviarComoAdmin(patch("/api/transfers/1"), corpo);
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detalhes", hasItem(containsString("origem"))));
@@ -141,16 +150,14 @@ class ValidacaoWebTest extends WebTestBase {
     }
 
     @Test
-    void moedaInvalidaRetorna400SemChamarOService() throws Exception {
-        // Given
+    void deveRetornar400SemChamarOService_quandoMoedaNaoEhCodigoIso() throws Exception {
+        // given
         String corpo = "{\"moedaOrigem\":\"DOLAR\"}";
 
-        // When
-        ResultActions resposta = mockMvc.perform(patch("/api/transfers/1").with(user("t").roles("ADMIN"))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content(corpo));
+        // when
+        ResultActions resposta = enviarComoAdmin(patch("/api/transfers/1"), corpo);
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detalhes", hasItem(containsString("moedaOrigem"))));
@@ -160,11 +167,11 @@ class ValidacaoWebTest extends WebTestBase {
     // ----- parametros da url -----
 
     @Test
-    void idComTipoErradoRetorna400SemChamarOService() throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoIdTemTipoErrado() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(get("/api/transfers/abc").with(user("t").roles("ADMIN")));
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.mensagem", containsString("abc")));
@@ -172,34 +179,34 @@ class ValidacaoWebTest extends WebTestBase {
     }
 
     @Test
-    void rotaInexistenteRetorna404EmJson() throws Exception {
-        // When
+    void deveRetornar404EmJson_quandoRotaNaoExiste() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(get("/api/nao-existe").with(user("t").roles("ADMIN")));
 
-        // Then
+        // then
         resposta.andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404));
     }
 
     @Test
-    void cotacaoComCodigoDeMoedaInvalidoRetorna400() throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoCodigoDaMoedaDaCotacaoEhInvalido() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(get("/api/cotacao").param("de", "US").param("para", "BRL")
                 .with(user("t").roles("ATENDENTE")));
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
         verifyNoInteractions(cotacaoService);
     }
 
     @Test
-    void statusDeBuscaInvalidoRetorna400() throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoStatusDaBuscaEhInvalido() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(get("/api/transfers/buscar").param("status", "XPTO")
                 .with(user("t").roles("ADMIN")));
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400));
         verifyNoInteractions(transferService);
@@ -208,13 +215,13 @@ class ValidacaoWebTest extends WebTestBase {
     // ----- login -----
 
     @Test
-    void loginSemCamposRetorna400ComUmDetalhePorCampo() throws Exception {
-        // When
+    void deveRetornar400ComUmDetalhePorCampo_quandoLoginVemSemCampos() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(post("/api/auth/login")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{}"));
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.detalhes.length()").value(2));
@@ -224,11 +231,11 @@ class ValidacaoWebTest extends WebTestBase {
     // ----- paginacao -----
 
     @Test
-    void paginacaoSemParametrosUsaTamanhoPadraoOrdenadoPorId() throws Exception {
-        // When
+    void deveUsarTamanhoPadraoOrdenadoPorId_quandoListaSemParametros() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(get("/api/transfers").with(user("t").roles("ADMIN")));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk());
         Pageable pedida = paginaPedidaAoService();
         assertThat(pedida.getPageSize()).isEqualTo(20);
@@ -237,12 +244,12 @@ class ValidacaoWebTest extends WebTestBase {
     }
 
     @Test
-    void paginacaoComTamanhoAbsurdoELimitadaAoMaximo() throws Exception {
-        // When
+    void deveLimitarAoMaximo_quandoTamanhoDaPaginaEhAbsurdo() throws Exception {
+        // when
         ResultActions resposta = mockMvc.perform(get("/api/transfers").param("size", "5000").param("page", "2")
                 .with(user("t").roles("ADMIN")));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk());
         Pageable pedida = paginaPedidaAoService();
         assertThat(pedida.getPageSize()).isEqualTo(100);

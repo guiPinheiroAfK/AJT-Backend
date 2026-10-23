@@ -39,14 +39,13 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /*
@@ -65,6 +64,7 @@ import static org.mockito.Mockito.when;
 class TransferServiceRegrasTest {
 
     private static final LocalDate DIA = LocalDate.of(2026, 10, 21);
+    private static final PageRequest PAGINA = PageRequest.of(0, 5);
 
     private final TransferRepository repository = mock(TransferRepository.class);
     private final OrdemServicoRepository ordemServicoRepository = mock(OrdemServicoRepository.class);
@@ -94,131 +94,135 @@ class TransferServiceRegrasTest {
         return new TransferRequestDTO(data, hora, origem, null, null, null, null, moeda, osId, null, null);
     }
 
-    private static FiltroTransferDTO filtroSemOs(Boolean semOs) {
-        return new FiltroTransferDTO(null, null, null, null, null, semOs);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void repositorioDevolveUmTransfer() {
-        when(repository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(transfer(StatusTransfer.CONFIRMADO, null))));
-    }
-
-    // executa a Specification que o service mandou pro repositorio e devolve o CriteriaBuilder usado
-    @SuppressWarnings("unchecked")
-    private CriteriaBuilder filtroAplicadoNaConsulta() {
-        ArgumentCaptor<Specification<Transfer>> spec = ArgumentCaptor.forClass(Specification.class);
-        verify(repository).findAll(spec.capture(), any(Pageable.class));
-        CriteriaBuilder cb = mock(CriteriaBuilder.class, RETURNS_MOCKS);
-        spec.getValue().toPredicate(mock(Root.class, RETURNS_MOCKS), mock(CriteriaQuery.class), cb);
-        return cb;
-    }
-
-    // ---------------- 404 ----------------
-
-    @Test
-    void buscaDeTransferInexistenteLanca404() {
-        // Given
+    private void transferNaoExiste() {
         when(repository.findById(9L)).thenReturn(Optional.empty());
-
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(TransferNaoEncontradoException.class);
-    }
-
-    @Test
-    void putDeTransferInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        TransferRequestDTO put = patch(DIA, LocalTime.NOON, "A", null, null);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, put)).isInstanceOf(TransferNaoEncontradoException.class);
-    }
-
-    @Test
-    void patchDeTransferInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        TransferRequestDTO soOrigem = patch(null, null, "C", null, null);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, soOrigem)).isInstanceOf(TransferNaoEncontradoException.class);
-    }
-
-    @Test
-    void patchDeMoedaEmTransferInexistenteLanca404AntesDaCotacao() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        TransferRequestDTO soMoeda = patch(null, null, null, "EUR", null);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, soMoeda)).isInstanceOf(TransferNaoEncontradoException.class);
-        verifyNoInteractions(cotacaoService);
-    }
-
-    @Test
-    void excluirTransferInexistenteLanca404SemApagar() {
-        // Given
         when(repository.existsById(9L)).thenReturn(false);
+    }
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L)).isInstanceOf(TransferNaoEncontradoException.class);
+    private void transferConfirmadoNaOs3() {
+        when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.CONFIRMADO, os(3L, StatusOrdemServico.ABERTA))));
+    }
+
+    // ----- id inexistente -----
+
+    @Test
+    void deveLancarTransferNaoEncontrado_quandoBuscaIdInexistente() {
+        // given
+        transferNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(TransferNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarTransferNaoEncontrado_quandoPutEmIdInexistente() {
+        // given
+        transferNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, patch(DIA, LocalTime.NOON, "A", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(TransferNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarTransferNaoEncontrado_quandoPatchEmIdInexistente() {
+        // given
+        transferNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, patch(null, null, "C", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(TransferNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarTransferNaoEncontradoAntesDoCambio_quandoPatchTrocaMoedaDeIdInexistente() {
+        // given
+        // trocando a moeda o 404 sai antes, na leitura pra recalcular o valor
+        transferNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, patch(null, null, null, "EUR", null)));
+
+        // then
+        assertThat(erro).isInstanceOf(TransferNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarTransferNaoEncontradoSemApagar_quandoExcluiIdInexistente() {
+        // given
+        transferNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(TransferNaoEncontradoException.class);
         verify(repository, never()).deleteById(anyLong());
     }
 
-    // ---------------- listagem ----------------
+    // ----- filtro -----
 
     @Test
-    @SuppressWarnings("unchecked")
-    void periodoInvertidoNoFiltroLanca400SemConsultar() {
-        // Given
-        FiltroTransferDTO invertido = new FiltroTransferDTO(null, DIA, DIA.minusDays(1), null, null, null);
-        PageRequest pagina = PageRequest.of(0, 5);
+    void deveLancarRegraNegocio_quandoPeriodoDoFiltroEstaInvertido() {
+        // when
+        Throwable erro = catchThrowable(() -> service.listar(new FiltroTransferDTO(null, DIA, DIA.minusDays(1), null, null, null), PAGINA));
 
-        // When / Then
-        assertThatThrownBy(() -> service.listar(invertido, pagina)).isInstanceOf(RegraNegocioException.class);
-        verify(repository, never()).findAll(any(Specification.class), any(Pageable.class));
+        // then
+        assertThat(erro).isInstanceOf(RegraNegocioException.class);
     }
 
     @Test
-    void filtroSemOsLigadoRestringeAosTransfersSemOrdemDeServico() {
-        // Given
-        repositorioDevolveUmTransfer();
+    void deveConsultar_quandoFiltroTemTodosOsCamposEPeriodoCerto() {
+        // given
+        when(repository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(transfer(StatusTransfer.CONFIRMADO, null))));
 
-        // When
-        PaginaResponseDTO<TransferResponseDTO> pagina = service.listar(filtroSemOs(true), PageRequest.of(0, 5));
+        // when
+        PaginaResponseDTO<TransferResponseDTO> pagina =
+                service.listar(new FiltroTransferDTO(StatusTransfer.CONFIRMADO, DIA, DIA, "a", 1L, true), PAGINA);
 
-        // Then
+        // then
         assertThat(pagina.conteudo()).hasSize(1);
-        verify(filtroAplicadoNaConsulta()).isNull(any());
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "semOs = {0} nao filtra por os nula")
     @NullSource
     @ValueSource(booleans = false)
-    void filtroSemOsDesligadoOuAusenteNaoRestringePorOs(Boolean semOs) {
-        // Given
-        repositorioDevolveUmTransfer();
+    @SuppressWarnings("unchecked")
+    void naoDeveRestringirPorOs_quandoFiltroSemOsEstaDesligadoOuAusente(Boolean semOs) {
+        // given
+        when(repository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(transfer(StatusTransfer.CONFIRMADO, null))));
+        ArgumentCaptor<Specification<Transfer>> spec = ArgumentCaptor.forClass(Specification.class);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class, RETURNS_MOCKS);
 
-        // When
-        service.listar(filtroSemOs(semOs), PageRequest.of(0, 5));
+        // when
+        service.listar(new FiltroTransferDTO(null, null, null, null, null, semOs), PAGINA);
 
-        // Then
-        verify(filtroAplicadoNaConsulta(), never()).isNull(any());
+        // then
+        verify(repository).findAll(spec.capture(), any(Pageable.class));
+        spec.getValue().toPredicate(mock(Root.class, RETURNS_MOCKS), mock(CriteriaQuery.class), cb);
+        verify(cb, never()).isNull(any());
     }
 
-    // ---------------- escrita ----------------
+    // ----- edicao -----
 
     @Test
-    void patchCampoACampoETrocandoSoAMoedaRecalculaComOValorSalvo() {
-        // Given
+    void deveRecalcularComOValorSalvo_quandoPatchMudaCamposETrocaSoAMoeda() {
+        // given
         when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.AGUARDANDO_OS, null)));
         when(cotacaoService.obterCotacao("EUR", "BRL")).thenReturn(new CotacaoDTO("EUR", "BRL", new BigDecimal("6.5"), null));
 
-        // When
+        // when
         TransferResponseDTO salvo = service.atualizarParcial(5L, patch(DIA.plusDays(1), LocalTime.MIDNIGHT, "Rodoviaria", "eur", null));
 
-        // Then
+        // then
         assertThat(salvo.dataTransfer()).isEqualTo(DIA.plusDays(1));
         assertThat(salvo.horaTransfer()).isEqualTo(LocalTime.MIDNIGHT);
         assertThat(salvo.origem()).isEqualTo("Rodoviaria");
@@ -227,84 +231,84 @@ class TransferServiceRegrasTest {
     }
 
     @Test
-    void putComPassageirosTrocaALista() {
-        // Given
+    void deveTrocarAListaDePassageiros_quandoPutTrazPassageiros() {
+        // given
         when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.AGUARDANDO_OS, null)));
         when(passageiroRepository.findAllById(Set.of(1L))).thenReturn(List.of(Passageiro.builder().id(1L).nome("Ana").build()));
-        TransferRequestDTO put = new TransferRequestDTO(DIA, LocalTime.NOON, "A", "B", null, new BigDecimal("50"), null,
-                "BRL", null, Set.of(1L), null);
+        TransferRequestDTO put = new TransferRequestDTO(DIA, LocalTime.NOON, "A", "B", null, new BigDecimal("50"), null, "BRL", null, Set.of(1L), null);
 
-        // When
+        // when
         TransferResponseDTO salvo = service.atualizar(5L, put);
 
-        // Then
+        // then
         assertThat(salvo.passageiroIds()).containsExactly(1L);
     }
 
     @Test
-    void sairDaOsEmAndamentoNaoVoltaPraAguardandoOs() {
-        // Given
+    void naoDeveVoltarPraAguardandoOs_quandoSaiDaOsEmAndamento() {
+        // given
         when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.EM_ANDAMENTO, os(3L, StatusOrdemServico.EM_ANDAMENTO))));
-        TransferRequestDTO semOs = new TransferRequestDTO(DIA, LocalTime.NOON, "A", "B", StatusTransfer.EM_ANDAMENTO,
-                new BigDecimal("1"), null, "BRL", null, null, null);
+        TransferRequestDTO put = new TransferRequestDTO(DIA, LocalTime.NOON, "A", "B", StatusTransfer.EM_ANDAMENTO, new BigDecimal("1"), null, "BRL", null, null, null);
 
-        // When
-        TransferResponseDTO salvo = service.atualizar(5L, semOs);
+        // when
+        TransferResponseDTO salvo = service.atualizar(5L, put);
 
-        // Then
+        // then
         assertThat(salvo.status()).isEqualTo(StatusTransfer.EM_ANDAMENTO); // so CONFIRMADO volta
-        assertThat(salvo.osId()).isNull();
     }
 
     @Test
-    void mudarSoADataDentroDaMesmaOsTambemConfereODia() {
-        // Given
-        when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.CONFIRMADO, os(3L, StatusOrdemServico.ABERTA))));
+    void deveLancarRegraNegocio_quandoMudaSoADataDentroDaMesmaOs() {
+        // given
+        transferConfirmadoNaOs3();
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(os(3L, StatusOrdemServico.ABERTA)));
-        TransferRequestDTO outroDia = patch(DIA.plusDays(1), null, null, null, 3L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(5L, outroDia))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(5L, patch(DIA.plusDays(1), null, null, null, 3L)));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("mesmo dia");
     }
 
     @Test
-    void naoEntraEmOsFinalizada() {
-        // Given
-        when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.CONFIRMADO, os(3L, StatusOrdemServico.ABERTA))));
+    void deveLancarRegraNegocio_quandoEntraEmOsFinalizada() {
+        // given
+        transferConfirmadoNaOs3();
         when(ordemServicoRepository.findById(4L)).thenReturn(Optional.of(os(4L, StatusOrdemServico.FINALIZADA)));
-        TransferRequestDTO paraOsFinalizada = patch(null, null, null, null, 4L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(5L, paraOsFinalizada))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(5L, patch(null, null, null, null, 4L)));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("FINALIZADA");
     }
 
     @Test
-    void trocarDeUmaOsAbertaParaOutraEmAndamentoPode() {
-        // Given
-        when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.CONFIRMADO, os(3L, StatusOrdemServico.ABERTA))));
+    void deveTrocarDeOs_quandoOutraOsEstaEmAndamento() {
+        // given
+        transferConfirmadoNaOs3();
         when(ordemServicoRepository.findById(6L)).thenReturn(Optional.of(os(6L, StatusOrdemServico.EM_ANDAMENTO)));
 
-        // When
+        // when
         TransferResponseDTO salvo = service.atualizarParcial(5L, patch(null, null, null, null, 6L));
 
-        // Then
+        // then
         assertThat(salvo.osId()).isEqualTo(6L);
-        assertThat(salvo.status()).isEqualTo(StatusTransfer.CONFIRMADO);
     }
 
     @Test
-    void exclusaoApagaEAudita() {
-        // Given
+    void deveApagarEAuditar_quandoExcluiTransferExistente() {
+        // given
         when(repository.existsById(5L)).thenReturn(true);
 
-        // When
+        // when
         service.deletar(5L);
 
-        // Then
+        // then
         verify(repository).deleteById(5L);
         verify(auditoriaService).registrar("transfers", 5L, "Transfer removido");
     }

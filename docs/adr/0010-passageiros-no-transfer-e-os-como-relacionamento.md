@@ -92,3 +92,21 @@ e entidade é feita no service (`buscarOrdemServico`). Sem `osId` o transfer fic
 - Testes: `service/TransferServiceTest.java` (vínculo em uma consulta, id inexistente, PUT mantém, `[]` limpa),
   `integracao/RelacionamentosIntegrationTest.java` (tabela de junção real, endpoint, exclusão de passageiro,
   FK da OS)
+
+## Atualizações posteriores
+
+Registro append-only: a decisão original acima continua valendo; abaixo, o que a estendeu depois.
+
+- **2026-10-19 (commit `565f718`, migration `V10__Status_Transfer_Com_Os.sql`):** o vínculo transfer → OS
+  ganhou regras no `TransferService`:
+  - transfer que entra numa OS passa a `CONFIRMADO`; o `CONFIRMADO` que sai da OS volta a `AGUARDANDO_OS`
+    (os outros status, como `EM_ANDAMENTO`, ficam como estão);
+  - a OS precisa ser do mesmo dia do transfer ("a OS agrupa os transfers de um mesmo dia") e não pode estar
+    `CANCELADA` nem `FINALIZADA` (400).
+
+  A `V10` corrige os registros antigos que estavam numa OS ainda como `AGUARDANDO_OS`. Do lado da OS, o
+  `OrdemServicoService` não deixa mudar a data de uma OS que já tem transfers (400, "Desvincule-os antes de
+  mudar a data").
+- **2026-10-22:** além dos testes acima, a consulta `PassageiroRepository.findByTransferId` é testada no banco
+  real em `repository/PassageiroRepositoryTest.java` (`@DataJpaTest`,
+  [ADR-0021](0021-estrategia-de-testes-v2-slices-e-bdd.md)).

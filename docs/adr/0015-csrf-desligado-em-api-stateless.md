@@ -65,3 +65,14 @@ Se alguém passar a usar sessão ou cookie para autenticar, esses testes quebram
 - `api/src/test/java/com/AJTBackend/integracao/AutenticacaoIntegrationTest.java` — testes
   `loginNaoAbreSessaoNemDevolveCookie` e `cookieSemOTokenNaoAutorizaEscrita`
 - [ADR-0004](0004-seguranca-de-login-e-sessao.md) — como o token é emitido, validado e invalidado
+
+## Atualizações posteriores
+
+Registro append-only: a decisão original acima continua valendo; abaixo, o que a estendeu depois.
+
+- **2026-10-22 ([ADR-0021](0021-estrategia-de-testes-v2-slices-e-bdd.md)):** os dois testes que verificam as
+  premissas foram renomeados no padrão `deve…_quando…`:
+  - `loginNaoAbreSessaoNemDevolveCookie` virou `naoDeveAbrirSessaoNemDevolverCookie_quandoLoginDaCerto`;
+  - `cookieSemOTokenNaoAutorizaEscrita` virou `deveRetornar401_quandoEscritaChegaSoComCookieSemToken`.
+
+  O comportamento verificado é o mesmo.

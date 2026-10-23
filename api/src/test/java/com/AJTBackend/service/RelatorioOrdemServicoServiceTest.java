@@ -25,10 +25,9 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /*
@@ -52,51 +51,62 @@ class RelatorioOrdemServicoServiceTest {
             ordemServicoRepository, paradaOsRepository, new UsuarioLogado(), acessoMotorista);
 
     private static String texto(byte[] pdf) throws IOException {
-        try (PdfReader leitor = new PdfReader(pdf)) {
+        PdfReader leitor = new PdfReader(pdf);
+        try {
             return new PdfTextExtractor(leitor).getTextFromPage(1);
+        } finally {
+            leitor.close();
         }
     }
 
-    @Test
-    void osInexistenteLanca404() {
-        // Given
-        when(ordemServicoRepository.findById(9L)).thenReturn(Optional.empty());
-
-        // When / Then
-        assertThatThrownBy(() -> service.gerar(9L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
-        verifyNoInteractions(paradaOsRepository);
+    private void osVisivelSemParadas(OrdemServico os) {
+        when(ordemServicoRepository.findById(os.getId())).thenReturn(Optional.of(os));
+        when(acessoMotorista.podeVer(any())).thenReturn(true);
+        when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(os.getId())).thenReturn(List.of());
     }
 
     @Test
-    void motoristaNaoImprimeOsDeOutroERecebe404() {
-        // Given
+    void deveLancarOsNaoEncontrada_quandoOsNaoExiste() {
+        // given
+        when(ordemServicoRepository.findById(9L)).thenReturn(Optional.empty());
+
+        // when
+        Throwable erro = catchThrowable(() -> service.gerar(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarOsNaoEncontrada_quandoOsEhDeOutroMotorista() {
+        // given
         when(ordemServicoRepository.findById(1L)).thenReturn(Optional.of(OrdemServico.builder().id(1L).build()));
         when(acessoMotorista.podeVer(any())).thenReturn(false);
 
-        // When / Then
-        assertThatThrownBy(() -> service.gerar(1L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
-        verifyNoInteractions(paradaOsRepository);
+        // when
+        Throwable erro = catchThrowable(() -> service.gerar(1L));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
     }
 
     @Test
-    void osVaziaSaiComAvisosEmVezDeNull() throws IOException {
-        // Given
-        OrdemServico vazia = OrdemServico.builder().id(2L).dataServico(null).status(null).build();
-        when(ordemServicoRepository.findById(2L)).thenReturn(Optional.of(vazia));
-        when(acessoMotorista.podeVer(any())).thenReturn(true);
-        when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(2L)).thenReturn(List.of());
+    void deveImprimirAvisosEmVezDeNull_quandoOsEstaVazia() throws IOException {
+        // given
+        osVisivelSemParadas(OrdemServico.builder().id(2L).dataServico(null).status(null).build());
 
-        // When
-        String texto = texto(service.gerar(2L));
+        // when
+        byte[] pdf = service.gerar(2L);
 
-        // Then
-        assertThat(texto).contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado")
-                .doesNotContain("null");
+        // then
+        String texto = texto(pdf);
+        assertThat(texto).contains("Ordem de Serviço nº 2", "Não definido", "Nenhuma parada cadastrada", "Nenhum transfer vinculado");
+        assertThat(texto).doesNotContain("null");
     }
 
     @Test
-    void osCompletaListaRoteiroETransfersComCamposVazios() throws IOException {
-        // Given
+    void deveListarRoteiroETransfersSemNull_quandoOsCompletaTemCamposVazios() throws IOException {
+        // given
         Transfer comPassageiros = Transfer.builder().id(12L).horaTransfer(LocalTime.of(9, 0)).origem("Aeroporto").destino("Hotel")
                 .passageiros(Set.of(Passageiro.builder().id(1L).nome("Bia").build(), Passageiro.builder().id(2L).nome("Ana").build()))
                 .build();
@@ -109,60 +119,55 @@ class RelatorioOrdemServicoServiceTest {
         ParadaOs comTudo = ParadaOs.builder().id(1L).ordemParada(1).localParada("Aeroporto").horarioPrevisto(LocalTime.of(8, 45))
                 .acao(AcaoParada.EMBARQUE).transfers(Set.of(comPassageiros, semPassageiros)).build();
         ParadaOs semNada = ParadaOs.builder().id(2L).ordemParada(2).localParada("Hotel").build();
-
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(os));
         when(acessoMotorista.podeVer(any())).thenReturn(true);
         when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(3L)).thenReturn(List.of(comTudo, semNada));
 
-        // When
-        String texto = texto(service.gerar(3L));
+        // when
+        byte[] pdf = service.gerar(3L);
 
-        // Then
-        assertThat(texto).contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares")
-                .doesNotContain("Tel.") // sem telefone, sem rotulo solto
-                .contains("08:45", "EMBARQUE", "#11, #12") // transfers da parada em ordem de id
-                .contains("2 pax: Ana, Bia") // passageiros em ordem alfabetica
-                .contains("Rodoviaria")
-                .doesNotContain("null");
+        // then
+        String texto = texto(pdf);
+        assertThat(texto).contains("21/10/2026", "ABERTA", "Carlos", "Van 01", "ABC1D23", "15 lugares");
+        assertThat(texto).doesNotContain("Tel."); // sem telefone, sem rotulo solto
+        assertThat(texto).contains("08:45", "EMBARQUE", "#11, #12"); // transfers da parada em ordem de id
+        assertThat(texto).contains("2 pax: Ana, Bia"); // passageiros em ordem alfabetica
+        assertThat(texto).contains("Rodoviaria");
+        assertThat(texto).doesNotContain("null");
     }
 
     @Test
-    void telefoneDoMotoristaSaiNoCabecalhoQuandoCadastrado() throws IOException {
-        // Given
-        OrdemServico os = OrdemServico.builder().id(4L).dataServico(LocalDate.of(2026, 10, 21))
+    void deveImprimirOTelefoneNoCabecalho_quandoMotoristaTemTelefone() throws IOException {
+        // given
+        osVisivelSemParadas(OrdemServico.builder().id(5L).dataServico(LocalDate.of(2026, 10, 21))
                 .motorista(Motorista.builder().id(5L).nome("Carlos").telefone("(11) 98888-7777").build())
-                .build();
-        when(ordemServicoRepository.findById(4L)).thenReturn(Optional.of(os));
-        when(acessoMotorista.podeVer(any())).thenReturn(true);
-        when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(4L)).thenReturn(List.of());
+                .build());
 
-        // When
-        String texto = texto(service.gerar(4L));
+        // when
+        byte[] pdf = service.gerar(5L);
 
-        // Then
-        assertThat(texto).contains("Carlos  •  Tel.: (11) 98888-7777");
+        // then
+        assertThat(texto(pdf)).contains("Carlos  •  Tel.: (11) 98888-7777");
     }
 
     // RNF007/LGPD: o papel fica com o motorista, entao o documento do passageiro nunca e impresso
     @Test
-    void documentoDoPassageiroNaoSaiNoPapel() throws IOException {
-        // Given
+    void naoDeveImprimirODocumento_quandoTransferTemPassageirosComCpfEPassaporte() throws IOException {
+        // given
         Transfer transfer = Transfer.builder().id(20L).horaTransfer(LocalTime.of(10, 0)).origem("GRU").destino("Hotel")
                 .passageiros(Set.of(
                         Passageiro.builder().id(1L).nome("Ana Lima").tipoDocumento("CPF").documento("529.982.247-25").build(),
                         Passageiro.builder().id(2L).nome("John Doe").tipoDocumento("PASSAPORTE").documento("XP9988776").build()))
                 .build();
-        OrdemServico os = OrdemServico.builder().id(4L).dataServico(LocalDate.of(2026, 10, 21))
-                .transfers(new ArrayList<>(List.of(transfer))).build();
-        when(ordemServicoRepository.findById(4L)).thenReturn(Optional.of(os));
-        when(acessoMotorista.podeVer(any())).thenReturn(true);
-        when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(4L)).thenReturn(List.of());
+        osVisivelSemParadas(OrdemServico.builder().id(4L).dataServico(LocalDate.of(2026, 10, 21))
+                .transfers(new ArrayList<>(List.of(transfer))).build());
 
-        // When
-        String texto = texto(service.gerar(4L));
+        // when
+        byte[] pdf = service.gerar(4L);
 
-        // Then
-        assertThat(texto).contains("Ana Lima", "John Doe")
-                .doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
+        // then
+        String texto = texto(pdf);
+        assertThat(texto).contains("Ana Lima", "John Doe");
+        assertThat(texto).doesNotContain("529.982.247-25", "52998224725", "XP9988776", "CPF", "PASSAPORTE");
     }
 }

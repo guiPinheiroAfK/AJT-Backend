@@ -33,6 +33,11 @@ import org.springframework.test.web.servlet.MockMvc;
  * aqui, rapido) de "a regra de negocio por tras dela esta certa" (testado
  * nos *ServiceTest). extraida pra classe base pra nao repetir a lista de
  * @MockitoBean em cada classe de teste que usa os controllers.
+ *
+ * de proposito sem @WebMvcTest(controllers = ...): toda classe web usa esta
+ * mesma configuracao, entao o spring monta o contexto uma vez e reaproveita
+ * (cache de contexto). restringir por controller criaria um contexto novo
+ * por classe e deixaria a suite mais lenta sem ganho de isolamento.
  */
 @WebMvcTest(properties = "ajt.cors.allowed-origins=http://localhost:4200")
 @Import({SecurityConfig.class, JsonAuthErrorHandler.class})

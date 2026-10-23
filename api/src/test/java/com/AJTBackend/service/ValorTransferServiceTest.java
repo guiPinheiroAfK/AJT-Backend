@@ -13,72 +13,90 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/*
+ * o que testa: a regra do valor em reais do transfer (ValorTransferService):
+ * valor base informado e respeitado, BRL e sem moeda usam o valor original,
+ * moeda estrangeira converte pela cotacao com duas casas (HALF_UP), api de
+ * cambio fora do ar devolve null, e a moeda vai sempre em maiusculo.
+ *
+ * como rodar: teste unitario com o CotacaoService mockado. sem spring, sem
+ * banco, sem rede. "mvn test".
+ *
+ * por que existe: e o numero que vira faturamento no painel. arredondamento
+ * errado ou um cadastro travado porque a api de cambio caiu aparecem direto
+ * no caixa da empresa.
+ */
 class ValorTransferServiceTest {
 
     private final CotacaoService cotacaoService = mock(CotacaoService.class);
     private final ValorTransferService service = new ValorTransferService(cotacaoService);
 
+    private void cotacaoDoDolar(String taxa) {
+        when(cotacaoService.obterCotacao("USD", "BRL"))
+                .thenReturn(new CotacaoDTO("USD", "BRL", new BigDecimal(taxa), "2026-09-16"));
+    }
+
     // ----- sem conversao -----
 
     @Test
-    void respeitaValorBaseInformadoSemConsultarCotacao() {
-        // Given
+    void deveRespeitarOValorBaseSemConsultarCotacao_quandoValorBaseFoiInformado() {
+        // given
         BigDecimal valorBase = new BigDecimal("300.00");
         BigDecimal valorOriginal = new BigDecimal("50.00");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(valorBase, valorOriginal, "USD");
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("300.00");
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
     }
 
     @Test
-    void respeitaValorBaseInformadoMesmoSemValorOriginalNemMoeda() {
-        // Given
+    void deveRespeitarOValorBase_quandoNaoHaValorOriginalNemMoeda() {
+        // given
         BigDecimal valorBase = new BigDecimal("99.90");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(valorBase, null, null);
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("99.90");
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
     }
 
     @Test
-    void emReaisOValorBaseEhOValorOriginal() {
-        // Given
+    void deveUsarOValorOriginal_quandoMoedaEhReal() {
+        // given
         BigDecimal valorOriginal = new BigDecimal("120.50");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, valorOriginal, "BRL");
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("120.50");
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
     }
 
     @Test
-    void semMoedaOValorOriginalEhUsadoComoEsta() {
-        // Given
+    void deveUsarOValorOriginalComoEsta_quandoNaoHaMoeda() {
+        // given
         BigDecimal valorOriginal = new BigDecimal("80.00");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, valorOriginal, null);
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("80.00");
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
     }
 
     @Test
-    void semValorOriginalNaoHaOQueCalcular() {
-        // When
+    void deveDevolverNull_quandoNaoHaValorOriginal() {
+        // when
         BigDecimal resultado = service.calcularValorBase(null, null, "USD");
 
-        // Then
+        // then
         assertThat(resultado).isNull();
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
     }
@@ -86,55 +104,53 @@ class ValorTransferServiceTest {
     // ----- conversao de moeda estrangeira -----
 
     @Test
-    void converteMoedaEstrangeiraPelaCotacaoParaReais() {
-        // Given
-        when(cotacaoService.obterCotacao("USD", "BRL"))
-                .thenReturn(new CotacaoDTO("USD", "BRL", new BigDecimal("5.4321"), "2026-09-16"));
+    void deveConverterParaReaisPelaCotacao_quandoMoedaEhEstrangeira() {
+        // given
+        cotacaoDoDolar("5.4321");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, new BigDecimal("100.00"), "USD");
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("543.21");
         verify(cotacaoService).obterCotacao("USD", "BRL");
     }
 
     @Test
-    void valorConvertidoSaiComExatamenteDuasCasasDecimais() {
-        // Given
-        when(cotacaoService.obterCotacao("USD", "BRL"))
-                .thenReturn(new CotacaoDTO("USD", "BRL", new BigDecimal("5.4321"), "2026-09-16"));
+    void deveSairComDuasCasasDecimais_quandoConverteMoedaEstrangeira() {
+        // given
+        cotacaoDoDolar("5.4321");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, new BigDecimal("100.00"), "USD");
 
-        // Then
+        // then
         assertThat(resultado.scale()).isEqualTo(2);
     }
 
     @Test
-    void arredondaMeioParaCima() {
-        // Given: 1,00 x 0,005 = 0,005 -> HALF_UP -> 0,01
+    void deveArredondarParaCima_quandoConversaoCaiNoMeio() {
+        // given
+        // 1,00 x 0,005 = 0,005 -> HALF_UP -> 0,01
         when(cotacaoService.obterCotacao("EUR", "BRL"))
                 .thenReturn(new CotacaoDTO("EUR", "BRL", new BigDecimal("0.005"), null));
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, new BigDecimal("1.00"), "EUR");
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("0.01");
     }
 
     @Test
-    void valorOriginalZeroConverteParaZeroComDuasCasas() {
-        // Given
-        when(cotacaoService.obterCotacao("USD", "BRL"))
-                .thenReturn(new CotacaoDTO("USD", "BRL", new BigDecimal("5.4321"), null));
+    void deveConverterParaZeroComDuasCasas_quandoValorOriginalEhZero() {
+        // given
+        cotacaoDoDolar("5.4321");
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, BigDecimal.ZERO, "USD");
 
-        // Then
+        // then
         assertThat(resultado).isEqualByComparingTo("0.00");
         assertThat(resultado.scale()).isEqualTo(2);
     }
@@ -142,15 +158,15 @@ class ValorTransferServiceTest {
     // ----- api de cambio fora do ar -----
 
     @Test
-    void cotacaoForaDoArNaoTravaOCadastroEDevolveNull() {
-        // Given
+    void deveDevolverNullSemTravarOCadastro_quandoCotacaoEstaForaDoAr() {
+        // given
         when(cotacaoService.obterCotacao("EUR", "BRL"))
                 .thenThrow(new CotacaoIndisponivelException("EUR", "BRL", new RuntimeException("timeout")));
 
-        // When
+        // when
         BigDecimal resultado = service.calcularValorBase(null, new BigDecimal("100.00"), "EUR");
 
-        // Then
+        // then
         assertThat(resultado).isNull();
         verify(cotacaoService).obterCotacao("EUR", "BRL");
     }
@@ -158,29 +174,29 @@ class ValorTransferServiceTest {
     // ----- normalizacao da moeda -----
 
     @Test
-    void normalizarMoedaPassaMinusculasParaMaiusculas() {
-        // When
+    void devePassarParaMaiusculo_quandoMoedaVemEmMinusculo() {
+        // when
         String moeda = ValorTransferService.normalizarMoeda("usd");
 
-        // Then
+        // then
         assertThat(moeda).isEqualTo("USD");
     }
 
     @Test
-    void normalizarMoedaMantemOQueJaEstaEmMaiusculo() {
-        // When
+    void deveManterAMoeda_quandoJaEstaEmMaiusculo() {
+        // when
         String moeda = ValorTransferService.normalizarMoeda("BRL");
 
-        // Then
+        // then
         assertThat(moeda).isEqualTo("BRL");
     }
 
     @Test
-    void normalizarMoedaNulaContinuaNula() {
-        // When
+    void deveContinuarNula_quandoMoedaEhNula() {
+        // when
         String moeda = ValorTransferService.normalizarMoeda(null);
 
-        // Then
+        // then
         assertThat(moeda).isNull();
     }
 }

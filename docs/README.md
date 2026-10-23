@@ -14,6 +14,12 @@ documentar acontece direto aqui. Periodicamente — hoje o combinado é sempre p
 do dia 20 de cada mês — o conteúdo acumulado aqui é mergeado na `main`, e a branch
 `documentacao` continua viva pra receber as próximas ADRs.
 
+**Situação em 2026-10-22:** as ADRs vão até a 0022. As de 0016 a 0020 registram o que entrou entre 19 e 21 de
+outubro (versão e 409 nos cadastros, filtros das listagens, motorista vendo só as próprias OS, painel do dia
+e PDF da OS). A 0021 fecha o padrão dos testes (um slice por camada, nomes `deve…_quando…` e
+given/when/then), e a 0022 organiza os scripts de verificação em `scripts/`. O banco está na migration V11,
+a suíte tem 889 execuções e o [mapa do código](mapa-do-codigo.md) está atualizado com tudo isso.
+
 ## Como funciona (resumo — o processo completo está na [ADR-0000](adr/0000-processo-de-adr.md))
 
 - Cada decisão relevante vira um arquivo em `docs/adr/`, numerado sequencialmente:
@@ -53,6 +59,13 @@ do dia 20 de cada mês — o conteúdo acumulado aqui é mergeado na `main`, e a
 | [0013](adr/0013-organizacao-do-codigo-e-tamanho-das-classes.md) | Organização em camadas e regras de tamanho de classe | Aceito |
 | [0014](adr/0014-estrategia-de-testes-e-demonstracao.md) | Estratégia de testes em três níveis e artefatos de demonstração | Aceito |
 | [0015](adr/0015-csrf-desligado-em-api-stateless.md) | CSRF desligado na API stateless com token Bearer | Aceito |
+| [0016](adr/0016-controle-de-concorrencia-otimista.md) | Controle de concorrência otimista nos cadastros (versão e 409) | Aceito |
+| [0017](adr/0017-filtros-de-busca-com-specifications.md) | Filtros das listagens com Specifications e `%`/`_` tratados como texto | Aceito |
+| [0018](adr/0018-acesso-do-motorista-as-proprias-os.md) | Motorista vê só as próprias OS (vínculo usuário-motorista e `/minhas`) | Aceito |
+| [0019](adr/0019-painel-de-resumo-e-visibilidade-do-faturamento.md) | Painel de resumo do dia e faturamento visível só para quem gerencia | Aceito |
+| [0020](adr/0020-relatorio-pdf-da-ordem-de-servico.md) | Relatório em PDF da ordem de serviço | Aceito |
+| [0021](adr/0021-estrategia-de-testes-v2-slices-e-bdd.md) | Estratégia de testes v2: slice por camada, nomes `deve…_quando…` e given/when/then | Aceito |
+| [0022](adr/0022-scripts-de-verificacao-em-scripts.md) | Scripts de verificação da API organizados em `scripts/` | Aceito |
 
 ## Para quem está estudando o projeto agora
 
@@ -68,7 +81,11 @@ Ordem de leitura sugerida:
    e [ADR-0007](adr/0007-correcao-do-n-mais-1-nas-paradas.md) — decisões de performance.
 6. [ADR-0011](adr/0011-auditoria-de-escritas.md) e [ADR-0012](adr/0012-documentacao-da-api-com-openapi.md)
    — rastreabilidade e documentação da API.
-7. [ADR-0014](adr/0014-estrategia-de-testes-e-demonstracao.md), [ADR-0008](adr/0008-testcontainers-singleton-e-versao-fixada.md)
+7. [ADR-0016](adr/0016-controle-de-concorrencia-otimista.md), [ADR-0017](adr/0017-filtros-de-busca-com-specifications.md),
+   [ADR-0018](adr/0018-acesso-do-motorista-as-proprias-os.md), [ADR-0019](adr/0019-painel-de-resumo-e-visibilidade-do-faturamento.md)
+   e [ADR-0020](adr/0020-relatorio-pdf-da-ordem-de-servico.md) — edição simultânea, filtros, HU07, painel e PDF.
+8. [ADR-0014](adr/0014-estrategia-de-testes-e-demonstracao.md), [ADR-0021](adr/0021-estrategia-de-testes-v2-slices-e-bdd.md),
+   [ADR-0022](adr/0022-scripts-de-verificacao-em-scripts.md), [ADR-0008](adr/0008-testcontainers-singleton-e-versao-fixada.md)
    e [ADR-0009](adr/0009-infra-perfis-container-e-rede.md) — como o projeto é testado, demonstrado e implantado.
 
 Cada ADR tem uma seção **"Onde encontrar no código"** com os arquivos exatos — não é só teoria, é o mapa de

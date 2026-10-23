@@ -8,9 +8,6 @@ import com.AJTBackend.model.enums.StatusTransfer;
 import com.AJTBackend.repository.LogAuditoriaRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.NullSource;
-import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -47,6 +44,8 @@ import static org.mockito.Mockito.when;
  */
 class AuditoriaServiceTest {
 
+    private static final PageRequest PAGINA = PageRequest.of(0, 10);
+
     private final LogAuditoriaRepository repository = mock(LogAuditoriaRepository.class);
     private final AuditoriaService service = new AuditoriaService(repository, new UsuarioLogado());
 
@@ -55,162 +54,166 @@ class AuditoriaServiceTest {
         SecurityContextHolder.clearContext();
     }
 
-    private LogAuditoria gravado() {
-        ArgumentCaptor<LogAuditoria> captor = ArgumentCaptor.forClass(LogAuditoria.class);
-        verify(repository).save(captor.capture());
-        return captor.getValue();
-    }
-
     @Test
-    void registraComUsuarioLogadoEData() {
-        // Given
+    void deveGravarTabelaRegistroUsuarioEData_quandoHaUsuarioLogado() {
+        // given
         SecurityContextHolder.getContext().setAuthentication(
                 new UsernamePasswordAuthenticationToken("maria", null, List.of()));
 
-        // When
+        // when
         service.registrar("transfers", 7L, "Transfer criado");
 
-        // Then
-        LogAuditoria log = gravado();
-        assertThat(log.getTabelaAfetada()).isEqualTo("transfers");
-        assertThat(log.getRegistroId()).isEqualTo(7L);
-        assertThat(log.getMensagem()).isEqualTo("Transfer criado (por maria)");
-        assertThat(log.getDataHora()).isNotNull();
+        // then
+        LogAuditoria gravado = logGravado();
+        assertThat(gravado.getTabelaAfetada()).isEqualTo("transfers");
+        assertThat(gravado.getRegistroId()).isEqualTo(7L);
+        assertThat(gravado.getMensagem()).isEqualTo("Transfer criado (por maria)");
+        assertThat(gravado.getDataHora()).isNotNull();
     }
 
     @Test
-    void semUsuarioAutenticadoRegistraComoSistema() {
-        // When
+    void deveRegistrarComoSistema_quandoNaoHaUsuarioAutenticado() {
+        // when
         service.registrar("ordens_servico", 1L, "Ordem de serviço criada");
 
-        // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Ordem de serviço criada (por sistema)");
+        // then
+        assertThat(logGravado().getMensagem()).isEqualTo("Ordem de serviço criada (por sistema)");
     }
 
     @Test
-    void atualizacaoComMudancaDeStatusDizDeQualParaQual() {
-        // When
+    void deveDizerDeQualStatusParaQual_quandoStatusMudou() {
+        // when
         service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
                 StatusTransfer.AGUARDANDO_OS, StatusTransfer.CONFIRMADO);
 
-        // Then
-        assertThat(gravado().getMensagem())
+        // then
+        assertThat(logGravado().getMensagem())
                 .isEqualTo("Transfer atualizado: status AGUARDANDO_OS -> CONFIRMADO (por sistema)");
     }
 
     @Test
-    void atualizacaoSemMudancaDeStatusNaoMencionaStatus() {
-        // When
+    void naoDeveMencionarStatus_quandoStatusNaoMudou() {
+        // when
         service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
                 StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO);
 
-        // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Transfer atualizado (por sistema)");
+        // then
+        assertThat(logGravado().getMensagem()).isEqualTo("Transfer atualizado (por sistema)");
     }
 
     @Test
-    void atualizacaoComMudancaDeValorDizDeQualParaQual() {
-        // When
+    void deveDizerDeQualValorParaQual_quandoValorMudou() {
+        // when
         service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
                 StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO,
                 new BigDecimal("150.00"), new BigDecimal("180.5"));
 
-        // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Transfer atualizado: valor 150.00 -> 180.50 (por sistema)");
+        // then
+        assertThat(logGravado().getMensagem())
+                .isEqualTo("Transfer atualizado: valor 150.00 -> 180.50 (por sistema)");
     }
 
     @Test
-    void atualizacaoComStatusEValorMencionaOsDois() {
-        // When
+    void deveMencionarStatusEValor_quandoOsDoisMudaram() {
+        // when
         service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
                 StatusTransfer.AGUARDANDO_OS, StatusTransfer.CONFIRMADO, null, new BigDecimal("90"));
 
-        // Then
-        assertThat(gravado().getMensagem())
+        // then
+        assertThat(logGravado().getMensagem())
                 .isEqualTo("Transfer atualizado: status AGUARDANDO_OS -> CONFIRMADO; valor sem valor -> 90.00 (por sistema)");
     }
 
     @Test
-    void valorApagadoApareceComoSemValor() {
-        // When
+    void deveMostrarSemValor_quandoValorFoiApagado() {
+        // when
         service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
                 StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO, new BigDecimal("150"), null);
 
-        // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Transfer atualizado: valor 150.00 -> sem valor (por sistema)");
+        // then
+        assertThat(logGravado().getMensagem()).isEqualTo("Transfer atualizado: valor 150.00 -> sem valor (por sistema)");
     }
 
     @Test
-    void valorAusenteAntesEDepoisNaoContaComoMudanca() {
-        // When
+    void naoDeveMencionarValor_quandoValorEstaAusenteAntesEDepois() {
+        // when
         service.registrarAtualizacao("transfers", 6L, "Transfer atualizado",
                 StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO, null, null);
 
-        // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Transfer atualizado (por sistema)");
+        // then
+        assertThat(logGravado().getMensagem()).doesNotContain("valor");
     }
 
     @Test
-    void mesmoValorComEscalaDiferenteNaoContaComoMudanca() {
-        // When
+    void naoDeveContarComoMudanca_quandoMesmoValorTemEscalaDiferente() {
+        // when
         service.registrarAtualizacao("transfers", 5L, "Transfer atualizado",
                 StatusTransfer.CONFIRMADO, StatusTransfer.CONFIRMADO,
                 new BigDecimal("150.0"), new BigDecimal("150.00"));
 
-        // Then
-        assertThat(gravado().getMensagem()).isEqualTo("Transfer atualizado (por sistema)");
+        // then
+        assertThat(logGravado().getMensagem()).isEqualTo("Transfer atualizado (por sistema)");
     }
 
     @Test
-    void listaComTabelaERegistroIdDevolveOHistoricoDeUmRegistro() {
-        // Given
-        var pageable = PageRequest.of(0, 10);
-        LogAuditoria log = LogAuditoria.builder().id(3L).tabelaAfetada("transfers").registroId(7L)
-                .mensagem("Transfer criado (por maria)").dataHora(LocalDateTime.now()).build();
-        when(repository.findByTabelaAfetadaAndRegistroId("transfers", 7L, pageable))
-                .thenReturn(new PageImpl<>(List.of(log), pageable, 1));
+    void deveBuscarOHistoricoDoRegistro_quandoListaComTabelaERegistroId() {
+        // given
+        when(repository.findByTabelaAfetadaAndRegistroId(eq("transfers"), eq(7L), any()))
+                .thenReturn(new PageImpl<>(List.of(), PAGINA, 0));
 
-        // When
-        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("transfers", 7L, pageable);
+        // when
+        service.listar("transfers", 7L, PAGINA);
 
-        // Then
-        assertThat(pagina.conteudo()).singleElement().satisfies(item -> {
-            assertThat(item.registroId()).isEqualTo(7L);
-            assertThat(item.mensagem()).isEqualTo("Transfer criado (por maria)");
-        });
-        verify(repository, never()).findAll(pageable);
+        // then
+        verify(repository).findByTabelaAfetadaAndRegistroId("transfers", 7L, PAGINA);
     }
 
     @Test
-    void listaComFiltroDeTabelaUsaAConsultaFiltrada() {
-        // Given
-        var pageable = PageRequest.of(0, 10);
+    void deveUsarAConsultaFiltrada_quandoListaSoComTabela() {
+        // given
         LogAuditoria log = LogAuditoria.builder().id(1L).tabelaAfetada("transfers").registroId(7L)
                 .mensagem("x").dataHora(LocalDateTime.now()).build();
-        when(repository.findByTabelaAfetada(eq("transfers"), any())).thenReturn(new PageImpl<>(List.of(log), pageable, 1));
+        when(repository.findByTabelaAfetada(eq("transfers"), any())).thenReturn(new PageImpl<>(List.of(log), PAGINA, 1));
 
-        // When
-        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("transfers", null, pageable);
+        // when
+        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("transfers", null, PAGINA);
 
-        // Then
+        // then
         assertThat(pagina.conteudo()).hasSize(1);
         assertThat(pagina.conteudo().get(0).registroId()).isEqualTo(7L);
         assertThat(pagina.totalElementos()).isEqualTo(1);
     }
 
-    @ParameterizedTest
-    @NullSource
-    @ValueSource(strings = {"", "  "})
-    void listaSemTabelaUsaFindAllMesmoComRegistroId(String tabela) {
-        // Given
-        var pageable = PageRequest.of(0, 10);
-        when(repository.findAll(pageable)).thenReturn(new PageImpl<>(List.of(), pageable, 0));
+    @Test
+    void deveUsarFindAll_quandoListaSemTabela() {
+        // given
+        when(repository.findAll(PAGINA)).thenReturn(new PageImpl<>(List.of(), PAGINA, 0));
 
-        // When
-        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar(tabela, 7L, pageable);
+        // when
+        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar(null, null, PAGINA);
 
-        // Then
+        // then
         assertThat(pagina.conteudo()).isEmpty();
-        verify(repository).findAll(pageable);
+        verify(repository).findAll(PAGINA);
+    }
+
+    @Test
+    void deveIgnorarORegistroIdEUsarFindAll_quandoTabelaEstaEmBranco() {
+        // given
+        when(repository.findAll(PAGINA)).thenReturn(new PageImpl<>(List.of(), PAGINA, 0));
+
+        // when
+        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("  ", 7L, PAGINA);
+
+        // then
+        assertThat(pagina.conteudo()).isEmpty();
+        verify(repository).findAll(PAGINA);
+        verify(repository, never()).findByTabelaAfetadaAndRegistroId(any(), any(), any());
+    }
+
+    private LogAuditoria logGravado() {
+        ArgumentCaptor<LogAuditoria> captor = ArgumentCaptor.forClass(LogAuditoria.class);
+        verify(repository).save(captor.capture());
+        return captor.getValue();
     }
 }

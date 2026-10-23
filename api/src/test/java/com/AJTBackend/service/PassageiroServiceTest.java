@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -52,6 +52,7 @@ import static org.mockito.Mockito.when;
 class PassageiroServiceTest {
 
     private static final String CPF_VALIDO = "529.982.247-25";
+    private static final Pageable PAGINA = PageRequest.of(0, 5);
 
     private final PassageiroRepository repository = mock(PassageiroRepository.class);
     // chave de teste (32 bytes em Base64), a mesma ideia da AJT_CRYPTO_KEY
@@ -80,86 +81,89 @@ class PassageiroServiceTest {
 
     // ----- CPF e mascara -----
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "\"{0}\" e valido")
     @ValueSource(strings = {"529.982.247-25", "52998224725", "529 982 247 25", "100.000.001-08"})
-    void cpfComDigitosCertosEhValido(String cpf) {
-        // When
+    void deveAceitarOCpf_quandoDigitosVerificadoresBatem(String cpf) {
+        // when
         boolean valido = PassageiroService.cpfValido(cpf);
 
-        // Then
+        // then
         assertThat(valido).isTrue();
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "\"{0}\" e invalido")
     @ValueSource(strings = {"123", "529.982.247-24", "529.982.247-15", "111.111.111-11", "5299822472a", ""})
-    void cpfErradoEhInvalido(String cpf) {
-        // When
+    void deveRecusarOCpf_quandoDigitosOuFormatoEstaoErrados(String cpf) {
+        // when
         boolean valido = PassageiroService.cpfValido(cpf);
 
-        // Then
+        // then
         assertThat(valido).isFalse();
     }
 
     @Test
-    void cpfNuloEhInvalido() {
-        // When
+    void deveRecusarOCpf_quandoEhNulo() {
+        // when
         boolean valido = PassageiroService.cpfValido(null);
 
-        // Then
+        // then
         assertThat(valido).isFalse();
     }
 
     @Test
-    void documentoNuloViraSoAsteriscos() {
-        // When
+    void deveDevolverSoAsteriscos_quandoDocumentoEhNulo() {
+        // when
         String mascarado = PassageiroService.mascarar(null);
 
-        // Then
+        // then
         assertThat(mascarado).isEqualTo("**");
     }
 
     @Test
-    void documentoCurtoViraSoAsteriscos() {
-        // When
+    void deveDevolverSoAsteriscos_quandoDocumentoTemAteDoisCaracteres() {
+        // when
         String mascarado = PassageiroService.mascarar("12");
 
-        // Then
+        // then
         assertThat(mascarado).isEqualTo("**");
     }
 
     @Test
-    void documentoLongoMostraSoOsDoisUltimosCaracteres() {
-        // When
+    void deveMostrarSoOsDoisUltimos_quandoDocumentoEhLongo() {
+        // when
         String mascarado = PassageiroService.mascarar("XP9988776");
 
-        // Then
+        // then
         assertThat(mascarado).isEqualTo("*******76");
     }
 
     // ----- cadastro -----
 
     @Test
-    void cadastroComCpfInvalidoRetorna400SemGravar() {
-        // Given
+    void deveLancarRegraNegocioSemGravar_quandoCadastroTemCpfInvalido() {
+        // given
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", "123", "Brasileira", null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("CPF inválido");
         verify(repository, never()).save(any());
     }
 
     @Test
-    void cadastroComCpfValidoGravaOsDadosInformados() {
-        // Given
+    void deveGravarOsDadosInformados_quandoCadastroTemCpfValido() {
+        // given
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", CPF_VALIDO, "Brasileira", null);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         PassageiroResponseDTO criado = service.criar(dto);
 
-        // Then
+        // then
         assertThat(criado.nome()).isEqualTo("Ana");
         assertThat(criado.documento()).isEqualTo(CPF_VALIDO);
         Passageiro gravado = gravadoPeloSave();
@@ -170,15 +174,15 @@ class PassageiroServiceTest {
     }
 
     @Test
-    void passaporteNaoPassaPelaRegraDoCpf() {
-        // Given
+    void naoDeveValidarComoCpf_quandoDocumentoEhPassaporte() {
+        // given
         PassageiroRequestDTO dto = new PassageiroRequestDTO("John", "PASSAPORTE", "XP9988776", "Americana", null);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         PassageiroResponseDTO criado = service.criar(dto);
 
-        // Then
+        // then
         assertThat(criado.documento()).isEqualTo("XP9988776");
         Passageiro gravado = gravadoPeloSave();
         assertThat(gravado.getTipoDocumento()).isEqualTo("PASSAPORTE");
@@ -188,179 +192,191 @@ class PassageiroServiceTest {
     // ----- documento duplicado -----
 
     @Test
-    void cadastroComDocumentoDeOutroPassageiroRetorna400SemGravar() {
-        // Given: o mesmo CPF ja existe, gravado sem pontuacao
+    void deveLancarDuplicadoSemGravar_quandoCadastroUsaDocumentoDeOutroPassageiro() {
+        // given: o mesmo CPF ja existe, gravado sem pontuacao
         when(repository.existsByDocumentoHash(documentoHash.calcular("CPF", "52998224725"))).thenReturn(true);
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Outra", "CPF", CPF_VALIDO, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(DocumentoJaCadastradoException.class)
                 .hasMessage("Já existe passageiro cadastrado com este CPF.");
         verify(repository, never()).save(any());
     }
 
     @Test
-    void cadastroGravaOHashDoDocumento() {
-        // Given
+    void deveGravarOHashDoDocumento_quandoCadastroEhValido() {
+        // given
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         service.criar(new PassageiroRequestDTO("Ana", "CPF", CPF_VALIDO, null, null));
 
-        // Then
+        // then
         assertThat(gravadoPeloSave().getDocumentoHash()).isEqualTo(documentoHash.calcular("CPF", CPF_VALIDO));
     }
 
     @Test
-    void putComDocumentoDeOutroPassageiroRetorna400SemGravar() {
-        // Given
+    void deveLancarDuplicadoSemGravar_quandoPutUsaDocumentoDeOutroPassageiro() {
+        // given
         when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "RG", "12345")));
         when(repository.existsByDocumentoHashAndIdNot(documentoHash.calcular("CPF", CPF_VALIDO), 1L)).thenReturn(true);
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", CPF_VALIDO, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, dto)).isInstanceOf(DocumentoJaCadastradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto));
+
+        // then
+        assertThat(erro).isInstanceOf(DocumentoJaCadastradoException.class);
         verify(repository, never()).flush();
     }
 
     @Test
-    void putMantendoOProprioDocumentoNaoContaComoDuplicado() {
-        // Given: so o proprio registro tem o documento (a consulta ignora o id 1)
+    void naoDeveContarComoDuplicado_quandoPutMantemOProprioDocumento() {
+        // given: so o proprio registro tem o documento (a consulta ignora o id 1)
         Passageiro ana = passageiro(1L, null, "Ana", "CPF", CPF_VALIDO);
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
 
-        // When
+        // when
         service.atualizar(1L, new PassageiroRequestDTO("Ana Paula", "CPF", CPF_VALIDO, null, null));
 
-        // Then
+        // then
         verify(repository).existsByDocumentoHashAndIdNot(documentoHash.calcular("CPF", CPF_VALIDO), 1L);
         assertThat(ana.getDocumentoHash()).isEqualTo(documentoHash.calcular("CPF", CPF_VALIDO));
         verify(repository).flush();
     }
 
     @Test
-    void patchQueTrocaODocumentoPeloDeOutroPassageiroRetorna400() {
-        // Given
-        Passageiro ana = passageiro(1L, null, "Ana", "CPF", "100.000.001-08");
-        when(repository.findById(1L)).thenReturn(Optional.of(ana));
+    void deveLancarDuplicadoSemGravar_quandoPatchTrocaPeloDocumentoDeOutroPassageiro() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "CPF", "100.000.001-08")));
         when(repository.existsByDocumentoHashAndIdNot(documentoHash.calcular("CPF", CPF_VALIDO), 1L)).thenReturn(true);
+        PassageiroRequestDTO patch = new PassageiroRequestDTO(null, null, CPF_VALIDO, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, new PassageiroRequestDTO(null, null, CPF_VALIDO, null, null)))
-                .isInstanceOf(DocumentoJaCadastradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch));
+
+        // then
+        assertThat(erro).isInstanceOf(DocumentoJaCadastradoException.class);
         verify(repository, never()).flush();
     }
 
     @Test
-    void patchSoDeNomeNemConsultaDuplicado() {
-        // Given
+    void naoDeveConsultarDuplicado_quandoPatchMudaSoONome() {
+        // given
         when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "CPF", CPF_VALIDO)));
 
-        // When
+        // when
         service.atualizarParcial(1L, new PassageiroRequestDTO("Ana Maria", null, null, null, null));
 
-        // Then
+        // then
         verify(repository, never()).existsByDocumentoHashAndIdNot(any(), any());
     }
 
     // ----- perfil: documento mascarado ou completo -----
 
     @Test
-    void patchQueTrocaSoOTipoParaCpfValidaONumeroQueJaEstava() {
-        // Given
+    void deveValidarONumeroQueJaEstava_quandoPatchTrocaSoOTipoParaCpf() {
+        // given
         Passageiro existente = passageiro(1L, null, "Ana", "RG", "123");
         when(repository.findById(1L)).thenReturn(Optional.of(existente));
         PassageiroRequestDTO patch = new PassageiroRequestDTO(null, "CPF", null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patch))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("CPF inválido");
         verify(repository, never()).flush();
     }
 
     @Test
-    void motoristaRecebeODocumentoMascarado() {
-        // Given
+    void deveMascararODocumento_quandoQuemLeEhMotorista() {
+        // given
         logarComo("MOTORISTA");
         when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "CPF", CPF_VALIDO)));
 
-        // When
+        // when
         PassageiroResponseDTO resposta = service.buscarPorId(1L);
 
-        // Then
+        // then
         assertThat(resposta.documento()).isEqualTo("************25");
         assertThat(resposta.nome()).isEqualTo("Ana");
     }
 
     @Test
-    void atendenteRecebeODocumentoCompleto() {
-        // Given
+    void deveMostrarODocumentoCompleto_quandoQuemLeEhAtendente() {
+        // given
         logarComo("ATENDENTE");
         when(repository.findById(1L)).thenReturn(Optional.of(passageiro(1L, null, "Ana", "CPF", CPF_VALIDO)));
 
-        // When
+        // when
         PassageiroResponseDTO resposta = service.buscarPorId(1L);
 
-        // Then
+        // then
         assertThat(resposta.documento()).isEqualTo(CPF_VALIDO);
     }
 
     // ----- leitura -----
 
     @Test
-    void listarComFiltroDevolveAPaginaDoRepositorio() {
-        // Given
-        Pageable pagina = PageRequest.of(0, 5);
+    void deveDevolverAPaginaDoRepositorio_quandoListaComFiltro() {
+        // given
         Passageiro ana = passageiro(1L, null, "Ana", "RG", "12345");
         when(repository.findAll(ArgumentMatchers.<Specification<Passageiro>>any(), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(ana), pagina, 1));
+                .thenReturn(new PageImpl<>(List.of(ana), PAGINA, 1));
 
-        // When
-        PaginaResponseDTO<PassageiroResponseDTO> resultado = service.listar(new FiltroPassageiroDTO("an", null), pagina);
+        // when
+        PaginaResponseDTO<PassageiroResponseDTO> resultado = service.listar(new FiltroPassageiroDTO("an", null), PAGINA);
 
-        // Then
+        // then
         assertThat(resultado.conteudo()).extracting(PassageiroResponseDTO::nome).containsExactly("Ana");
         assertThat(resultado.totalElementos()).isEqualTo(1);
     }
 
     @Test
-    void buscarPorNacionalidadeDevolveAPaginaDoRepositorio() {
-        // Given
-        Pageable pagina = PageRequest.of(0, 5);
+    void deveDevolverAPaginaDoRepositorio_quandoBuscaPorNacionalidade() {
+        // given
         Passageiro ana = passageiro(1L, null, "Ana", "RG", "12345");
-        when(repository.findByNacionalidadeIgnoreCase("argentina", pagina))
-                .thenReturn(new PageImpl<>(List.of(ana), pagina, 1));
+        when(repository.findByNacionalidadeIgnoreCase("argentina", PAGINA))
+                .thenReturn(new PageImpl<>(List.of(ana), PAGINA, 1));
 
-        // When
-        PaginaResponseDTO<PassageiroResponseDTO> resultado = service.buscarPorNacionalidade("argentina", pagina);
+        // when
+        PaginaResponseDTO<PassageiroResponseDTO> resultado = service.buscarPorNacionalidade("argentina", PAGINA);
 
-        // Then
+        // then
         assertThat(resultado.conteudo()).extracting(PassageiroResponseDTO::nome).containsExactly("Ana");
         assertThat(resultado.totalElementos()).isEqualTo(1);
     }
 
     @Test
-    void listarPorTransferDevolveOsPassageirosDoTransfer() {
-        // Given
+    void deveDevolverOsPassageirosDoTransfer_quandoListaPorTransfer() {
+        // given
         Passageiro ana = passageiro(1L, null, "Ana", "RG", "12345");
         when(repository.findByTransferId(7L)).thenReturn(List.of(ana));
 
-        // When
+        // when
         List<PassageiroResponseDTO> resultado = service.listarPorTransfer(7L);
 
-        // Then
+        // then
         assertThat(resultado).extracting(PassageiroResponseDTO::nome).containsExactly("Ana");
     }
 
     @Test
-    void buscarPorIdInexistenteLanca404() {
-        // Given
+    void deveLancarPassageiroNaoEncontrado_quandoBuscaIdInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L))
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(PassageiroNaoEncontradoException.class)
                 .hasMessageContaining("9");
     }
@@ -368,27 +384,33 @@ class PassageiroServiceTest {
     // ----- PUT -----
 
     @Test
-    void putEmIdInexistenteLanca404() {
-        // Given
+    void deveLancarPassageiroNaoEncontrado_quandoPutEmIdInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "RG", "1", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(PassageiroNaoEncontradoException.class)
                 .hasMessageContaining("9");
         verify(repository, never()).flush();
     }
 
     @Test
-    void putComVersaoDesatualizadaLancaConflitoSemAlterarOPassageiro() {
-        // Given
+    void deveLancarConflitoSemAlterar_quandoPutTrazVersaoDesatualizada() {
+        // given
         Passageiro ana = passageiro(1L, 2L, "Ana", "RG", "12345");
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Outro Nome", "RG", "1", null, 1L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ConflitoDeVersaoException.class)
                 .hasMessageContaining("alterado por outro usuário");
         assertThat(ana.getNome()).isEqualTo("Ana");
@@ -396,14 +418,17 @@ class PassageiroServiceTest {
     }
 
     @Test
-    void putComCpfInvalidoLancaRegraDeNegocioSemAlterarOPassageiro() {
-        // Given
+    void deveLancarRegraNegocioSemAlterar_quandoPutTrazCpfInvalido() {
+        // given
         Passageiro ana = passageiro(1L, 2L, "Ana", "RG", "12345");
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana", "CPF", "123", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("CPF inválido");
         assertThat(ana.getDocumento()).isEqualTo("12345");
@@ -411,16 +436,16 @@ class PassageiroServiceTest {
     }
 
     @Test
-    void putValidoAtualizaTodosOsCamposEGravaAgora() {
-        // Given
+    void deveAtualizarTodosOsCamposEGravarNaHora_quandoPutEhValido() {
+        // given
         Passageiro ana = passageiro(1L, 2L, "Ana", "RG", "12345");
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
         PassageiroRequestDTO dto = new PassageiroRequestDTO("Ana Paula", "CPF", CPF_VALIDO, "Brasileira", 2L);
 
-        // When
+        // when
         PassageiroResponseDTO salvo = service.atualizar(1L, dto);
 
-        // Then
+        // then
         assertThat(salvo.nome()).isEqualTo("Ana Paula");
         assertThat(salvo.tipoDocumento()).isEqualTo("CPF");
         assertThat(salvo.documento()).isEqualTo(CPF_VALIDO);
@@ -432,16 +457,17 @@ class PassageiroServiceTest {
     // ----- PATCH -----
 
     @Test
-    void patchSoDeNomeNaoRevalidaODocumentoJaGravado() {
-        // Given: cpf antigo invalido ja gravado
+    void naoDeveRevalidarODocumentoGravado_quandoPatchMudaSoONome() {
+        // given
+        // cpf antigo invalido ja gravado
         Passageiro ana = passageiro(1L, null, "Ana", "CPF", "123");
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
         PassageiroRequestDTO patch = new PassageiroRequestDTO("Ana Maria", null, null, null, null);
 
-        // When
+        // when
         PassageiroResponseDTO resposta = service.atualizarParcial(1L, patch);
 
-        // Then
+        // then
         assertThat(resposta.nome()).isEqualTo("Ana Maria");
         assertThat(resposta.documento()).isEqualTo("123");
         assertThat(resposta.tipoDocumento()).isEqualTo("CPF");
@@ -449,16 +475,16 @@ class PassageiroServiceTest {
     }
 
     @Test
-    void patchDeDocumentoENacionalidadeCorrigeOCpfEMantemONome() {
-        // Given
+    void deveCorrigirOCpfEManterONome_quandoPatchTrazDocumentoENacionalidade() {
+        // given
         Passageiro ana = passageiro(1L, null, "Ana", "CPF", "123");
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
         PassageiroRequestDTO patch = new PassageiroRequestDTO(null, null, CPF_VALIDO, "Argentina", null);
 
-        // When
+        // when
         PassageiroResponseDTO corrigido = service.atualizarParcial(1L, patch);
 
-        // Then
+        // then
         assertThat(corrigido.documento()).isEqualTo(CPF_VALIDO);
         assertThat(corrigido.nacionalidade()).isEqualTo("Argentina");
         assertThat(corrigido.nome()).isEqualTo("Ana");
@@ -466,27 +492,33 @@ class PassageiroServiceTest {
     }
 
     @Test
-    void patchEmIdInexistenteLanca404() {
-        // Given
+    void deveLancarPassageiroNaoEncontrado_quandoPatchEmIdInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
         PassageiroRequestDTO patch = new PassageiroRequestDTO("X", null, null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, patch))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, patch));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(PassageiroNaoEncontradoException.class)
                 .hasMessageContaining("9");
         verify(repository, never()).flush();
     }
 
     @Test
-    void patchComVersaoDesatualizadaLancaConflitoSemAlterarOPassageiro() {
-        // Given
+    void deveLancarConflitoSemAlterar_quandoPatchTrazVersaoDesatualizada() {
+        // given
         Passageiro ana = passageiro(1L, 2L, "Ana", "RG", "12345");
         when(repository.findById(1L)).thenReturn(Optional.of(ana));
         PassageiroRequestDTO patch = new PassageiroRequestDTO("Outro Nome", null, null, null, 1L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patch))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ConflitoDeVersaoException.class)
                 .hasMessageContaining("alterado por outro usuário");
         assertThat(ana.getNome()).isEqualTo("Ana");
@@ -496,26 +528,29 @@ class PassageiroServiceTest {
     // ----- exclusao -----
 
     @Test
-    void excluirInexistenteLanca404SemApagarNada() {
-        // Given
+    void deveLancarPassageiroNaoEncontradoSemApagar_quandoExcluiIdInexistente() {
+        // given
         when(repository.existsById(9L)).thenReturn(false);
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L))
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(PassageiroNaoEncontradoException.class)
                 .hasMessageContaining("9");
         verify(repository, never()).deleteById(any());
     }
 
     @Test
-    void excluirExistenteApagaOPassageiro() {
-        // Given
+    void deveApagarOPassageiro_quandoExcluiIdExistente() {
+        // given
         when(repository.existsById(1L)).thenReturn(true);
 
-        // When
+        // when
         service.deletar(1L);
 
-        // Then
+        // then
         verify(repository).deleteById(1L);
     }
 }

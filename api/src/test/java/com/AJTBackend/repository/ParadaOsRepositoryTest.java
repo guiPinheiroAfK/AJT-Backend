@@ -56,6 +56,12 @@ class ParadaOsRepositoryTest extends RepositorioTestBase {
         return os;
     }
 
+    // le os transfers de cada parada: e essa leitura que dispararia o N+1, entao faz parte da acao medida
+    private static List<ParadaOs> comTransfersLidos(List<ParadaOs> paradas) {
+        paradas.forEach(p -> p.getTransfers().size());
+        return paradas;
+    }
+
     // grava tudo e esvazia o cache da sessao, pra contagem medir idas reais ao banco
     private Statistics estatisticasDoBancoLimpo() {
         em.flush();
@@ -66,51 +72,65 @@ class ParadaOsRepositoryTest extends RepositorioTestBase {
     }
 
     @Test
-    void paradasDaOsVemEmOrdemComOsTransfersNumaUnicaQuery() {
-        // Given
+    void deveTrazerAsParadasEmOrdemComOsTransfersNumaQuerySo_quandoListaAsParadasDaOs() {
+        // given
         Long osId = osComParadas(null).getId();
         Statistics stats = estatisticasDoBancoLimpo();
 
-        // When
-        List<ParadaOs> paradas = repository.findByOrdemServicoIdOrderByOrdemParadaAsc(osId);
-        List<Integer> transfersPorParada = paradas.stream().map(p -> p.getTransfers().size()).toList();
+        // when
+        List<ParadaOs> paradas = comTransfersLidos(repository.findByOrdemServicoIdOrderByOrdemParadaAsc(osId));
 
-        // Then
+        // then
         assertThat(paradas).extracting(ParadaOs::getOrdemParada).containsExactly(1, 2, 3, 4, 5);
-        assertThat(transfersPorParada).containsOnly(TRANSFERS_POR_PARADA);
+        assertThat(paradas).extracting(p -> p.getTransfers().size()).containsOnly(TRANSFERS_POR_PARADA);
         assertThat(stats.getPrepareStatementCount()).isEqualTo(1); // sem o @EntityGraph: 1 + 5
     }
 
     @Test
-    void listagemPaginadaCarregaOsTransfersEmLoteENaoUmaQueryPorParada() {
-        // Given
+    void deveCarregarOsTransfersEmLote_quandoListaAsParadasPaginado() {
+        // given
         osComParadas(null);
         Statistics stats = estatisticasDoBancoLimpo();
 
-        // When
-        Page<ParadaOs> pagina = repository.findAll(PageRequest.of(0, 20, Sort.by("id")));
-        int totalDeTransfers = pagina.getContent().stream().mapToInt(p -> p.getTransfers().size()).sum();
+        // when
+        List<ParadaOs> paradas = comTransfersLidos(repository.findAll(PageRequest.of(0, 20, Sort.by("id"))).getContent());
 
-        // Then
-        assertThat(pagina.getContent()).hasSize(PARADAS);
-        assertThat(totalDeTransfers).isEqualTo(PARADAS * TRANSFERS_POR_PARADA);
+        // then
+        assertThat(paradas).hasSize(PARADAS);
+        assertThat(paradas.stream().mapToInt(p -> p.getTransfers().size()).sum())
+                .isEqualTo(PARADAS * TRANSFERS_POR_PARADA);
         assertThat(stats.getPrepareStatementCount()).isLessThanOrEqualTo(3); // pagina + count + 1 lote
     }
 
     @Test
-    void buscaPorMotoristaTrazSoAsParadasDasOsDele() {
-        // Given
+    void deveTrazerSoAsParadasDasOsDele_quandoBuscaPorMotorista() {
+        // given
         Motorista carlos = em.persist(Motorista.builder().nome("Carlos").cnh("CNH-CARLOS").build());
         Motorista dora = em.persist(Motorista.builder().nome("Dora").cnh("CNH-DORA").build());
         Long osDoCarlos = osComParadas(carlos).getId();
         osComParadas(dora);
         em.flush();
 
-        // When
+        // when
         Page<ParadaOs> doCarlos = repository.findByOrdemServicoMotoristaId(carlos.getId(), PageRequest.of(0, 20));
 
-        // Then
+        // then
         assertThat(doCarlos.getTotalElements()).isEqualTo(PARADAS);
         assertThat(doCarlos.getContent()).allSatisfy(p -> assertThat(p.getOrdemServico().getId()).isEqualTo(osDoCarlos));
+    }
+
+    @Test
+    void deveDevolverPaginaVazia_quandoMotoristaNaoTemOs() {
+        // given
+        Motorista semOs = em.persist(Motorista.builder().nome("Maria").cnh("CNH-MARIA").build());
+        Motorista comOs = em.persist(Motorista.builder().nome("Pedro").cnh("CNH-PEDRO").build());
+        osComParadas(comOs);
+        em.flush();
+
+        // when
+        Page<ParadaOs> doSemOs = repository.findByOrdemServicoMotoristaId(semOs.getId(), PageRequest.of(0, 20));
+
+        // then
+        assertThat(doSemOs.getContent()).isEmpty();
     }
 }

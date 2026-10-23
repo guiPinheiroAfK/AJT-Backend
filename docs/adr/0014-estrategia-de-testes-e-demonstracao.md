@@ -96,3 +96,12 @@ dados reais migrando V6→V7, e o **stack completo em containers** (`docker comp
   `// Given`, `// When` e `// Then` (ou `// When / Then` quando a execução é a própria verificação, como em
   `assertThatThrownBy`). Execução e verificação ficam em linhas separadas, e nos testes web o `perform(...)`
   vai para uma variável `ResultActions resposta` antes do `andExpect`.
+- **2026-10-22 ([ADR-0021](0021-estrategia-de-testes-v2-slices-e-bdd.md)):** o padrão da entrada acima foi
+  revisto:
+  - nomes `deve…_quando…` / `naoDeve…_quando…`;
+  - comentários `// given`, `// when` e `// then` em minúsculo, sem o `// When / Then` junto;
+  - exceção capturada com `catchThrowable` no `when`, no lugar do `assertThatThrownBy`.
+
+  Números contados com `grep`: 52 classes de teste, 647 métodos, 889 execuções (config 56, service 323,
+  repository 72, web 363, integração 75). Os scripts de verificação foram para `scripts/api/`
+  ([ADR-0022](0022-scripts-de-verificacao-em-scripts.md)).
