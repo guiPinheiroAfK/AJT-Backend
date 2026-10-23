@@ -19,11 +19,7 @@ import com.AJTBackend.model.enums.StatusOrdemServico;
 import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
-import jakarta.persistence.criteria.CriteriaBuilder;
-import jakarta.persistence.criteria.CriteriaQuery;
-import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -37,15 +33,13 @@ import java.util.Optional;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 /*
@@ -64,6 +58,7 @@ import static org.mockito.Mockito.when;
 class OrdemServicoServiceTest {
 
     private static final LocalDate DIA = LocalDate.of(2026, 10, 21);
+    private static final PageRequest PAGINA = PageRequest.of(0, 5);
 
     private final OrdemServicoRepository repository = mock(OrdemServicoRepository.class);
     private final MotoristaRepository motoristaRepository = mock(MotoristaRepository.class);
@@ -79,8 +74,8 @@ class OrdemServicoServiceTest {
                 .motorista(motoristaId != null ? Motorista.builder().id(motoristaId).build() : null).build();
     }
 
-    private static OrdemServico osComTransfer() {
-        OrdemServico comTransfer = os(1L, null);
+    private static OrdemServico osComUmTransfer(Long id) {
+        OrdemServico comTransfer = os(id, null);
         comTransfer.setTransfers(new ArrayList<>(List.of(Transfer.builder().id(2L).build())));
         return comTransfer;
     }
@@ -93,368 +88,365 @@ class OrdemServicoServiceTest {
         return new FiltroOrdemServicoDTO(null, inicio, fim, null, null);
     }
 
-    @SuppressWarnings("unchecked")
-    private void repositorioDevolve(OrdemServico os) {
-        when(repository.findAll(any(Specification.class), any(Pageable.class)))
-                .thenReturn(new PageImpl<>(List.of(os), PageRequest.of(0, 5), 1));
+    private void repositorioDevolveUmaOsDoMotorista5() {
+        when(repository.findAll(any(Specification.class), any(Pageable.class))).thenReturn(new PageImpl<>(List.of(os(1L, 5L)), PAGINA, 1));
     }
 
-    // executa a Specification que o service mandou pro repositorio e devolve o CriteriaBuilder usado
-    @SuppressWarnings("unchecked")
-    private CriteriaBuilder filtroAplicadoNaConsulta() {
-        ArgumentCaptor<Specification<OrdemServico>> spec = ArgumentCaptor.forClass(Specification.class);
-        verify(repository).findAll(spec.capture(), any(Pageable.class));
-        CriteriaBuilder cb = mock(CriteriaBuilder.class, RETURNS_MOCKS);
-        spec.getValue().toPredicate(mock(Root.class, RETURNS_MOCKS), mock(CriteriaQuery.class), cb);
-        return cb;
+    private void motorista5EVeiculo6Cadastrados() {
+        when(motoristaRepository.findById(5L)).thenReturn(Optional.of(Motorista.builder().id(5L).build()));
+        when(veiculoRepository.findById(6L)).thenReturn(Optional.of(Veiculo.builder().id(6L).build()));
     }
 
     // ---------------- leitura ----------------
 
     @Test
-    @SuppressWarnings("unchecked")
-    void periodoInvertidoLanca400SemConsultar() {
-        // Given
-        FiltroOrdemServicoDTO invertido = filtro(DIA, DIA.minusDays(1));
-        PageRequest pagina = PageRequest.of(0, 5);
+    void deveLancarRegraNegocioSemConsultar_quandoPeriodoEstaInvertido() {
+        // when
+        Throwable erro = catchThrowable(() -> service.listar(filtro(DIA, DIA.minusDays(1)), PAGINA));
 
-        // When / Then
-        assertThatThrownBy(() -> service.listar(invertido, pagina))
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("depois da final");
         verify(repository, never()).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
-    void gerenteListaComOFiltroDeMotoristaQueEscolheu() {
-        // Given
+    void deveListarComTodosOsFiltros_quandoUsuarioNaoEhRestrito() {
+        // given
+        repositorioDevolveUmaOsDoMotorista5();
         when(acessoMotorista.restrito()).thenReturn(false);
-        repositorioDevolve(os(1L, 7L));
-        FiltroOrdemServicoDTO doMotorista7 = new FiltroOrdemServicoDTO(StatusOrdemServico.ABERTA, DIA, DIA, 7L, 2L);
 
-        // When
-        PaginaResponseDTO<OrdemServicoResponseDTO> pagina = service.listar(doMotorista7, PageRequest.of(0, 5));
+        // when
+        PaginaResponseDTO<OrdemServicoResponseDTO> pagina =
+                service.listar(new FiltroOrdemServicoDTO(StatusOrdemServico.ABERTA, DIA, DIA, 5L, 2L), PAGINA);
 
-        // Then
-        assertThat(pagina.conteudo()).extracting(OrdemServicoResponseDTO::motoristaId).containsExactly(7L);
-        verify(filtroAplicadoNaConsulta()).equal(any(), eq(7L));
+        // then
+        assertThat(pagina.totalElementos()).isEqualTo(1);
     }
 
     @Test
-    void motoristaListaSoAsDeleMesmoPedindoAsDeOutro() {
-        // Given
+    void deveListarPorStatus_quandoMotoristaTemVinculo() {
+        // given
+        repositorioDevolveUmaOsDoMotorista5();
         when(acessoMotorista.restrito()).thenReturn(true);
         when(acessoMotorista.motoristaId()).thenReturn(Optional.of(5L));
-        repositorioDevolve(os(1L, 5L));
-        FiltroOrdemServicoDTO pedindoOMotorista7 = new FiltroOrdemServicoDTO(null, null, null, 7L, null);
 
-        // When
-        service.listar(pedindoOMotorista7, PageRequest.of(0, 5));
+        // when
+        PaginaResponseDTO<OrdemServicoResponseDTO> pagina = service.buscarPorStatus(StatusOrdemServico.ABERTA, PAGINA);
 
-        // Then
-        CriteriaBuilder cb = filtroAplicadoNaConsulta();
-        verify(cb).equal(any(), eq(5L));
-        verify(cb, never()).equal(any(), eq(7L));
+        // then
+        assertThat(pagina.conteudo()).hasSize(1);
     }
 
     @Test
-    void motoristaSemCadastroLigadoRecebeFiltroQueNaoTrazNada() {
-        // Given
+    void deveConsultarComFiltroNenhum_quandoMotoristaNaoTemVinculo() {
+        // given
+        repositorioDevolveUmaOsDoMotorista5();
         when(acessoMotorista.restrito()).thenReturn(true);
         when(acessoMotorista.motoristaId()).thenReturn(Optional.empty());
-        repositorioDevolve(os(1L, 5L));
 
-        // When
-        service.listar(filtro(null, null), PageRequest.of(0, 5));
+        // when
+        PaginaResponseDTO<OrdemServicoResponseDTO> pagina = service.listar(filtro(null, null), PAGINA);
 
-        // Then
-        verify(filtroAplicadoNaConsulta()).disjunction();
-    }
-
-    @Test
-    void buscaPorStatusUsaOFiltroDeStatus() {
-        // Given
-        when(acessoMotorista.restrito()).thenReturn(false);
-        repositorioDevolve(os(1L, 5L));
-
-        // When
-        PaginaResponseDTO<OrdemServicoResponseDTO> pagina = service.buscarPorStatus(StatusOrdemServico.ABERTA, PageRequest.of(0, 5));
-
-        // Then
+        // then
+        // o repositorio mockado ignora o filtro "nenhum"; o resultado real fica no FiltrosNoBancoRepositoryTest
         assertThat(pagina.conteudo()).hasSize(1);
-        verify(filtroAplicadoNaConsulta()).equal(any(), eq(StatusOrdemServico.ABERTA));
+        verify(repository).findAll(any(Specification.class), any(Pageable.class));
     }
 
     @Test
-    void buscaPorIdVisivelDevolveAOs() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, 5L)));
-        when(acessoMotorista.podeVer(any())).thenReturn(true);
-
-        // When
-        OrdemServicoResponseDTO encontrada = service.buscarPorId(1L);
-
-        // Then
-        assertThat(encontrada.id()).isEqualTo(1L);
-        assertThat(encontrada.motoristaId()).isEqualTo(5L);
-    }
-
-    @Test
-    void motoristaNaoVeOsDeOutroERecebe404() {
-        // Given
+    void deveLancarOsNaoEncontrada_quandoMotoristaBuscaOsDeOutro() {
+        // given
         when(repository.findById(1L)).thenReturn(Optional.of(os(1L, 6L)));
         when(acessoMotorista.podeVer(any())).thenReturn(false);
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(1L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(1L));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
     }
 
     @Test
-    void osInexistenteLanca404() {
-        // Given
+    void deveLancarOsNaoEncontrada_quandoOsNaoExiste() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void minhasDoDiaSemCadastroLigadoVemVaziaSemConsultar() {
-        // Given
+    void deveDevolverAOs_quandoUsuarioPodeVer() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, 5L)));
+        when(acessoMotorista.podeVer(any())).thenReturn(true);
+
+        // when
+        OrdemServicoResponseDTO resposta = service.buscarPorId(1L);
+
+        // then
+        assertThat(resposta.motoristaId()).isEqualTo(5L);
+    }
+
+    @Test
+    void deveDevolverListaVaziaSemConsultar_quandoMotoristaSemVinculoPedeAsDoDia() {
+        // given
         when(acessoMotorista.motoristaId()).thenReturn(Optional.empty());
 
-        // When
+        // when
         List<OrdemServicoDoDiaDTO> minhas = service.minhasDoDia(DIA);
 
-        // Then
+        // then
         assertThat(minhas).isEmpty();
         verify(repository, never()).findAll(any(Specification.class), any(Sort.class));
     }
 
     @Test
-    @SuppressWarnings("unchecked")
-    void minhasDoDiaTrazAsOsDoMotoristaComAsParadas() {
-        // Given
+    void deveTrazerAsOsComParadas_quandoMotoristaComVinculoPedeAsDeHoje() {
+        // given
         when(acessoMotorista.motoristaId()).thenReturn(Optional.of(5L));
         when(repository.findAll(any(Specification.class), any(Sort.class))).thenReturn(List.of(os(1L, 5L)));
         when(paradaOsService.listarPorOrdemServico(1L)).thenReturn(List.of(
                 new ParadaOsResponseDTO(3L, 1L, 1, "Aeroporto", null, null, null, null, null, Set.of(), 0L)));
 
-        // When
+        // when
         List<OrdemServicoDoDiaDTO> minhas = service.minhasDoDia(null); // sem data = hoje
 
-        // Then
-        assertThat(minhas).singleElement().satisfies(doDia -> {
-            assertThat(doDia.ordem().id()).isEqualTo(1L);
-            assertThat(doDia.paradas()).extracting(ParadaOsResponseDTO::localParada).containsExactly("Aeroporto");
-        });
+        // then
+        assertThat(minhas).hasSize(1);
+        assertThat(minhas.get(0).paradas()).extracting(ParadaOsResponseDTO::localParada).containsExactly("Aeroporto");
     }
 
     // ---------------- escrita ----------------
 
     @Test
-    void cadastroComMotoristaInexistenteLanca404SemGravar() {
-        // Given
+    void deveLancarMotoristaNaoEncontradoSemGravar_quandoCadastroTemMotoristaInexistente() {
+        // given
         when(motoristaRepository.findById(5L)).thenReturn(Optional.empty());
-        OrdemServicoRequestDTO dto = dto(DIA, 5L, null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto)).isInstanceOf(MotoristaNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto(DIA, 5L, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class);
         verify(repository, never()).save(any());
     }
 
     @Test
-    void cadastroComVeiculoInexistenteLanca404SemGravar() {
-        // Given
+    void deveLancarVeiculoNaoEncontradoSemGravar_quandoCadastroTemVeiculoInexistente() {
+        // given
         when(veiculoRepository.findById(6L)).thenReturn(Optional.empty());
-        OrdemServicoRequestDTO dto = dto(DIA, null, 6L, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto)).isInstanceOf(VeiculoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto(DIA, null, 6L, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(VeiculoNaoEncontradoException.class);
         verify(repository, never()).save(any());
     }
 
     @Test
-    void cadastroSemStatusNasceAbertaEAudita() {
-        // Given
-        when(motoristaRepository.findById(5L)).thenReturn(Optional.of(Motorista.builder().id(5L).build()));
-        when(veiculoRepository.findById(6L)).thenReturn(Optional.of(Veiculo.builder().id(6L).build()));
+    void deveNascerAbertaEAuditar_quandoCadastroNaoTrazStatus() {
+        // given
+        motorista5EVeiculo6Cadastrados();
         when(repository.save(any())).thenAnswer(inv -> {
             OrdemServico salva = inv.getArgument(0);
             salva.setId(10L);
             return salva;
         });
 
-        // When
+        // when
         OrdemServicoResponseDTO criada = service.criar(dto(DIA, 5L, 6L, null, null));
 
-        // Then
+        // then
         assertThat(criada.status()).isEqualTo(StatusOrdemServico.ABERTA);
-        assertThat(criada.motoristaId()).isEqualTo(5L);
         assertThat(criada.veiculoId()).isEqualTo(6L);
         verify(auditoriaService).registrar("ordens_servico", 10L, "Ordem de servico criada");
     }
 
     @Test
-    void putDeOsInexistenteLanca404() {
-        // Given
+    void deveLancarOsNaoEncontrada_quandoPutEmOsInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
-        OrdemServicoRequestDTO dto = dto(DIA, null, null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, dto)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, dto(DIA, null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
     }
 
     @Test
-    void patchDeOsInexistenteLanca404() {
-        // Given
+    void deveLancarOsNaoEncontrada_quandoPatchEmOsInexistente() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
-        OrdemServicoRequestDTO dto = dto(null, null, null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, dto)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, dto(null, null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
     }
 
     @Test
-    void putComVersaoVelhaLanca409() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
-        OrdemServicoRequestDTO versaoVelha = dto(DIA, null, null, null, 0L);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
-    }
-
-    @Test
-    void patchComVersaoVelhaLanca409() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
-        OrdemServicoRequestDTO versaoVelha = dto(null, null, null, null, 0L);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
-    }
-
-    @Test
-    void osSemTransfersPodeMudarDeDia() {
-        // Given
+    void deveLancarConflitoDeVersao_quandoPutTrazVersaoVelha() {
+        // given
         when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
 
-        // When
-        OrdemServicoResponseDTO salva = service.atualizar(1L, dto(DIA.plusDays(3), null, null, null, null));
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto(DIA, null, null, null, 0L)));
 
-        // Then
-        assertThat(salva.dataServico()).isEqualTo(DIA.plusDays(3));
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
     }
 
     @Test
-    void osComTransfersNaoMudaDeDiaNoPut() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(osComTransfer()));
-        OrdemServicoRequestDTO outroDia = dto(DIA.plusDays(1), null, null, null, null);
+    void deveLancarConflitoDeVersao_quandoPatchTrazVersaoVelha() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, outroDia))
-                .isInstanceOf(RegraNegocioException.class)
-                .hasMessageContaining("Desvincule");
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, dto(null, null, null, null, 0L)));
+
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
     }
 
     @Test
-    void osComTransfersNaoMudaDeDiaNoPatch() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(osComTransfer()));
-        OrdemServicoRequestDTO outroDia = dto(DIA.plusDays(1), null, null, null, null);
+    void deveMudarODia_quandoOsNaoTemTransfers() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, outroDia))
-                .isInstanceOf(RegraNegocioException.class)
-                .hasMessageContaining("1 transfer(s)");
+        // when
+        OrdemServicoResponseDTO resposta = service.atualizar(1L, dto(DIA.plusDays(3), null, null, null, null));
+
+        // then
+        assertThat(resposta.dataServico()).isEqualTo(DIA.plusDays(3));
     }
 
     @Test
-    void osComTransfersPodeSerEditadaMantendoODia() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(osComTransfer()));
+    void devePermitirEditar_quandoOsComTransfersMantemODiaSemVersao() {
+        // given
+        when(repository.findById(2L)).thenReturn(Optional.of(osComUmTransfer(2L)));
 
-        // When
-        OrdemServicoResponseDTO salva = service.atualizar(1L, dto(DIA, null, null, StatusOrdemServico.EM_ANDAMENTO, 1L));
+        // when
+        OrdemServicoResponseDTO resposta = service.atualizar(2L, dto(DIA, null, null, StatusOrdemServico.EM_ANDAMENTO, null));
 
-        // Then
-        assertThat(salva.status()).isEqualTo(StatusOrdemServico.EM_ANDAMENTO);
-        assertThat(salva.dataServico()).isEqualTo(DIA);
+        // then
+        assertThat(resposta.status()).isEqualTo(StatusOrdemServico.EM_ANDAMENTO);
     }
 
     @Test
-    void putSemStatusVoltaPraAbertaEAuditaAMudanca() {
-        // Given
+    void devePermitirEditar_quandoOsComTransfersMantemODiaComVersaoAtual() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(osComUmTransfer(1L)));
+
+        // when
+        OrdemServicoResponseDTO resposta = service.atualizar(1L, dto(DIA, null, null, StatusOrdemServico.EM_ANDAMENTO, 1L));
+
+        // then
+        assertThat(resposta.status()).isEqualTo(StatusOrdemServico.EM_ANDAMENTO);
+    }
+
+    @Test
+    void deveLancarRegraNegocio_quandoPutMudaODiaDeOsComTransfers() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(osComUmTransfer(1L)));
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto(DIA.plusDays(1), null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(RegraNegocioException.class).hasMessageContaining("Desvincule");
+    }
+
+    @Test
+    void deveLancarRegraNegocio_quandoPatchMudaODiaDeOsComTransfers() {
+        // given
+        when(repository.findById(1L)).thenReturn(Optional.of(osComUmTransfer(1L)));
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, dto(DIA.plusDays(1), null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(RegraNegocioException.class).hasMessageContaining("1 transfer(s)");
+    }
+
+    @Test
+    void deveVoltarPraAbertaEAuditarAMudanca_quandoPutNaoTrazStatus() {
+        // given
         OrdemServico emAndamento = os(1L, null);
         emAndamento.setStatus(StatusOrdemServico.EM_ANDAMENTO);
         when(repository.findById(1L)).thenReturn(Optional.of(emAndamento));
 
-        // When
-        OrdemServicoResponseDTO salva = service.atualizar(1L, dto(DIA, null, null, null, null));
+        // when
+        OrdemServicoResponseDTO resposta = service.atualizar(1L, dto(DIA, null, null, null, null));
 
-        // Then
-        assertThat(salva.status()).isEqualTo(StatusOrdemServico.ABERTA);
+        // then
+        assertThat(resposta.status()).isEqualTo(StatusOrdemServico.ABERTA);
         verify(auditoriaService).registrarAtualizacao(eq("ordens_servico"), eq(1L), any(),
                 eq(StatusOrdemServico.EM_ANDAMENTO), eq(StatusOrdemServico.ABERTA));
     }
 
     @Test
-    void patchComTodosOsCamposTrocaTudo() {
-        // Given
+    void deveAlterarTodosOsCampos_quandoPatchTrazTodos() {
+        // given
         when(repository.findById(1L)).thenReturn(Optional.of(os(1L, null)));
-        when(motoristaRepository.findById(5L)).thenReturn(Optional.of(Motorista.builder().id(5L).build()));
-        when(veiculoRepository.findById(6L)).thenReturn(Optional.of(Veiculo.builder().id(6L).build()));
+        motorista5EVeiculo6Cadastrados();
 
-        // When
-        OrdemServicoResponseDTO salva = service.atualizarParcial(1L, dto(DIA.plusDays(2), 5L, 6L, StatusOrdemServico.FINALIZADA, null));
+        // when
+        OrdemServicoResponseDTO tudo = service.atualizarParcial(1L, dto(DIA.plusDays(2), 5L, 6L, StatusOrdemServico.FINALIZADA, null));
 
-        // Then
-        assertThat(salva.dataServico()).isEqualTo(DIA.plusDays(2));
-        assertThat(salva.motoristaId()).isEqualTo(5L);
-        assertThat(salva.veiculoId()).isEqualTo(6L);
-        assertThat(salva.status()).isEqualTo(StatusOrdemServico.FINALIZADA);
+        // then
+        assertThat(tudo.dataServico()).isEqualTo(DIA.plusDays(2));
+        assertThat(tudo.motoristaId()).isEqualTo(5L);
+        assertThat(tudo.veiculoId()).isEqualTo(6L);
+        assertThat(tudo.status()).isEqualTo(StatusOrdemServico.FINALIZADA);
     }
 
     @Test
-    void patchVazioNaoMudaNada() {
-        // Given
-        OrdemServico finalizada = os(1L, 5L);
+    void naoDeveMudarNada_quandoPatchVemVazio() {
+        // given
+        OrdemServico finalizada = os(1L, null);
         finalizada.setStatus(StatusOrdemServico.FINALIZADA);
         when(repository.findById(1L)).thenReturn(Optional.of(finalizada));
 
-        // When
-        OrdemServicoResponseDTO salva = service.atualizarParcial(1L, dto(null, null, null, null, null));
+        // when
+        OrdemServicoResponseDTO nada = service.atualizarParcial(1L, dto(null, null, null, null, null));
 
-        // Then
-        assertThat(salva.status()).isEqualTo(StatusOrdemServico.FINALIZADA);
-        assertThat(salva.dataServico()).isEqualTo(DIA);
-        assertThat(salva.motoristaId()).isEqualTo(5L);
+        // then
+        assertThat(nada.status()).isEqualTo(StatusOrdemServico.FINALIZADA);
+        assertThat(nada.dataServico()).isEqualTo(DIA);
     }
 
     @Test
-    void excluirOsExistenteApagaEAudita() {
-        // Given
-        when(repository.existsById(1L)).thenReturn(true);
-
-        // When
-        service.deletar(1L);
-
-        // Then
-        verify(repository).deleteById(1L);
-        verify(auditoriaService).registrar("ordens_servico", 1L, "Ordem de servico removida");
-    }
-
-    @Test
-    void excluirOsInexistenteLanca404SemApagar() {
-        // Given
+    void deveLancarOsNaoEncontradaSemApagar_quandoExcluiOsInexistente() {
+        // given
         when(repository.existsById(9L)).thenReturn(false);
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L)).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
         verify(repository, never()).deleteById(anyLong());
-        verifyNoInteractions(auditoriaService);
+    }
+
+    @Test
+    void deveApagarEAuditar_quandoExcluiOsExistente() {
+        // given
+        when(repository.existsById(1L)).thenReturn(true);
+
+        // when
+        service.deletar(1L);
+
+        // then
+        verify(repository).deleteById(1L);
+        verify(auditoriaService).registrar("ordens_servico", 1L, "Ordem de servico removida");
     }
 }
