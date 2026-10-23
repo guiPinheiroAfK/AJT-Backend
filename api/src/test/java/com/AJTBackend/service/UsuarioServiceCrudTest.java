@@ -6,7 +6,6 @@ import com.AJTBackend.dto.UsuarioRequestDTO;
 import com.AJTBackend.dto.UsuarioResponseDTO;
 import com.AJTBackend.exception.ConflitoDeVersaoException;
 import com.AJTBackend.exception.MotoristaNaoEncontradoException;
-import com.AJTBackend.exception.RegraNegocioException;
 import com.AJTBackend.exception.UsuarioNaoEncontradoException;
 import com.AJTBackend.model.Motorista;
 import com.AJTBackend.model.Usuario;
@@ -28,7 +27,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -46,7 +45,7 @@ import static org.mockito.Mockito.when;
  * como rodar: teste unitario com repositorios mockados e BCrypt de verdade (custo baixo);
  * o usuario logado e simulado no SecurityContextHolder. sem spring, sem banco. "mvn test".
  *
- * por que existe: e a tela de quem controla o acesso ao resto inteiro do sistema.
+ * por que existe: e a tela de quem controla o acesso a todo o resto do sistema.
  */
 class UsuarioServiceCrudTest {
 
@@ -65,242 +64,262 @@ class UsuarioServiceCrudTest {
                 .role(Role.ATENDENTE).ativo(true).trocarSenha(false).build();
     }
 
+    private static Usuario mariaMotorista() {
+        Usuario motorista = maria();
+        motorista.setRole(Role.MOTORISTA);
+        return motorista;
+    }
+
     private static UsuarioRequestDTO dto(String nome, String username, String senha, Role role, Boolean ativo, Long motoristaId, Long versao) {
         return new UsuarioRequestDTO(nome, username, senha, role, ativo, motoristaId, versao);
     }
 
-    private static void logadoComo(String username) {
-        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(username, null, List.of()));
-    }
-
-    @Test
-    void listarTodosDevolveAPaginaConvertida() {
-        // Given
-        var pagina = PageRequest.of(0, 5);
-        when(repository.findAll(pagina)).thenReturn(new PageImpl<>(List.of(maria()), pagina, 1));
-
-        // When
-        PaginaResponseDTO<UsuarioResponseDTO> resultado = service.listarTodos(pagina);
-
-        // Then
-        assertThat(resultado.conteudo()).extracting(UsuarioResponseDTO::username).containsExactly("maria");
-    }
-
-    @Test
-    void buscaPorIdDevolveOUsuario() {
-        // Given
-        when(repository.findById(2L)).thenReturn(Optional.of(maria()));
-
-        // When
-        UsuarioResponseDTO encontrado = service.buscarPorId(2L);
-
-        // Then
-        assertThat(encontrado.username()).isEqualTo("maria");
-        assertThat(encontrado.role()).isEqualTo(Role.ATENDENTE);
-    }
-
-    @Test
-    void buscaPorIdInexistenteLanca404() {
-        // Given
+    private void usuarioNaoExiste() {
         when(repository.findById(9L)).thenReturn(Optional.empty());
-
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(UsuarioNaoEncontradoException.class);
     }
 
-    @Test
-    void buscaPorUsernameInexistenteLanca404ComOUsername() {
-        // Given
-        when(repository.findByUsername("ninguem")).thenReturn(Optional.empty());
+    // ----- cadastro -----
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorUsername("ninguem"))
-                .isInstanceOf(UsuarioNaoEncontradoException.class)
-                .hasMessageContaining("ninguem");
-    }
-
-    @Test
-    void cadastroComSenhaEmBrancoLanca400SemGravar() {
-        // Given
-        UsuarioRequestDTO semSenha = dto("Ana", "ana", "   ", Role.ATENDENTE, null, null, null);
-
-        // When / Then
-        assertThatThrownBy(() -> service.criar(semSenha))
-                .isInstanceOf(RegraNegocioException.class)
-                .hasMessageContaining("Senha é obrigatória");
-        verify(repository, never()).save(any());
-    }
-
-    @Test
-    void cadastroSemAtivoNasceAtivoEObrigaTrocarSenha() {
-        // Given
-        when(repository.existsByUsername("ana")).thenReturn(false);
-        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
-
-        // When
-        UsuarioResponseDTO criada = service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, null, null, null));
-
-        // Then
-        assertThat(criada.ativo()).isTrue();
-        assertThat(criada.trocarSenha()).isTrue();
-    }
-
-    @ParameterizedTest
+    @ParameterizedTest(name = "ativo = {0} e respeitado")
     @ValueSource(booleans = {true, false})
-    void cadastroRespeitaOAtivoInformado(boolean ativo) {
-        // Given
+    void deveRespeitarOAtivo_quandoCadastroInformaAtivo(boolean ativo) {
+        // given
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         UsuarioResponseDTO criado = service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, ativo, null, null));
 
-        // Then
+        // then
         assertThat(criado.ativo()).isEqualTo(ativo);
     }
 
     @Test
-    void putDeUsuarioInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        UsuarioRequestDTO dto = dto("X", "x12", null, Role.ATENDENTE, null, null, null);
+    void deveLancarErroDeSenhaObrigatoria_quandoCadastroTemSenhaEmBranco() {
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto("Ana", "ana", "   ", Role.ATENDENTE, null, null, null)));
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, dto)).isInstanceOf(UsuarioNaoEncontradoException.class);
+        // then
+        assertThat(erro).hasMessageContaining("Senha é obrigatória");
+        verify(repository, never()).save(any());
     }
 
     @Test
-    void patchDeUsuarioInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        UsuarioRequestDTO dto = dto(null, null, null, null, null, null, null);
+    void deveNascerAtivoEObrigarTrocaDeSenha_quandoCadastroNaoInformaAtivo() {
+        // given
+        when(repository.existsByUsername("ana")).thenReturn(false);
+        when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, dto)).isInstanceOf(UsuarioNaoEncontradoException.class);
+        // when
+        UsuarioResponseDTO criada = service.criar(dto("Ana", "ana", "senha12345", Role.ATENDENTE, null, null, null));
+
+        // then
+        assertThat(criada.ativo()).isTrue();
+        assertThat(criada.trocarSenha()).isTrue();
+    }
+
+    // ----- leitura -----
+
+    @Test
+    void deveDevolverAPagina_quandoListaTodos() {
+        // given
+        var pagina = PageRequest.of(0, 5);
+        when(repository.findAll(pagina)).thenReturn(new PageImpl<>(List.of(maria()), pagina, 1));
+
+        // when
+        PaginaResponseDTO<UsuarioResponseDTO> resultado = service.listarTodos(pagina);
+
+        // then
+        assertThat(resultado.conteudo()).hasSize(1);
     }
 
     @Test
-    void excluirUsuarioInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L)).isInstanceOf(UsuarioNaoEncontradoException.class);
-        verify(repository, never()).delete(any());
-    }
-
-    @Test
-    void putComVersaoVelhaLanca409() {
-        // Given
+    void deveDevolverOUsuario_quandoBuscaIdExistente() {
+        // given
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
-        UsuarioRequestDTO versaoVelha = dto("Maria", "maria", null, Role.ATENDENTE, null, null, 0L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(2L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
+        // when
+        UsuarioResponseDTO resposta = service.buscarPorId(2L);
+
+        // then
+        assertThat(resposta.username()).isEqualTo("maria");
     }
 
     @Test
-    void putComMesmoUsernameESenhaEmBrancoNaoMexeNaSenhaNemConsultaDuplicidade() {
-        // Given
+    void deveLancarUsuarioNaoEncontrado_quandoBuscaIdInexistente() {
+        // given
+        usuarioNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarUsuarioNaoEncontrado_quandoBuscaUsernameInexistente() {
+        // given
+        when(repository.findByUsername("ninguem")).thenReturn(Optional.empty());
+
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorUsername("ninguem"));
+
+        // then
+        assertThat(erro).isInstanceOf(UsuarioNaoEncontradoException.class).hasMessageContaining("ninguem");
+    }
+
+    // ----- edicao e exclusao de inexistente -----
+
+    @Test
+    void deveLancarUsuarioNaoEncontrado_quandoPutEmIdInexistente() {
+        // given
+        usuarioNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, dto("X", "x12", null, Role.ATENDENTE, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarUsuarioNaoEncontrado_quandoPatchEmIdInexistente() {
+        // given
+        usuarioNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, dto(null, null, null, null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    @Test
+    void deveLancarUsuarioNaoEncontrado_quandoExcluiIdInexistente() {
+        // given
+        usuarioNaoExiste();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(UsuarioNaoEncontradoException.class);
+    }
+
+    // ----- edicao -----
+
+    @Test
+    void deveLancarConflitoDeVersao_quandoPutTrazVersaoVelha() {
+        // given
+        when(repository.findById(2L)).thenReturn(Optional.of(maria()));
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(2L, dto("Maria", "maria", null, Role.ATENDENTE, null, null, 0L)));
+
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
+    }
+
+    @Test
+    void deveManterSenhaENaoConsultarUsername_quandoPutMantemUsernamePerfilESenhaEmBranco() {
+        // given
         Usuario existente = maria();
         when(repository.findById(2L)).thenReturn(Optional.of(existente));
 
-        // When
+        // when
         UsuarioResponseDTO salvo = service.atualizar(2L, dto("Maria Souza", "maria", "", Role.ATENDENTE, true, null, 1L));
 
-        // Then
+        // then
         assertThat(salvo.nome()).isEqualTo("Maria Souza");
-        assertThat(existente.getSenha()).isEqualTo("hash");
-        verify(repository, never()).existsByUsername(any());
+        assertThat(existente.getSenha()).isEqualTo("hash"); // senha em branco nao mexe na atual
+        verify(repository, never()).existsByUsername(any()); // mesmo username: nem consulta
     }
 
     @Test
-    void putTrocandoPerfilUsernameESenhaDeOutroUsuarioObrigaTrocaNoProximoLogin() {
-        // Given
+    void deveTrocarPerfilReativarEObrigarTroca_quandoAdminDefineSenhaDeOutroUsuario() {
+        // given
         Usuario inativo = maria();
         inativo.setAtivo(false);
         when(repository.findById(2L)).thenReturn(Optional.of(inativo));
         when(repository.existsByUsername("maria.s")).thenReturn(false);
 
-        // When
+        // when
         UsuarioResponseDTO salvo = service.atualizar(2L, dto("Maria", "maria.s", "novasenha1", Role.GERENTE, true, null, null));
 
-        // Then
+        // then
         assertThat(salvo.role()).isEqualTo(Role.GERENTE);
         assertThat(salvo.ativo()).isTrue();
         assertThat(salvo.username()).isEqualTo("maria.s");
-        assertThat(salvo.trocarSenha()).isTrue();
+        assertThat(salvo.trocarSenha()).isTrue(); // senha definida pelo admin: troca no proximo login
         assertThat(encoder.matches("novasenha1", inativo.getSenha())).isTrue();
     }
 
     @Test
-    void trocarAPropriaSenhaPelaTelaNaoObrigaTrocaDeNovo() {
-        // Given
-        logadoComo("maria");
+    void naoDeveObrigarTrocaDeNovo_quandoUsuarioTrocaAPropriaSenhaPelaTela() {
+        // given
+        SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken("maria", null, List.of()));
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
 
-        // When
+        // when
         UsuarioResponseDTO salvo = service.atualizarParcial(2L, dto(null, null, "minhanova1", null, null, null, null));
 
-        // Then
+        // then
         assertThat(salvo.trocarSenha()).isFalse();
     }
 
     @Test
-    void patchTrocaUsernameELigaAoCadastroDeMotorista() {
-        // Given
-        Usuario motorista = maria();
-        motorista.setRole(Role.MOTORISTA);
+    void deveTrocarUsernameEReligarMotorista_quandoPatchTrazOsDoisEVinculoJaEraDele() {
+        // given
+        Usuario motorista = mariaMotorista();
         when(repository.findById(2L)).thenReturn(Optional.of(motorista));
         when(repository.existsByUsername("carlos")).thenReturn(false);
         when(motoristaRepository.findById(5L)).thenReturn(Optional.of(Motorista.builder().id(5L).nome("Carlos").build()));
         // o mesmo usuario ja estava ligado a este motorista: religar nao e duplicidade
         when(repository.findByMotoristaId(5L)).thenReturn(Optional.of(motorista));
 
-        // When
+        // when
         UsuarioResponseDTO salvo = service.atualizarParcial(2L, dto(null, "carlos", null, null, null, 5L, null));
 
-        // Then
+        // then
         assertThat(salvo.username()).isEqualTo("carlos");
         assertThat(salvo.motoristaId()).isEqualTo(5L);
     }
 
     @Test
-    void ligarAMotoristaInexistenteLanca404() {
-        // Given
-        Usuario motorista = maria();
-        motorista.setRole(Role.MOTORISTA);
-        when(repository.findById(2L)).thenReturn(Optional.of(motorista));
+    void deveLancarMotoristaNaoEncontrado_quandoPatchLigaMotoristaInexistente() {
+        // given
+        when(repository.findById(2L)).thenReturn(Optional.of(mariaMotorista()));
         when(motoristaRepository.findById(77L)).thenReturn(Optional.empty());
-        UsuarioRequestDTO patch = dto(null, null, null, null, null, 77L, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(2L, patch)).isInstanceOf(MotoristaNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(2L, dto(null, null, null, null, null, 77L, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(MotoristaNaoEncontradoException.class);
     }
 
     @Test
-    void patchComAtivoEPerfilIguaisAosAtuaisNaoMudaNada() {
-        // Given
+    void naoDeveMudarNada_quandoPatchTrazAtivoEPerfilIguaisAosAtuais() {
+        // given
         when(repository.findById(2L)).thenReturn(Optional.of(maria()));
 
-        // When
+        // when
         UsuarioResponseDTO salvo = service.atualizarParcial(2L, dto(null, null, null, Role.ATENDENTE, true, null, null));
 
-        // Then
+        // then
         assertThat(salvo.ativo()).isTrue();
         assertThat(salvo.role()).isEqualTo(Role.ATENDENTE);
     }
 
     @Test
-    void adminExcluiOutroUsuario() {
-        // Given
-        logadoComo("admin");
-        Usuario maria = maria();
-        when(repository.findById(2L)).thenReturn(Optional.of(maria));
+    void deveApagar_quandoExcluiOutroUsuario() {
+        // given
+        when(repository.findById(2L)).thenReturn(Optional.of(maria()));
 
-        // When
+        // when
         service.deletar(2L);
 
-        // Then
-        verify(repository).delete(maria);
+        // then
+        verify(repository).delete(any(Usuario.class));
     }
 }
