@@ -33,10 +33,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /*
- * classe base dos testes de integracao (todas as classes de integracao/).
- * sobe a aplicacao inteira, de verdade, contra um
+ * o que e: a classe base dos testes de integracao (todas as classes de integracao/).
+ * nao tem teste proprio: sobe a aplicacao inteira, de verdade, contra um
  * PostgreSQL 16 real via testcontainers — rodando todas as migrations do
- * flyway (V1 a V11) com ddl-auto=validate — e simula a api de cambio com
+ * flyway (V1 a V12) com ddl-auto=validate — e simula a api de cambio com
  * wiremock, sem sair pra internet.
  *
  * como rodar: precisa do docker desktop (ou outro engine docker) rodando
