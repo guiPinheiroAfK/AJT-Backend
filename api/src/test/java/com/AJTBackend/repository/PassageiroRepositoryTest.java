@@ -29,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class PassageiroRepositoryTest extends RepositorioTestBase {
 
     private static final String CPF = "529.982.247-25";
+    private static final LocalDate DIA = LocalDate.of(2031, 3, 10);
 
     @Autowired private TestEntityManager em;
     @Autowired private PassageiroRepository repository;
@@ -38,55 +39,115 @@ class PassageiroRepositoryTest extends RepositorioTestBase {
                 .documento("DOC-" + nome).nacionalidade(nacionalidade).build());
     }
 
+    private Transfer transferCom(Set<Passageiro> passageiros) {
+        return em.persist(Transfer.builder().dataTransfer(DIA).horaTransfer(LocalTime.NOON)
+                .origem("GRU").destino("Hotel").passageiros(passageiros).build());
+    }
+
+    // grava o passageiro com o CPF e limpa a sessao, pra leitura seguinte ir ao banco
+    private Long passageiroComCpfGravado() {
+        Long id = em.persistAndGetId(Passageiro.builder().nome("Ana").tipoDocumento("CPF").documento(CPF).build(), Long.class);
+        em.flush();
+        em.clear();
+        return id;
+    }
+
+    // ----- passageiros de um transfer -----
+
     @Test
-    void passageirosDeUmTransferVemEmOrdemDeNomeESoOsDele() {
-        // Given
+    void deveListarSoOsDoTransferEmOrdemDeNome_quandoOutroTransferTemOutroPassageiro() {
+        // given
         Passageiro bia = passageiro("Bia", "Brasileira");
         Passageiro ana = passageiro("Ana", "Brasileira");
         Passageiro carlos = passageiro("Carlos", "Chilena");
-        Transfer transfer = em.persist(Transfer.builder().dataTransfer(LocalDate.of(2031, 3, 10))
-                .horaTransfer(LocalTime.NOON).origem("GRU").destino("Hotel").passageiros(Set.of(bia, ana)).build());
-        em.persist(Transfer.builder().dataTransfer(LocalDate.of(2031, 3, 10)).horaTransfer(LocalTime.NOON)
-                .origem("GRU").destino("Centro").passageiros(Set.of(carlos)).build());
+        Transfer transfer = transferCom(Set.of(bia, ana));
+        transferCom(Set.of(carlos));
         em.flush();
 
-        // When
+        // when
         List<Passageiro> doTransfer = repository.findByTransferId(transfer.getId());
 
-        // Then
+        // then
         assertThat(doTransfer).extracting(Passageiro::getNome).containsExactly("Ana", "Bia");
     }
 
     @Test
-    void buscaPorNacionalidadeIgnoraMaiusculas() {
-        // Given
+    void deveDevolverListaVazia_quandoTransferNaoTemPassageiros() {
+        // given
+        Transfer semPassageiros = transferCom(Set.of());
+        em.flush();
+
+        // when
+        List<Passageiro> doTransfer = repository.findByTransferId(semPassageiros.getId());
+
+        // then
+        assertThat(doTransfer).isEmpty();
+    }
+
+    @Test
+    void deveDevolverListaVazia_quandoTransferNaoExiste() {
+        // when
+        List<Passageiro> doTransfer = repository.findByTransferId(999_999L);
+
+        // then
+        assertThat(doTransfer).isEmpty();
+    }
+
+    // ----- nacionalidade -----
+
+    @Test
+    void deveAcharSemDiferenciarMaiusculas_quandoBuscaNacionalidadeEmMaiusculo() {
+        // given
         passageiro("Ana", "Brasileira");
         passageiro("John", "Americana");
         em.flush();
 
-        // When
+        // when
         Page<Passageiro> brasileiros = repository.findByNacionalidadeIgnoreCase("BRASILEIRA", PageRequest.of(0, 10));
 
-        // Then
+        // then
         assertThat(brasileiros.getContent()).extracting(Passageiro::getNome).containsExactly("Ana");
     }
 
     @Test
-    void documentoFicaCifradoNaColunaEVoltaLegivelNaEntidade() {
-        // Given
-        Long id = em.persistAndGetId(Passageiro.builder().nome("Ana").tipoDocumento("CPF").documento(CPF).build(), Long.class);
+    void deveDevolverPaginaVazia_quandoNacionalidadeNaoExiste() {
+        // given
+        passageiro("Ana", "Brasileira");
         em.flush();
-        em.clear();
 
-        // When
+        // when
+        Page<Passageiro> japoneses = repository.findByNacionalidadeIgnoreCase("Japonesa", PageRequest.of(0, 10));
+
+        // then
+        assertThat(japoneses.getTotalElements()).isZero();
+    }
+
+    // ----- documento cifrado -----
+
+    @Test
+    void deveGravarCifradoNaColuna_quandoPassageiroTemCpf() {
+        // given
+        Long id = passageiroComCpfGravado();
+
+        // when
         String naColuna = (String) em.getEntityManager()
                 .createNativeQuery("select documento from passageiros where id = :id")
                 .setParameter("id", id)
                 .getSingleResult();
+
+        // then
+        assertThat(naColuna).startsWith("v1:").doesNotContain(CPF).doesNotContain("52998224725");
+    }
+
+    @Test
+    void deveDevolverODocumentoLegivel_quandoLeOPassageiroDoBanco() {
+        // given
+        Long id = passageiroComCpfGravado();
+
+        // when
         Passageiro lido = repository.findById(id).orElseThrow();
 
-        // Then
-        assertThat(naColuna).startsWith("v1:").doesNotContain(CPF).doesNotContain("52998224725");
+        // then
         assertThat(lido.getDocumento()).isEqualTo(CPF);
     }
 }
