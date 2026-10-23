@@ -42,7 +42,7 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 ```
 AJT-Backend/
 ├── api/
-│   ├── src/main/java/com/AJTBackend/
+│   ├── src/main/java/com/ajtbackend/
 │   │   ├── client/         # Feign Client da API de câmbio
 │   │   ├── config/         # segurança, JWT, CORS, criptografia, OpenAPI
 │   │   ├── controller/     # controllers REST por domínio
@@ -156,7 +156,8 @@ mvn test
 - **Unitários e de camada web** (services, JWT, criptografia, matriz de permissões, validação): rodam sem dependências externas.
 - **Repository** (`repository/*RepositoryTest`, `@DataJpaTest`): só a camada JPA contra um PostgreSQL 16 real via Testcontainers. **Precisam do Docker rodando**; sem Docker são pulados.
 - **Integração** (`integracao/*IntegrationTest`): sobem um PostgreSQL 16 real via Testcontainers e simulam a API de câmbio com WireMock. **Precisam do Docker rodando**; sem Docker são pulados.
-- Cobertura: `api/target/site/jacoco/index.html` após `mvn test`.
+- Cobertura: `api/target/site/jacoco/index.html` após `mvn test` (hoje 100% de linhas e branches).
+- O que cada teste cobre, ligado aos requisitos e aos status HTTP: [docs/catalogo-de-testes.md](docs/catalogo-de-testes.md).
 
 **Teste ponta a ponta contra a API rodando** (usa o login do admin e apaga o que criar):
 

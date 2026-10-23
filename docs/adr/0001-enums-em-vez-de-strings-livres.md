@@ -46,11 +46,11 @@ valor fora da lista já dá erro antes de chegar no service.
 
 ## Onde encontrar no código
 
-- Enums: `api/src/main/java/com/AJTBackend/model/enums/` (`Role`, `StatusTransfer`,
+- Enums: `api/src/main/java/com/ajtbackend/model/enums/` (`Role`, `StatusTransfer`,
   `StatusOrdemServico`, `StatusParada`, `AcaoParada`)
 - Uso nas entidades: `model/Usuario.java`, `model/Transfer.java`,
   `model/OrdemServico.java`, `model/ParadaOs.java` (campo anotado com `@Enumerated`)
 - Tratamento do erro de valor inválido: `exception/GlobalExceptionHandler.java`,
   método `handleJsonInvalido`
-- Teste que cobre a mensagem de erro: `api/src/test/java/com/AJTBackend/web/ValidacaoWebTest.java`,
+- Teste que cobre a mensagem de erro: `api/src/test/java/com/ajtbackend/web/ValidacaoWebTest.java`,
   método `enumInvalidoListaValoresAceitos`

@@ -4,8 +4,8 @@ Guia para quem precisa **entender ou alterar** o AJT-Backend. Responde "onde est
 classe?" e "o que faço para adicionar um recurso novo?". As decisões e os porquês estão nas ADRs
 ([índice](README.md)); aqui está o **mapa**.
 
-Todos os caminhos abaixo são relativos a `api/src/main/java/com/AJTBackend/` (código) ou
-`api/src/test/java/com/AJTBackend/` (testes), salvo indicação.
+Todos os caminhos abaixo são relativos a `api/src/main/java/com/ajtbackend/` (código) ou
+`api/src/test/java/com/ajtbackend/` (testes), salvo indicação.
 
 ## 1. Como uma requisição percorre o código
 
@@ -195,14 +195,17 @@ Um handler cobre a classe-mãe: criar uma nova `XNaoEncontrada` **não** exige n
 **Regra de ouro:** migration já aplicada **nunca** é editada (quebra o checksum do Flyway); mudanças viram
 uma migration nova. O Hibernate roda em `ddl-auto: validate`: só confere, nunca altera o schema.
 
-## 5. Testes (647 métodos, 889 execuções) e onde ficam
+## 5. Testes (660 métodos, 914 execuções, 100% de cobertura) e onde ficam
 
 | Nível | Pasta | Base | Execuções | Roda sem Docker |
 |---|---|---|---:|:---:|
-| Unitário | `config/*Test`, `service/*Test` | nenhuma (Mockito) | 56 + 323 | sim |
+| Unitário | `config/`, `exception/` e a raiz; `service/` | nenhuma (Mockito) | 68 + 330 | sim |
 | Repositório (`@DataJpaTest`, PostgreSQL real) | `repository/` | `RepositorioTestBase` | 72 | não |
-| Camada web (`@WebMvcTest`) | `web/` | `WebTestBase`, `ErrosWebTestBase` | 363 | sim |
-| Integração (`@SpringBootTest`, PostgreSQL real) | `integracao/` | `IntegracaoTestBase` | 75 | não |
+| Camada web (`@WebMvcTest`) | `web/` | `WebTestBase`, `ErrosWebTestBase` | 368 | sim |
+| Integração (`@SpringBootTest`, PostgreSQL real) | `integracao/` | `IntegracaoTestBase` | 76 | não |
+
+O que cada classe cobre, ligado aos requisitos (HU, RF, RNF), com os caminhos tristes e o status
+HTTP de cada um: [catálogo de testes](catalogo-de-testes.md).
 
 Todo teste se chama `deve…_quando…` (ou `naoDeve…_quando…`) e tem os blocos `// given`, `// when` e
 `// then`, com uma ação só no `when`. Detalhes e justificativas: [ADR-0014](adr/0014-estrategia-de-testes-e-demonstracao.md)

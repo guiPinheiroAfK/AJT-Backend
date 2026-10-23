@@ -88,10 +88,10 @@ O login original tinha três problemas de segurança:
 - Campos novos na entidade: `model/Usuario.java` (`trocarSenha`, `senhaAlteradaEm`)
 - Migration que marca o admin do seed: `resources/db/migration/V6__Seguranca_E_Indices.sql`
 - Endpoint de troca de senha: `controller/AuthController.java`, `PUT /api/auth/senha`
-- Testes: `api/src/test/java/com/AJTBackend/service/AuthServiceTest.java`,
-  `api/src/test/java/com/AJTBackend/service/LoginAttemptServiceTest.java`,
-  `api/src/test/java/com/AJTBackend/config/JwtAuthenticationFilterTest.java` e,
-  contra banco real, `api/src/test/java/com/AJTBackend/integracao/AutenticacaoIntegrationTest.java`
+- Testes: `api/src/test/java/com/ajtbackend/service/AuthServiceTest.java`,
+  `api/src/test/java/com/ajtbackend/service/LoginAttemptServiceTest.java`,
+  `api/src/test/java/com/ajtbackend/config/JwtAuthenticationFilterTest.java` e,
+  contra banco real, `api/src/test/java/com/ajtbackend/integracao/AutenticacaoIntegrationTest.java`
 
 ## Atualizações posteriores
 

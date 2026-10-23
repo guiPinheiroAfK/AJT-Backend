@@ -79,9 +79,9 @@ gravava o transfer no banco. Dois problemas:
   `@Transactional` do método cobrir tudo)
 - Prefixo correto do Feign: `application.yml`, `spring.cloud.openfeign.client.config`
 - Cliente Feign: `client/CotacaoClient.java`
-- Testes: `api/src/test/java/com/AJTBackend/service/CotacaoServiceTest.java` e,
+- Testes: `api/src/test/java/com/ajtbackend/service/CotacaoServiceTest.java` e,
   contra WireMock simulando a API real,
-  `api/src/test/java/com/AJTBackend/integracao/CotacaoIntegrationTest.java`
+  `api/src/test/java/com/ajtbackend/integracao/CotacaoIntegrationTest.java`
   (métodos `consultaApiExternaUmaVezEUsaCacheNasSeguintes` e
   `apiLentaRespeitaTimeoutERetorna502` provam o cache e o timeout de verdade)
 

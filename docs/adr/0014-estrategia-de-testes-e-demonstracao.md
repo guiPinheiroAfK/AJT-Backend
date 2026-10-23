@@ -76,9 +76,9 @@ dados reais migrando V6→V7, e o **stack completo em containers** (`docker comp
 
 ## Onde encontrar no código
 
-- Unitários: `api/src/test/java/com/AJTBackend/service/*Test.java`, `config/*Test.java`
-- Camada web: `api/src/test/java/com/AJTBackend/web/` (`WebTestBase`, `AutorizacaoWebTest`, `ValidacaoWebTest`)
-- Integração: `api/src/test/java/com/AJTBackend/integracao/` (`IntegracaoTestBase` + 5 classes);
+- Unitários: `api/src/test/java/com/ajtbackend/service/*Test.java`, `config/*Test.java`
+- Camada web: `api/src/test/java/com/ajtbackend/web/` (`WebTestBase`, `AutorizacaoWebTest`, `ValidacaoWebTest`)
+- Integração: `api/src/test/java/com/ajtbackend/integracao/` (`IntegracaoTestBase` + 5 classes);
   perfil de teste em `api/src/test/resources/application-test.yml`
 - Cobertura: plugin `jacoco-maven-plugin` em `api/pom.xml`
 - Demonstração: `postman/` e `scripts/smoke-test.sh` (na raiz do repositório)
@@ -88,7 +88,7 @@ dados reais migrando V6→V7, e o **stack completo em containers** (`docker comp
 
 - **2026-10-22 — quarto nível: slice de repositório.** Consultas próprias dos repositórios (`@Query` JPQL,
   `@EntityGraph`, agregações do painel, escape do `LIKE` nas `Especificacoes`) passam a ser testadas com
-  `@DataJpaTest` em `api/src/test/java/com/AJTBackend/repository/*RepositoryTest.java`, contra o PostgreSQL real
+  `@DataJpaTest` em `api/src/test/java/com/ajtbackend/repository/*RepositoryTest.java`, contra o PostgreSQL real
   (`@AutoConfigureTestDatabase(replace = NONE)`). Esse slice sobe só JPA, Flyway e o banco, e cada teste roda numa
   transação desfeita no fim. O `@SpringBootTest` fica restrito aos `*IntegrationTest`, que precisam da aplicação
   inteira (HTTP, segurança, câmbio). Como a integração, esse nível precisa de Docker.
