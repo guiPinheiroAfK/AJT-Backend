@@ -27,6 +27,18 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/*
+ * o que testa: o resumo do painel (PainelService): contagem de transfers e
+ * OS do dia por status (com zero nos que nao vieram), totais, faturamento do
+ * dia e do mes so para ADMIN e GERENTE, e a data padrao no fuso de sao paulo.
+ *
+ * como rodar: teste unitario com os repositorios mockados e o perfil simulado
+ * no SecurityContextHolder. sem spring, sem banco. "mvn test".
+ *
+ * por que existe: o faturamento e informacao gerencial; se a regra de perfil
+ * falhar, atendente e motorista passam a ver o caixa da empresa. as queries
+ * de verdade (contagem e soma sem cancelado) ficam no ConsultasDoPainelRepositoryTest.
+ */
 class PainelServiceTest {
 
     private static final LocalDate DIA = LocalDate.of(2026, 10, 19);
@@ -57,17 +69,17 @@ class PainelServiceTest {
     // ----- contagem por status -----
 
     @Test
-    void transfersDoDiaSaemContadosPorStatus() {
-        // Given
+    void deveContarTransfersPorStatus_quandoDiaTemTransfers() {
+        // given
         logarComo("ATENDENTE");
         transfersDoDia(
                 new Object[]{StatusTransfer.AGUARDANDO_OS, 3L},
                 new Object[]{StatusTransfer.CONFIRMADO, 2L});
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.data()).isEqualTo(DIA);
         assertThat(resumo.transfersPorStatus())
                 .containsEntry(StatusTransfer.AGUARDANDO_OS, 3L)
@@ -75,45 +87,45 @@ class PainelServiceTest {
     }
 
     @Test
-    void statusDeTransferSemRegistroApareceComZero() {
-        // Given
+    void deveMostrarZero_quandoStatusDeTransferNaoTemRegistro() {
+        // given
         logarComo("ATENDENTE");
         transfersDoDia(new Object[]{StatusTransfer.AGUARDANDO_OS, 3L});
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.transfersPorStatus())
                 .containsEntry(StatusTransfer.CANCELADO, 0L)
                 .hasSize(StatusTransfer.values().length);
     }
 
     @Test
-    void totalDeTransfersEhASomaDosStatus() {
-        // Given
+    void deveSomarOsStatus_quandoCalculaTotalDeTransfers() {
+        // given
         logarComo("ATENDENTE");
         transfersDoDia(
                 new Object[]{StatusTransfer.AGUARDANDO_OS, 3L},
                 new Object[]{StatusTransfer.CONFIRMADO, 2L});
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.totalTransfers()).isEqualTo(5);
     }
 
     @Test
-    void ordensDeServicoDoDiaSaemContadasPorStatusComZeroNosQueNaoVieram() {
-        // Given
+    void deveContarOsPorStatusComZeroNosQueFaltam_quandoDiaTemOs() {
+        // given
         logarComo("ATENDENTE");
         ordensDoDia(new Object[]{StatusOrdemServico.ABERTA, 1L});
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.ordensServicoPorStatus())
                 .containsEntry(StatusOrdemServico.ABERTA, 1L)
                 .containsEntry(StatusOrdemServico.EM_ANDAMENTO, 0L)
@@ -121,29 +133,29 @@ class PainelServiceTest {
     }
 
     @Test
-    void totalDeOrdensDeServicoEhASomaDosStatus() {
-        // Given
+    void deveSomarOsStatus_quandoCalculaTotalDeOs() {
+        // given
         logarComo("ATENDENTE");
         ordensDoDia(
                 new Object[]{StatusOrdemServico.ABERTA, 1L},
                 new Object[]{StatusOrdemServico.EM_ANDAMENTO, 4L});
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.totalOrdensServico()).isEqualTo(5);
     }
 
     @Test
-    void diaSemNenhumRegistroTemTotaisZeradosEOsStatusTodosComZero() {
-        // Given
+    void deveZerarTotaisEStatus_quandoDiaNaoTemNenhumRegistro() {
+        // given
         logarComo("ATENDENTE");
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.totalTransfers()).isZero();
         assertThat(resumo.totalOrdensServico()).isZero();
         assertThat(resumo.transfersPorStatus().values()).containsOnly(0L);
@@ -151,64 +163,66 @@ class PainelServiceTest {
     }
 
     @Test
-    void contagemQueVemDoBancoComoIntegerTambemEhConvertida() {
-        // Given: o driver pode devolver o COUNT como Integer em vez de Long
+    void deveConverterParaLong_quandoBancoDevolveContagemComoInteger() {
+        // given
+        // o driver pode devolver o COUNT como Integer em vez de Long
         logarComo("ATENDENTE");
         transfersDoDia(new Object[]{StatusTransfer.CONFIRMADO, 4});
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.transfersPorStatus()).containsEntry(StatusTransfer.CONFIRMADO, 4L);
         assertThat(resumo.totalTransfers()).isEqualTo(4);
     }
 
     // ----- faturamento por perfil -----
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "{0} nao ve faturamento")
     @ValueSource(strings = {"ATENDENTE", "MOTORISTA"})
-    void faturamentoNaoApareceParaQuemNaoGerencia(String perfil) {
-        // Given
+    void naoDeveMostrarNemConsultarFaturamento_quandoPerfilNaoGerencia(String perfil) {
+        // given
         logarComo(perfil);
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.faturamentoDia()).isNull();
         assertThat(resumo.faturamentoMes()).isNull();
         verify(transferRepository, never()).somarValorBaseNoPeriodo(any(), any(), any());
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "{0} ve faturamento do dia e do mes")
     @ValueSource(strings = {"ADMIN", "GERENTE"})
-    void adminEGerenteVeemOFaturamentoDoDiaEDoMesSemCancelados(String perfil) {
-        // Given
+    void deveMostrarFaturamentoDoDiaEDoMesSemCancelados_quandoPerfilGerencia(String perfil) {
+        // given
         logarComo(perfil);
         when(transferRepository.somarValorBaseNoPeriodo(DIA, DIA, StatusTransfer.CANCELADO))
                 .thenReturn(new BigDecimal("450.00"));
         when(transferRepository.somarValorBaseNoPeriodo(PRIMEIRO_DO_MES, DIA, StatusTransfer.CANCELADO))
                 .thenReturn(new BigDecimal("9800.00"));
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(DIA);
 
-        // Then
+        // then
         assertThat(resumo.faturamentoDia()).isEqualByComparingTo("450.00");
         assertThat(resumo.faturamentoMes()).isEqualByComparingTo("9800.00");
     }
 
     @Test
-    void faturamentoDoMesVaiDoPrimeiroDiaDoMesAteADataConsultada() {
-        // Given
+    void deveUsarPeriodoDeUmDiaSoNoMes_quandoDataEhODia1() {
+        // given
         logarComo("GERENTE");
         LocalDate primeiroDeNovembro = LocalDate.of(2026, 11, 1);
 
-        // When
+        // when
         service.resumo(primeiroDeNovembro);
 
-        // Then: no dia 1 o periodo do mes e um dia so
+        // then
+        // no dia 1 o periodo do mes e um dia so: as duas somas usam o mesmo intervalo
         verify(transferRepository, times(2))
                 .somarValorBaseNoPeriodo(primeiroDeNovembro, primeiroDeNovembro, StatusTransfer.CANCELADO);
     }
@@ -216,28 +230,29 @@ class PainelServiceTest {
     // ----- data da consulta -----
 
     @Test
-    void dataInformadaEAUsadaNasConsultasDeContagem() {
-        // Given
+    void deveConsultarAsContagensNaData_quandoDataEhInformada() {
+        // given
         logarComo("ATENDENTE");
 
-        // When
+        // when
         service.resumo(DIA);
 
-        // Then
+        // then
         verify(transferRepository).contarPorStatusNaData(DIA);
         verify(ordemServicoRepository).contarPorStatusNaData(DIA);
     }
 
     @Test
-    void semDataUsaHojeNoFusoDeSaoPaulo() {
-        // Given
+    void deveUsarHojeNoFusoDeSaoPaulo_quandoDataNaoEhInformada() {
+        // given
         logarComo("ADMIN");
         LocalDate antes = LocalDate.now(PainelService.FUSO_OPERACAO);
 
-        // When
+        // when
         PainelResumoDTO resumo = service.resumo(null);
 
-        // Then: aceita virar o dia entre a chamada e a conferencia
+        // then
+        // aceita virar o dia entre a chamada e a conferencia
         LocalDate depois = LocalDate.now(PainelService.FUSO_OPERACAO);
         assertThat(resumo.data()).isBetween(antes, depois);
         ArgumentCaptor<LocalDate> consultada = ArgumentCaptor.forClass(LocalDate.class);
