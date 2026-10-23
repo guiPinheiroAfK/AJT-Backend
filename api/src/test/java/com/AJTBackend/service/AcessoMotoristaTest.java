@@ -56,39 +56,87 @@ class AcessoMotoristaTest {
     }
 
     @Test
-    void gerenteVeQualquerOs() {
+    void gerenteNaoTemRestricaoEVeOsDeQualquerMotorista() {
+        // Given
         logadoComo("GERENTE");
 
-        assertThat(acesso.restrito()).isFalse();
-        assertThat(acesso.podeVer(osDoMotorista(7L))).isTrue();
-        assertThat(acesso.podeVer(osDoMotorista(null))).isTrue();
+        // When
+        boolean restrito = acesso.restrito();
+        boolean veOsDeOutro = acesso.podeVer(osDoMotorista(7L));
+        boolean veOsSemMotorista = acesso.podeVer(osDoMotorista(null));
+
+        // Then
+        assertThat(restrito).isFalse();
+        assertThat(veOsDeOutro).isTrue();
+        assertThat(veOsSemMotorista).isTrue();
     }
 
     @Test
-    void motoristaSoVeAPropriaOs() {
+    void motoristaEhRestritoAoCadastroLigadoAoUsuario() {
+        // Given
         logadoComo("MOTORISTA");
         ligadoAoMotorista(5L);
 
-        assertThat(acesso.restrito()).isTrue();
-        assertThat(acesso.motoristaId()).contains(5L);
-        assertThat(acesso.podeVer(osDoMotorista(5L))).isTrue();
-        assertThat(acesso.podeVer(osDoMotorista(7L))).isFalse();
+        // When
+        boolean restrito = acesso.restrito();
+        Optional<Long> motoristaId = acesso.motoristaId();
+
+        // Then
+        assertThat(restrito).isTrue();
+        assertThat(motoristaId).contains(5L);
+    }
+
+    @Test
+    void motoristaVeAPropriaOs() {
+        // Given
+        logadoComo("MOTORISTA");
+        ligadoAoMotorista(5L);
+
+        // When
+        boolean podeVer = acesso.podeVer(osDoMotorista(5L));
+
+        // Then
+        assertThat(podeVer).isTrue();
+    }
+
+    @Test
+    void motoristaNaoVeOsDeOutroMotorista() {
+        // Given
+        logadoComo("MOTORISTA");
+        ligadoAoMotorista(5L);
+
+        // When
+        boolean podeVer = acesso.podeVer(osDoMotorista(7L));
+
+        // Then
+        assertThat(podeVer).isFalse();
     }
 
     @Test
     void motoristaNaoVeOsAindaSemMotorista() {
+        // Given
         logadoComo("MOTORISTA");
         ligadoAoMotorista(5L);
 
-        assertThat(acesso.podeVer(osDoMotorista(null))).isFalse();
+        // When
+        boolean podeVer = acesso.podeVer(osDoMotorista(null));
+
+        // Then
+        assertThat(podeVer).isFalse();
     }
 
     @Test
-    void motoristaSemCadastroLigadoNaoVeNada() {
+    void motoristaSemCadastroLigadoNaoVeNenhumaOs() {
+        // Given
         logadoComo("MOTORISTA");
         ligadoAoMotorista(null);
 
-        assertThat(acesso.motoristaId()).isEmpty();
-        assertThat(acesso.podeVer(osDoMotorista(5L))).isFalse();
+        // When
+        Optional<Long> motoristaId = acesso.motoristaId();
+        boolean podeVer = acesso.podeVer(osDoMotorista(5L));
+
+        // Then
+        assertThat(motoristaId).isEmpty();
+        assertThat(podeVer).isFalse();
     }
 }

@@ -20,6 +20,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -62,12 +64,15 @@ class AuthServiceTest {
 
     @Test
     void loginComSucessoGeraTokenEAtualizaUltimoLogin() {
+        // Given
         Usuario usuario = usuario("admin", "senha-correta", true);
         usuario.setTrocarSenha(true);
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
 
+        // When
         LoginResponseDTO resposta = authService.login(new LoginRequestDTO("admin", "senha-correta"), IP);
 
+        // Then
         assertThat(resposta.token()).isNotBlank();
         assertThat(resposta.tipo()).isEqualTo("Bearer");
         assertThat(resposta.expiraEm()).isEqualTo(3600);
@@ -75,52 +80,87 @@ class AuthServiceTest {
         assertThat(resposta.trocarSenha()).isTrue();
         assertThat(usuario.getUltimoLogin()).isNotNull();
         assertThat(jwtService.validarToken(resposta.token()).getSubject()).isEqualTo("admin");
+        verify(usuarioRepository).save(usuario);
     }
 
     @Test
     void usernameInexistenteRetornaCredenciaisInvalidas() {
+        // Given
         when(usuarioRepository.findByUsername("fantasma")).thenReturn(Optional.empty());
+        LoginRequestDTO login = new LoginRequestDTO("fantasma", "qualquer");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("fantasma", "qualquer"), IP))
-                .isInstanceOf(CredenciaisInvalidasException.class);
+        // When / Then
+        assertThatThrownBy(() -> authService.login(login, IP)).isInstanceOf(CredenciaisInvalidasException.class);
     }
 
     @Test
     void senhaErradaRetornaCredenciaisInvalidas() {
+        // Given
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario("admin", "senha-correta", true)));
+        LoginRequestDTO login = new LoginRequestDTO("admin", "errada");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("admin", "errada"), IP))
-                .isInstanceOf(CredenciaisInvalidasException.class);
+        // When / Then
+        assertThatThrownBy(() -> authService.login(login, IP)).isInstanceOf(CredenciaisInvalidasException.class);
+        verify(usuarioRepository, never()).save(any());
     }
 
     @Test
-    void usuarioInativoNaoLoga() {
+    void usuarioInativoNaoLogaMesmoComSenhaCorreta() {
+        // Given
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario("admin", "senha-correta", false)));
+        LoginRequestDTO login = new LoginRequestDTO("admin", "senha-correta");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("admin", "senha-correta"), IP))
-                .isInstanceOf(CredenciaisInvalidasException.class);
+        // When / Then
+        assertThatThrownBy(() -> authService.login(login, IP)).isInstanceOf(CredenciaisInvalidasException.class);
     }
 
     @Test
-    void bloqueiaAposExcessoDeTentativasMesmoComSenhaCorreta() {
+    void loginSemUsernameRetornaCredenciaisInvalidas() {
+        // Given: o @NotBlank do DTO barra isso no controller; aqui confere que o service tambem nao quebra
+        when(usuarioRepository.findByUsername(null)).thenReturn(Optional.empty());
+        LoginRequestDTO login = new LoginRequestDTO(null, "x");
+
+        // When / Then
+        assertThatThrownBy(() -> authService.login(login, IP)).isInstanceOf(CredenciaisInvalidasException.class);
+    }
+
+    @Test
+    void tresSenhasErradasBloqueiamAteOLoginComASenhaCorreta() {
+        // Given
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario("admin", "senha-correta", true)));
         for (int i = 0; i < 3; i++) {
-            assertThatThrownBy(() -> authService.login(new LoginRequestDTO("admin", "errada"), IP))
-                    .isInstanceOf(CredenciaisInvalidasException.class);
+            catchThrowable(() -> authService.login(new LoginRequestDTO("admin", "errada"), IP));
         }
+        LoginRequestDTO senhaCorreta = new LoginRequestDTO("admin", "senha-correta");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("admin", "senha-correta"), IP))
-                .isInstanceOf(MuitasTentativasException.class);
+        // When / Then
+        assertThatThrownBy(() -> authService.login(senhaCorreta, IP)).isInstanceOf(MuitasTentativasException.class);
+    }
+
+    @Test
+    void usuarioBloqueadoNemConsultaOBanco() {
+        // Given
+        for (int i = 0; i < 3; i++) {
+            loginAttemptService.registrarFalha(IP, "admin");
+        }
+        LoginRequestDTO login = new LoginRequestDTO("admin", "x");
+
+        // When / Then
+        assertThatThrownBy(() -> authService.login(login, IP)).isInstanceOf(MuitasTentativasException.class);
+        verify(usuarioRepository, never()).findByUsername(anyString());
     }
 
     @Test
     void trocaDeSenhaAtualizaHashLimpaFlagEMarcaData() {
+        // Given
         Usuario usuario = usuario("admin", "senha-antiga", true);
         usuario.setTrocarSenha(true);
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
 
+        // When
         LoginResponseDTO resposta = authService.trocarSenha("admin", new TrocaSenhaRequestDTO("senha-antiga", "senha-nova-123"));
 
+        // Then
         assertThat(passwordEncoder.matches("senha-nova-123", usuario.getSenha())).isTrue();
         assertThat(usuario.getTrocarSenha()).isFalse();
         assertThat(usuario.getSenhaAlteradaEm()).isNotNull();
@@ -130,51 +170,44 @@ class AuthServiceTest {
     }
 
     @Test
-    void trocaDeSenhaComSenhaAtualErrada() {
-        when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario("admin", "senha-antiga", true)));
-
-        assertThatThrownBy(() -> authService.trocarSenha("admin", new TrocaSenhaRequestDTO("errada", "senha-nova-123")))
-                .isInstanceOf(RegraNegocioException.class)
-                .hasMessageContaining("Senha atual incorreta");
-    }
-
-    @Test
-    void novaSenhaNaoPodeSerIgualAAtual() {
+    void trocaDeSenhaComSenhaAtualErradaNaoAlteraNada() {
+        // Given
         Usuario usuario = usuario("admin", "senha-antiga", true);
         when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
         String hashAntes = usuario.getSenha();
+        TrocaSenhaRequestDTO troca = new TrocaSenhaRequestDTO("errada", "senha-nova-123");
 
-        assertThatThrownBy(() -> authService.trocarSenha("admin", new TrocaSenhaRequestDTO("senha-antiga", "senha-antiga")))
-                .isInstanceOf(RegraNegocioException.class);
+        // When / Then
+        assertThatThrownBy(() -> authService.trocarSenha("admin", troca))
+                .isInstanceOf(RegraNegocioException.class)
+                .hasMessageContaining("Senha atual incorreta");
         assertThat(usuario.getSenha()).isEqualTo(hashAntes);
     }
 
     @Test
-    void usuarioBloqueadoNemConsultaOBanco() {
-        for (int i = 0; i < 3; i++) {
-            loginAttemptService.registrarFalha(IP, "admin");
-        }
+    void novaSenhaNaoPodeSerIgualAAtual() {
+        // Given
+        Usuario usuario = usuario("admin", "senha-antiga", true);
+        when(usuarioRepository.findByUsername("admin")).thenReturn(Optional.of(usuario));
+        String hashAntes = usuario.getSenha();
+        TrocaSenhaRequestDTO troca = new TrocaSenhaRequestDTO("senha-antiga", "senha-antiga");
 
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO("admin", "x"), IP))
-                .isInstanceOf(MuitasTentativasException.class);
-        verify(usuarioRepository, never()).findByUsername(anyString());
+        // When / Then
+        assertThatThrownBy(() -> authService.trocarSenha("admin", troca))
+                .isInstanceOf(RegraNegocioException.class)
+                .hasMessageContaining("diferente da atual");
+        assertThat(usuario.getSenha()).isEqualTo(hashAntes);
     }
 
     @Test
     void trocaDeSenhaDeUsuarioRemovidoRetorna404() {
+        // Given
         when(usuarioRepository.findByUsername("removido")).thenReturn(Optional.empty());
+        TrocaSenhaRequestDTO troca = new TrocaSenhaRequestDTO("a", "senha-nova-123");
 
-        assertThatThrownBy(() -> authService.trocarSenha("removido", new TrocaSenhaRequestDTO("a", "senha-nova-123")))
+        // When / Then
+        assertThatThrownBy(() -> authService.trocarSenha("removido", troca))
                 .isInstanceOf(UsuarioNaoEncontradoException.class);
-    }
-
-    @Test
-    void loginSemUsernameRetornaCredenciaisInvalidas() {
-        // o @NotBlank do DTO barra isso no controller; aqui confere que o service tambem nao quebra (log, contador)
-        when(usuarioRepository.findByUsername(null)).thenReturn(Optional.empty());
-
-        assertThatThrownBy(() -> authService.login(new LoginRequestDTO(null, "x"), IP))
-                .isInstanceOf(CredenciaisInvalidasException.class);
     }
 
     private Usuario usuario(String username, String senha, boolean ativo) {

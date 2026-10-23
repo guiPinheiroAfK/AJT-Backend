@@ -9,8 +9,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockFilterChain;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
@@ -59,15 +59,21 @@ class JwtAuthenticationFilterTest {
         SecurityContextHolder.clearContext();
     }
 
+    private Authentication autenticacaoDepoisDoFiltro(String authorization) throws Exception {
+        filter.doFilter(requisicao(authorization), new MockHttpServletResponse(), chain);
+        return SecurityContextHolder.getContext().getAuthentication();
+    }
+
     @Test
     void autenticaComRoleVindaDoBancoENaoDoToken() throws Exception {
-        // token diz ADMIN, mas no banco o usuario foi rebaixado pra ATENDENTE
+        // Given: o token diz ADMIN, mas no banco o usuario foi rebaixado pra ATENDENTE
         String token = jwtService.gerarToken("joao", Role.ADMIN);
         when(usuarioRepository.findByUsername("joao")).thenReturn(Optional.of(usuario("joao", Role.ATENDENTE, true)));
 
-        filter.doFilter(requisicao("Bearer " + token), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Bearer " + token);
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        // Then
         assertThat(auth).isNotNull();
         assertThat(auth.getName()).isEqualTo("joao");
         assertThat(auth.getAuthorities()).extracting(GrantedAuthority::getAuthority).containsExactly("ROLE_ATENDENTE");
@@ -75,73 +81,92 @@ class JwtAuthenticationFilterTest {
     }
 
     @Test
-    void naoAutenticaUsuarioInativo() throws Exception {
+    void naoAutenticaUsuarioInativoMasDeixaACadeiaSeguir() throws Exception {
+        // Given
         String token = jwtService.gerarToken("joao", Role.ADMIN);
         when(usuarioRepository.findByUsername("joao")).thenReturn(Optional.of(usuario("joao", Role.ADMIN, false)));
 
-        filter.doFilter(requisicao("Bearer " + token), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Bearer " + token);
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        // Then
+        assertThat(auth).isNull();
         assertThat(chain.getRequest()).isNotNull(); // segue a cadeia; o SecurityConfig devolve 401
     }
 
     @Test
     void naoAutenticaUsuarioRemovido() throws Exception {
+        // Given
         String token = jwtService.gerarToken("joao", Role.ADMIN);
         when(usuarioRepository.findByUsername("joao")).thenReturn(Optional.empty());
 
-        filter.doFilter(requisicao("Bearer " + token), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Bearer " + token);
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        // Then
+        assertThat(auth).isNull();
     }
 
     @Test
     void naoAutenticaTokenEmitidoAntesDaTrocaDeSenha() throws Exception {
+        // Given
         String token = jwtService.gerarToken("joao", Role.ADMIN);
         Usuario usuario = usuario("joao", Role.ADMIN, true);
         usuario.setSenhaAlteradaEm(LocalDateTime.now().plusSeconds(5));
         when(usuarioRepository.findByUsername("joao")).thenReturn(Optional.of(usuario));
 
-        filter.doFilter(requisicao("Bearer " + token), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Bearer " + token);
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        // Then
+        assertThat(auth).isNull();
     }
 
     @Test
     void tokenInvalidoNaoConsultaOBanco() throws Exception {
-        filter.doFilter(requisicao("Bearer token.invalido.xyz"), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Bearer token.invalido.xyz");
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        // Then
+        assertThat(auth).isNull();
         verify(usuarioRepository, never()).findByUsername(anyString());
         assertThat(chain.getRequest()).isNotNull();
     }
 
     @Test
     void semHeaderSegueSemAutenticar() throws Exception {
-        filter.doFilter(requisicao(null), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro(null);
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        // Then
+        assertThat(auth).isNull();
         verify(usuarioRepository, never()).findByUsername(anyString());
+        assertThat(chain.getRequest()).isNotNull();
     }
 
     @Test
     void headerSemPrefixoBearerSegueSemAutenticar() throws Exception {
-        filter.doFilter(requisicao("Basic YWRtaW46YWRtaW4="), new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Basic YWRtaW46YWRtaW4=");
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isNull();
+        // Then
+        assertThat(auth).isNull();
         verify(usuarioRepository, never()).findByUsername(anyString());
         assertThat(chain.getRequest()).isNotNull();
     }
 
     @Test
     void requisicaoJaAutenticadaNaoEhReprocessada() throws Exception {
+        // Given
         Authentication existente = new UsernamePasswordAuthenticationToken("maria", null, List.of());
         SecurityContextHolder.getContext().setAuthentication(existente);
+        String tokenDeOutroUsuario = jwtService.gerarToken("joao", Role.ADMIN);
 
-        filter.doFilter(requisicao("Bearer " + jwtService.gerarToken("joao", Role.ADMIN)),
-                new MockHttpServletResponse(), chain);
+        // When
+        Authentication auth = autenticacaoDepoisDoFiltro("Bearer " + tokenDeOutroUsuario);
 
-        assertThat(SecurityContextHolder.getContext().getAuthentication()).isSameAs(existente);
+        // Then
+        assertThat(auth).isSameAs(existente);
         verify(usuarioRepository, never()).findByUsername(anyString());
     }
 

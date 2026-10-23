@@ -38,19 +38,24 @@ class CotacaoServiceTest {
 
     @Test
     void mesmaMoedaRetornaTaxaUmSemChamarApi() {
+        // When
         CotacaoDTO cotacao = service.obterCotacao("brl", "BRL");
 
+        // Then
         assertThat(cotacao.taxa()).isEqualByComparingTo(BigDecimal.ONE);
         verify(client, never()).obterCotacao(anyString(), anyString());
     }
 
     @Test
     void retornaTaxaEDataDaApiComMoedasNormalizadas() {
+        // Given
         when(client.obterCotacao("USD", "BRL")).thenReturn(
                 new CotacaoResponseDTO(BigDecimal.ONE, "USD", "2026-09-16", Map.of("BRL", new BigDecimal("5.4321"))));
 
+        // When
         CotacaoDTO cotacao = service.obterCotacao("usd", "brl");
 
+        // Then
         assertThat(cotacao.moedaOrigem()).isEqualTo("USD");
         assertThat(cotacao.taxa()).isEqualByComparingTo("5.4321");
         assertThat(cotacao.data()).isEqualTo("2026-09-16");
@@ -58,23 +63,32 @@ class CotacaoServiceTest {
 
     @Test
     void moedaAusenteNaRespostaViraIndisponivel() {
+        // Given
         when(client.obterCotacao("USD", "XYZ")).thenReturn(
                 new CotacaoResponseDTO(BigDecimal.ONE, "USD", "2026-09-16", Map.of()));
 
-        assertThatThrownBy(() -> service.obterCotacao("USD", "XYZ")).isInstanceOf(CotacaoIndisponivelException.class);
+        // When / Then
+        assertThatThrownBy(() -> service.obterCotacao("USD", "XYZ"))
+                .isInstanceOf(CotacaoIndisponivelException.class);
     }
 
     @Test
     void respostaSemTabelaDeTaxasViraIndisponivel() {
-        when(client.obterCotacao("USD", "BRL")).thenReturn(new CotacaoResponseDTO(BigDecimal.ONE, "USD", "2026-09-16", null));
+        // Given
+        when(client.obterCotacao("USD", "BRL")).thenReturn(
+                new CotacaoResponseDTO(BigDecimal.ONE, "USD", "2026-09-16", null));
 
-        assertThatThrownBy(() -> service.obterCotacao("USD", "BRL")).isInstanceOf(CotacaoIndisponivelException.class);
+        // When / Then
+        assertThatThrownBy(() -> service.obterCotacao("USD", "BRL"))
+                .isInstanceOf(CotacaoIndisponivelException.class);
     }
 
     @Test
-    void erroDoClientViraIndisponivel() {
+    void erroDoClientViraIndisponivelGuardandoACausa() {
+        // Given
         when(client.obterCotacao("USD", "BRL")).thenThrow(new RuntimeException("timeout"));
 
+        // When / Then
         assertThatThrownBy(() -> service.obterCotacao("USD", "BRL"))
                 .isInstanceOf(CotacaoIndisponivelException.class)
                 .hasRootCauseMessage("timeout");

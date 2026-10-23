@@ -34,10 +34,13 @@ class JwtServiceTest {
 
     @Test
     void geraEValidaTokenComUsernameERole() {
+        // Given
         String token = jwtService.gerarToken("maria", Role.GERENTE);
 
+        // When
         Claims claims = jwtService.validarToken(token);
 
+        // Then
         assertThat(claims.getSubject()).isEqualTo("maria");
         assertThat(claims.get("role", String.class)).isEqualTo("GERENTE");
         assertThat(claims.getIssuedAt()).isNotNull();
@@ -45,58 +48,109 @@ class JwtServiceTest {
 
     @Test
     void rejeitaTokenExpirado() {
+        // Given
         JwtService expiraNaHora = new JwtService(SECRET, -1_000);
         String token = expiraNaHora.gerarToken("maria", Role.ADMIN);
 
+        // When / Then
         assertThatThrownBy(() -> jwtService.validarToken(token)).isInstanceOf(ExpiredJwtException.class);
     }
 
     @Test
     void rejeitaTokenAssinadoComOutraChave() {
+        // Given
         JwtService outraChave = new JwtService("outra-chave-totalmente-diferente-com-32-chars!!", 60_000);
         String token = outraChave.gerarToken("maria", Role.ADMIN);
 
+        // When / Then
         assertThatThrownBy(() -> jwtService.validarToken(token)).isInstanceOf(JwtException.class);
     }
 
     @Test
     void rejeitaTokenMalformado() {
-        assertThatThrownBy(() -> jwtService.validarToken("nao.e.um-jwt")).isInstanceOf(JwtException.class);
+        // Given
+        String malformado = "nao.e.um-jwt";
+
+        // When / Then
+        assertThatThrownBy(() -> jwtService.validarToken(malformado)).isInstanceOf(JwtException.class);
     }
 
     @Test
     void falhaNaInicializacaoComChaveCurta() {
-        assertThatThrownBy(() -> new JwtService("curta", 60_000))
+        // Given
+        String chaveCurta = "curta";
+
+        // When / Then
+        assertThatThrownBy(() -> new JwtService(chaveCurta, 60_000))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("32");
     }
 
     @Test
-    void tokenEmitidoAntesDaTrocaDeSenhaEhConsideradoAntigo() {
-        Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
-
-        assertThat(jwtService.emitidoAntesDe(claims, LocalDateTime.now().plusMinutes(1))).isTrue();
-        assertThat(jwtService.emitidoAntesDe(claims, LocalDateTime.now().minusMinutes(1))).isFalse();
-        assertThat(jwtService.emitidoAntesDe(claims, null)).isFalse();
-    }
-
-    @Test
     void falhaNaInicializacaoSemChave() {
+        // When / Then
         assertThatThrownBy(() -> new JwtService(null, 60_000))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("AJT_JWT_SECRET");
     }
 
     @Test
-    void tokenSemDataDeEmissaoNaoEhConsideradoAntigo() {
-        Claims semIat = mock(Claims.class);
-        when(semIat.getIssuedAt()).thenReturn(null);
+    void tokenEmitidoAntesDaTrocaDeSenhaEhConsideradoAntigo() {
+        // Given
+        Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
+        LocalDateTime senhaTrocadaDepois = LocalDateTime.now().plusMinutes(1);
 
-        assertThat(jwtService.emitidoAntesDe(semIat, LocalDateTime.now())).isFalse();
+        // When
+        boolean antigo = jwtService.emitidoAntesDe(claims, senhaTrocadaDepois);
+
+        // Then
+        assertThat(antigo).isTrue();
     }
 
     @Test
-    void expiracaoEmSegundos() {
-        assertThat(jwtService.getExpiracaoSegundos()).isEqualTo(60);
+    void tokenEmitidoDepoisDaTrocaDeSenhaContinuaValendo() {
+        // Given
+        Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
+        LocalDateTime senhaTrocadaAntes = LocalDateTime.now().minusMinutes(1);
+
+        // When
+        boolean antigo = jwtService.emitidoAntesDe(claims, senhaTrocadaAntes);
+
+        // Then
+        assertThat(antigo).isFalse();
+    }
+
+    @Test
+    void usuarioQueNuncaTrocouASenhaNaoTemTokenAntigo() {
+        // Given
+        Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
+
+        // When
+        boolean antigo = jwtService.emitidoAntesDe(claims, null);
+
+        // Then
+        assertThat(antigo).isFalse();
+    }
+
+    @Test
+    void tokenSemDataDeEmissaoNaoEhConsideradoAntigo() {
+        // Given
+        Claims semIat = mock(Claims.class);
+        when(semIat.getIssuedAt()).thenReturn(null);
+
+        // When
+        boolean antigo = jwtService.emitidoAntesDe(semIat, LocalDateTime.now());
+
+        // Then
+        assertThat(antigo).isFalse();
+    }
+
+    @Test
+    void expiracaoEhInformadaEmSegundos() {
+        // When
+        long segundos = jwtService.getExpiracaoSegundos();
+
+        // Then
+        assertThat(segundos).isEqualTo(60);
     }
 }
