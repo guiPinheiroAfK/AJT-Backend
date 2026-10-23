@@ -100,3 +100,21 @@ arquivo quebraria o checksum do Flyway em qualquer banco existente.
 - Testes: `service/AuditoriaServiceTest.java` (mensagem, usuário, "sistema", filtro),
   `integracao/RelacionamentosIntegrationTest.java` (`auditoriaRegistraCriacaoEMudancaDeStatus...`,
   `auditoriaNaoSobraQuandoAOperacaoFalha`), `web/AutorizacaoWebTest.java` (só ADMIN/GERENTE leem)
+
+## Atualizações posteriores
+
+Registro append-only: a decisão original acima continua valendo; abaixo, o que a estendeu depois.
+
+- **2026-10-19 (commit `7d3d734`, migration `V8__Auditoria_Por_Registro.sql`):**
+  - a mensagem de atualização também registra a mudança de valor (RF014): `"valor 150.00 -> 180.00"`, com
+    "sem valor" quando o campo foi apagado ou estava vazio;
+  - `GET /api/auditoria?tabela=transfers&registroId=7` devolve o histórico de **um** registro
+    (`LogAuditoriaRepository.findByTabelaAfetadaAndRegistroId`);
+  - a `V8` cria o índice `(tabela_afetada, registro_id, data_hora DESC)` para essa consulta, porque o índice
+    da `V7` cobre só tabela e data (motivo no cabeçalho da migration).
+- **2026-10-22:** o `AuditoriaService` passou a chamar métodos privados entre si, e não os públicos, para não
+  passar por fora do proxy do `@Transactional` (comentário na classe). Os testes de integração citados acima
+  foram renomeados no padrão da [ADR-0021](0021-estrategia-de-testes-v2-slices-e-bdd.md)
+  (`deveMostrarCriacaoEMudancaDeStatus_quandoGerenteConsultaAuditoriaDeTransfers`,
+  `naoDeveSobrarLogDeAuditoria_quandoACriacaoFalha`). O filtro por registro também é testado no banco real
+  em `repository/LogAuditoriaRepositoryTest.java`.
