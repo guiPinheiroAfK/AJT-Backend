@@ -9,6 +9,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.annotation.web.configurers.CsrfConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -66,7 +67,7 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
-                .csrf(csrf -> csrf.disable()) // API stateless com Bearer token, sem cookie de sessao
+                .csrf(SecurityConfig::semCsrf) // API stateless com Bearer token, sem cookie de sessao
                 .cors(Customizer.withDefaults())
                 .sessionManagement(session ->
                         session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
@@ -103,6 +104,19 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * CSRF so explora credencial que o navegador anexa sozinho (cookie de sessao, login basic do navegador).
+     * Esta API nao tem nenhuma: e STATELESS, o login devolve o JWT no corpo e o cliente manda o token no
+     * header Authorization, que um site de terceiros nao consegue fazer o navegador enviar (e o CORS nao
+     * libera credenciais). Ligar o CSRF obrigaria cada cliente a buscar e reenviar um token extra sem
+     * proteger nada. Decisao e premissas: ADR-0015. AutenticacaoIntegrationTest falha se a API passar a
+     * abrir sessao, devolver cookie ou aceitar cookie no lugar do token.
+     */
+    @SuppressWarnings("java:S4502")
+    private static void semCsrf(CsrfConfigurer<HttpSecurity> csrf) {
+        csrf.disable();
     }
 
     @Bean
