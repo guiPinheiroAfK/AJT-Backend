@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.springframework.http.MediaType;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -22,9 +23,12 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 /*
  * o que testa: os caminhos de erro de /api/paradas-os — regras do ParadaOsRequestDTO
@@ -59,127 +63,155 @@ class ParadaOsErrosWebTest extends ErrosWebTestBase {
 
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
-    void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoCadastroTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/paradas-os"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(paradaOsService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
-    void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoPutTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(put("/api/paradas-os/1"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(paradaOsService, never()).atualizar(any(), any());
     }
 
     @Test
-    void acaoForaDoEnumListaOsValoresAceitos() throws Exception {
-        // When
+    void deveRetornar400ListandoOsAceitos_quandoAcaoNaoExiste() throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"acao\":\"PULAR\"}");
 
-        // Then
+        // then
         resposta.andExpect(validacao("acao: valor 'PULAR' inválido. Aceitos: EMBARQUE, DESEMBARQUE"));
     }
 
     @Test
-    void statusForaDoEnumListaOsValoresAceitos() throws Exception {
-        // When
+    void deveRetornar400ListandoOsAceitos_quandoStatusDaParadaNaoExiste() throws Exception {
+        // when
         ResultActions resposta = enviar(patch("/api/paradas-os/1"), "{\"statusParada\":\"FEITA\"}");
 
-        // Then
+        // then
         resposta.andExpect(validacao("statusParada: valor 'FEITA' inválido. Aceitos: PENDENTE, EM_ANDAMENTO, CONCLUIDA, CANCELADA"));
     }
 
     @Test
-    void cadastroEmOsInexistenteRetorna404() throws Exception {
-        // Given
+    void deveRetornar201_quandoListaDeTransfersVemVazia() throws Exception {
+        // given
+        when(paradaOsService.criar(any())).thenReturn(null);
+
+        // when
+        ResultActions resposta = enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"transferIds\":[]}");
+
+        // then
+        resposta.andExpect(status().isCreated());
+    }
+
+    // ----- inexistentes -----
+
+    @Test
+    void deveRetornar404_quandoCadastroApontaOsInexistente() throws Exception {
+        // given
         when(paradaOsService.criar(any())).thenThrow(new OrdemServicoNaoEncontradoException(8L));
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/paradas-os"), VALIDO);
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "8"));
     }
 
     @Test
-    void cadastroComTransferInexistenteRetorna404() throws Exception {
-        // Given
+    void deveRetornar404_quandoCadastroApontaTransferInexistente() throws Exception {
+        // given
         when(paradaOsService.criar(any())).thenThrow(new TransferNaoEncontradoException(9L));
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"transferIds\":[9]}");
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "9"));
     }
 
-    static Stream<Arguments> requisicoesAParadaInexistente() {
-        return Stream.of(
-                Arguments.of("GET", "/api/paradas-os/99", null, "99"),
-                Arguments.of("PATCH", "/api/paradas-os/99", "{\"statusParada\":\"CONCLUIDA\"}", "99"),
-                Arguments.of("GET", "/api/paradas-os/ordem-servico/98", null, "98"),
-                Arguments.of("DELETE", "/api/paradas-os/99", null, "99"));
-    }
-
-    @ParameterizedTest(name = "{0} {1} -> 404")
-    @MethodSource("requisicoesAParadaInexistente")
-    void paradaOuOsInexistenteRetorna404(String verbo, String url, String json, String idNaMensagem) throws Exception {
-        // Given
+    @Test
+    void deveRetornar404_quandoGetEmIdInexistente() throws Exception {
+        // given
         when(paradaOsService.buscarPorId(99L)).thenThrow(new ParadaOsNaoEncontradaException(99L));
-        when(paradaOsService.atualizarParcial(eq(99L), any())).thenThrow(new ParadaOsNaoEncontradaException(99L));
-        when(paradaOsService.listarPorOrdemServico(98L)).thenThrow(new OrdemServicoNaoEncontradoException(98L));
-        doThrow(new ParadaOsNaoEncontradaException(99L)).when(paradaOsService).deletar(99L);
 
-        // When
-        ResultActions resposta = executar(verbo, url, json);
+        // when
+        ResultActions resposta = chamar(get("/api/paradas-os/99"));
 
-        // Then
-        resposta.andExpect(erro(404, "Recurso não encontrado", idNaMensagem));
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
-    void motoristaMexendoEmOutroCampoRetorna403() throws Exception {
-        // Given
+    void deveRetornar404_quandoPatchEmIdInexistente() throws Exception {
+        // given
+        when(paradaOsService.atualizarParcial(eq(99L), any())).thenThrow(new ParadaOsNaoEncontradaException(99L));
+
+        // when
+        ResultActions resposta = enviar(patch("/api/paradas-os/99"), "{\"statusParada\":\"CONCLUIDA\"}");
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoListaParadasDeOsInexistente() throws Exception {
+        // given
+        when(paradaOsService.listarPorOrdemServico(98L)).thenThrow(new OrdemServicoNaoEncontradoException(98L));
+
+        // when
+        ResultActions resposta = chamar(get("/api/paradas-os/ordem-servico/98"));
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "98"));
+    }
+
+    @Test
+    void deveRetornar404_quandoDeleteEmIdInexistente() throws Exception {
+        // given
+        doThrow(new ParadaOsNaoEncontradaException(99L)).when(paradaOsService).deletar(99L);
+
+        // when
+        ResultActions resposta = chamar(delete("/api/paradas-os/99"));
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    // ----- permissao e conflito -----
+
+    @Test
+    void deveRetornar403_quandoMotoristaMexeEmOutroCampoAlemDoStatus() throws Exception {
+        // given
         when(paradaOsService.atualizarParcial(eq(1L), any()))
                 .thenThrow(new AccessDeniedException("Motorista só pode alterar o status da parada"));
 
-        // When
+        // when
         ResultActions resposta = mockMvc.perform(patch("/api/paradas-os/1").with(user("mot").roles("MOTORISTA"))
-                        .contentType("application/json").content("{\"localParada\":\"Outro lugar\"}"));
+                .contentType(MediaType.APPLICATION_JSON).content("{\"localParada\":\"Outro lugar\"}"));
 
-        // Then
+        // then
         resposta.andExpect(erro(403, "Acesso negado", "só pode alterar o status"));
     }
 
     @Test
-    void versaoVelhaRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoPatchTrazVersaoVelha() throws Exception {
+        // given
         when(paradaOsService.atualizarParcial(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Parada", 1L));
 
-        // When
+        // when
         ResultActions resposta = enviar(patch("/api/paradas-os/1"), "{\"statusParada\":\"CONCLUIDA\",\"versao\":0}");
 
-        // Then
+        // then
         resposta.andExpect(erro(409, "Conflito de edição", "Parada 1"));
-    }
-
-    @Test
-    void listaVaziaDeTransfersEhAceita() throws Exception {
-        // Given
-        when(paradaOsService.criar(any())).thenReturn(null);
-
-        // When
-        ResultActions resposta = enviar(post("/api/paradas-os"), "{\"osId\":1,\"ordemParada\":1,\"localParada\":\"A\",\"transferIds\":[]}");
-
-        // Then
-        resposta.andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.status().isCreated());
     }
 }
