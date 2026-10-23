@@ -3,11 +3,16 @@ package com.ajtbackend.config;
 import com.ajtbackend.model.Passageiro;
 import com.ajtbackend.repository.PassageiroRepository;
 import org.junit.jupiter.api.Test;
+import org.mockito.MockedStatic;
 
+import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import javax.crypto.Mac;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -60,6 +65,20 @@ class DocumentoHashTest {
     void naoDeveQuebrar_quandoTipoEDocumentoSaoNulos() {
         // when / then
         assertThat(hash.calcular(null, null)).hasSize(64);
+    }
+
+    @Test
+    void deveLancarIllegalState_quandoAJvmNaoTemHmacSha256() {
+        // given: provedor de criptografia indisponivel (nao acontece numa JVM normal)
+        try (MockedStatic<Mac> mac = mockStatic(Mac.class)) {
+            mac.when(() -> Mac.getInstance("HmacSHA256")).thenThrow(new NoSuchAlgorithmException("sem HmacSHA256"));
+
+            // when
+            Throwable erro = catchThrowable(() -> hash.calcular("CPF", "52998224725"));
+
+            // then
+            assertThat(erro).isInstanceOf(IllegalStateException.class).hasMessageContaining("hash do documento");
+        }
     }
 
     @Test

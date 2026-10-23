@@ -3,14 +3,18 @@ package com.ajtbackend.config;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.MockedStatic;
 
 import java.nio.charset.StandardCharsets;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
 import java.util.stream.Stream;
+import javax.crypto.Cipher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
+import static org.mockito.Mockito.mockStatic;
 
 /*
  * o que testa: a cifra do documento do passageiro (CriptografiaConverter):
@@ -206,6 +210,20 @@ class CriptografiaConverterTest {
         assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("Base64");
+    }
+
+    @Test
+    void deveLancarIllegalState_quandoAJvmNaoConsegueCifrar() {
+        // given: provedor AES indisponivel (nao acontece numa JVM normal)
+        try (MockedStatic<Cipher> cipher = mockStatic(Cipher.class)) {
+            cipher.when(() -> Cipher.getInstance("AES/GCM/NoPadding")).thenThrow(new NoSuchAlgorithmException("sem AES"));
+
+            // when
+            Throwable erro = catchThrowable(() -> converter.convertToDatabaseColumn("XP9988776"));
+
+            // then
+            assertThat(erro).isInstanceOf(IllegalStateException.class).hasMessageContaining("cifrar");
+        }
     }
 
     private static String base64(String valor) {
