@@ -7,6 +7,9 @@ import com.AJTBackend.model.Usuario;
 import com.AJTBackend.repository.UsuarioRepository;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -19,7 +22,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /*
- * o que testa: a regra da HU07 isolada (AcessoMotorista) — quem nao e MOTORISTA ve qualquer OS,
+ * o que testa: a regra da HU07 isolada (AcessoMotorista) — quem nao e MOTORISTA ve qualquer OS;
  * o MOTORISTA so ve a OS cujo motorista e o cadastro ligado ao usuario dele; OS ainda sem
  * motorista e motorista sem cadastro ligado nao enxergam nada.
  *
@@ -56,87 +59,119 @@ class AcessoMotoristaTest {
     }
 
     @Test
-    void gerenteNaoTemRestricaoEVeOsDeQualquerMotorista() {
-        // Given
+    void naoDeveSerRestrito_quandoPerfilEhGerente() {
+        // given
         logadoComo("GERENTE");
 
-        // When
+        // when
         boolean restrito = acesso.restrito();
-        boolean veOsDeOutro = acesso.podeVer(osDoMotorista(7L));
-        boolean veOsSemMotorista = acesso.podeVer(osDoMotorista(null));
 
-        // Then
+        // then
         assertThat(restrito).isFalse();
-        assertThat(veOsDeOutro).isTrue();
-        assertThat(veOsSemMotorista).isTrue();
     }
 
-    @Test
-    void motoristaEhRestritoAoCadastroLigadoAoUsuario() {
-        // Given
-        logadoComo("MOTORISTA");
-        ligadoAoMotorista(5L);
+    @ParameterizedTest(name = "gerente ve a OS do motorista {0}")
+    @NullSource
+    @ValueSource(longs = 7L)
+    void deveVerQualquerOs_quandoPerfilEhGerente(Long motoristaDaOs) {
+        // given
+        logadoComo("GERENTE");
 
-        // When
-        boolean restrito = acesso.restrito();
-        Optional<Long> motoristaId = acesso.motoristaId();
+        // when
+        boolean podeVer = acesso.podeVer(osDoMotorista(motoristaDaOs));
 
-        // Then
-        assertThat(restrito).isTrue();
-        assertThat(motoristaId).contains(5L);
-    }
-
-    @Test
-    void motoristaVeAPropriaOs() {
-        // Given
-        logadoComo("MOTORISTA");
-        ligadoAoMotorista(5L);
-
-        // When
-        boolean podeVer = acesso.podeVer(osDoMotorista(5L));
-
-        // Then
+        // then
         assertThat(podeVer).isTrue();
     }
 
     @Test
-    void motoristaNaoVeOsDeOutroMotorista() {
-        // Given
+    void deveSerRestrito_quandoPerfilEhMotorista() {
+        // given
         logadoComo("MOTORISTA");
         ligadoAoMotorista(5L);
 
-        // When
+        // when
+        boolean restrito = acesso.restrito();
+
+        // then
+        assertThat(restrito).isTrue();
+    }
+
+    @Test
+    void deveDevolverOCadastroLigado_quandoMotoristaTemVinculo() {
+        // given
+        logadoComo("MOTORISTA");
+        ligadoAoMotorista(5L);
+
+        // when
+        Optional<Long> motoristaId = acesso.motoristaId();
+
+        // then
+        assertThat(motoristaId).contains(5L);
+    }
+
+    @Test
+    void deveVerAPropriaOs_quandoMotoristaDaOsEhOLigadoAoUsuario() {
+        // given
+        logadoComo("MOTORISTA");
+        ligadoAoMotorista(5L);
+
+        // when
+        boolean podeVer = acesso.podeVer(osDoMotorista(5L));
+
+        // then
+        assertThat(podeVer).isTrue();
+    }
+
+    @Test
+    void naoDeveVerAOsDeOutro_quandoMotoristaDaOsEhOutroCadastro() {
+        // given
+        logadoComo("MOTORISTA");
+        ligadoAoMotorista(5L);
+
+        // when
         boolean podeVer = acesso.podeVer(osDoMotorista(7L));
 
-        // Then
+        // then
         assertThat(podeVer).isFalse();
     }
 
     @Test
-    void motoristaNaoVeOsAindaSemMotorista() {
-        // Given
+    void naoDeveVerAOs_quandoOsAindaNaoTemMotorista() {
+        // given
         logadoComo("MOTORISTA");
         ligadoAoMotorista(5L);
 
-        // When
+        // when
         boolean podeVer = acesso.podeVer(osDoMotorista(null));
 
-        // Then
+        // then
         assertThat(podeVer).isFalse();
     }
 
     @Test
-    void motoristaSemCadastroLigadoNaoVeNenhumaOs() {
-        // Given
+    void naoDeveTerCadastro_quandoMotoristaNaoTemVinculo() {
+        // given
         logadoComo("MOTORISTA");
         ligadoAoMotorista(null);
 
-        // When
+        // when
         Optional<Long> motoristaId = acesso.motoristaId();
+
+        // then
+        assertThat(motoristaId).isEmpty();
+    }
+
+    @Test
+    void naoDeveVerNenhumaOs_quandoMotoristaNaoTemVinculo() {
+        // given
+        logadoComo("MOTORISTA");
+        ligadoAoMotorista(null);
+
+        // when
         boolean podeVer = acesso.podeVer(osDoMotorista(5L));
 
-        // Then
-        assertThat(motoristaId).isEmpty();
+        // then
         assertThat(podeVer).isFalse();
     }
 }
