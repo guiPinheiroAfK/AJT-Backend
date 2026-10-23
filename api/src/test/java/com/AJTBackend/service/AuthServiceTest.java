@@ -130,7 +130,7 @@ class AuthServiceTest {
         Throwable erro = catchThrowable(() -> authService.login(new LoginRequestDTO("admin", "senha-correta"), IP));
 
         // then
-        assertThat(tentativasErradas).allMatch(CredenciaisInvalidasException.class::isInstance);
+        assertThat(tentativasErradas).hasSize(3).allMatch(CredenciaisInvalidasException.class::isInstance);
         assertThat(erro).isInstanceOf(MuitasTentativasException.class);
     }
 
