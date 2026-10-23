@@ -5,6 +5,7 @@ import jakarta.persistence.criteria.CriteriaBuilder;
 import jakarta.persistence.criteria.CriteriaQuery;
 import jakarta.persistence.criteria.Expression;
 import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -19,17 +20,14 @@ import java.time.LocalDate;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_MOCKS;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 /*
@@ -42,11 +40,12 @@ import static org.mockito.Mockito.when;
  *
  * por que existe: um "%" digitado na busca viraria curinga e traria a base inteira; e um
  * periodo montado com o metodo errado (>= no lugar de <=) devolve a lista oposta.
+ * o resultado das mesmas pecas contra o postgres de verdade fica no FiltrosNoBancoRepositoryTest;
+ * aqui fica o detalhe de qual comparador e escolhido.
  */
 class EspecificacoesTest {
 
-    private static final LocalDate INICIO = LocalDate.of(2026, 9, 1);
-    private static final LocalDate FIM = LocalDate.of(2026, 9, 30);
+    private static final LocalDate DIA = LocalDate.of(2026, 9, 20);
 
     private Root<Object> root;
     private Path<Object> path;
@@ -63,145 +62,160 @@ class EspecificacoesTest {
         cb = mock(CriteriaBuilder.class, RETURNS_MOCKS);
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "contem com \"{0}\" nao filtra")
     @NullSource
     @ValueSource(strings = {"", "   "})
-    void textoVazioNaoFiltra(String valor) {
-        // When
-        Specification<Object> spec = Especificacoes.contem("nome", valor);
+    void naoDeveFiltrar_quandoTextoDoContemEstaVazio(String texto) {
+        // when
+        Specification<Object> spec = Especificacoes.contem("nome", texto);
 
-        // Then
+        // then
         assertThat(spec).isNull();
     }
 
     @Test
-    void valorNuloOuPeriodoSemPontasNaoFiltram() {
-        // When
-        Specification<Object> igual = Especificacoes.igual("status", null);
-        Specification<Object> periodo = Especificacoes.dataEntre("data", null, null);
+    void naoDeveFiltrar_quandoValorDoIgualEhNulo() {
+        // when
+        Specification<Object> spec = Especificacoes.igual("status", null);
 
-        // Then
-        assertThat(igual).isNull();
-        assertThat(periodo).isNull();
+        // then
+        assertThat(spec).isNull();
+    }
+
+    @Test
+    void naoDeveFiltrar_quandoPeriodoNaoTemNenhumaPonta() {
+        // when
+        Specification<Object> spec = Especificacoes.dataEntre("data", null, null);
+
+        // then
+        assertThat(spec).isNull();
     }
 
     @Test
     @SuppressWarnings("unchecked")
-    void contemIgnoraMaiusculasEEscapaCuringasDigitados() {
-        // Given
+    void deveUsarLikeEmMinusculasComCuringasEscapados_quandoTextoTemUnderlinePorcentoEBarra() {
+        // given
         Expression<String> minusculo = mock(Expression.class);
         when(cb.lower(any())).thenReturn(minusculo);
         Specification<Object> spec = Especificacoes.contem("nome", "  Ana_100%\\ ");
 
-        // When
+        // when
         spec.toPredicate(root, query, cb);
 
-        // Then
+        // then
         verify(cb).like(minusculo, "%ana\\_100\\%\\\\%", '\\');
     }
 
     @Test
-    void algumContemProcuraEmCadaCampo() {
-        // Given
+    void deveProcurarEmCadaCampoComOu_quandoAlgumContemRecebeDoisCampos() {
+        // given
         Specification<Object> spec = Especificacoes.algumContem("gru", "origem", "destino");
 
-        // When
+        // when
         spec.toPredicate(root, query, cb);
 
-        // Then
+        // then
         verify(root).get("origem");
         verify(root).get("destino");
         verify(cb, times(2)).like(any(), anyString(), any(Character.class));
-        verify(cb).or(any(jakarta.persistence.criteria.Predicate[].class));
+        verify(cb).or(any(Predicate[].class));
     }
 
     @Test
-    void igualNavegaPorCampoAninhado() {
-        // Given
+    void deveNavegarPeloCampoAninhado_quandoIgualRecebeCaminhoComPonto() {
+        // given
         Specification<Object> spec = Especificacoes.igual("motorista.id", 5L);
 
-        // When
+        // when
         spec.toPredicate(root, query, cb);
 
-        // Then
+        // then
         verify(root).get("motorista");
         verify(path).get("id");
         verify(cb).equal(path, 5L);
     }
 
     @Test
-    void periodoSoComFimUsaMenorOuIgual() {
-        // Given
-        Specification<Object> spec = Especificacoes.dataEntre("data", null, FIM);
+    void deveUsarMenorOuIgual_quandoPeriodoTemSoFim() {
+        // given
+        Specification<Object> spec = Especificacoes.dataEntre("data", null, DIA);
 
-        // When
+        // when
         spec.toPredicate(root, query, cb);
 
-        // Then
-        verify(cb).lessThanOrEqualTo(any(), eq(FIM));
-        verifyNoMoreInteractions(cb);
+        // then
+        verify(cb).lessThanOrEqualTo(any(), any(LocalDate.class));
+        verify(cb, never()).greaterThanOrEqualTo(any(), any(LocalDate.class));
+        verify(cb, never()).between(any(), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
-    void periodoSoComInicioUsaMaiorOuIgual() {
-        // Given
-        Specification<Object> spec = Especificacoes.dataEntre("data", INICIO, null);
+    void deveUsarMaiorOuIgual_quandoPeriodoTemSoInicio() {
+        // given
+        Specification<Object> spec = Especificacoes.dataEntre("data", DIA, null);
 
-        // When
+        // when
         spec.toPredicate(root, query, cb);
 
-        // Then
-        verify(cb).greaterThanOrEqualTo(any(), eq(INICIO));
-        verifyNoMoreInteractions(cb);
+        // then
+        verify(cb).greaterThanOrEqualTo(any(), any(LocalDate.class));
+        verify(cb, never()).lessThanOrEqualTo(any(), any(LocalDate.class));
+        verify(cb, never()).between(any(), any(LocalDate.class), any(LocalDate.class));
     }
 
     @Test
-    void periodoComAsDuasPontasUsaBetween() {
-        // Given
-        Specification<Object> spec = Especificacoes.dataEntre("data", INICIO, FIM);
+    void deveUsarBetween_quandoPeriodoTemAsDuasPontas() {
+        // given
+        Specification<Object> spec = Especificacoes.dataEntre("data", DIA.minusDays(19), DIA.plusDays(10));
 
-        // When
+        // when
         spec.toPredicate(root, query, cb);
 
-        // Then
-        verify(cb).between(any(), eq(INICIO), eq(FIM));
-        verifyNoMoreInteractions(cb);
+        // then
+        verify(cb).between(any(), any(LocalDate.class), any(LocalDate.class));
+        verify(cb, never()).lessThanOrEqualTo(any(), any(LocalDate.class));
+        verify(cb, never()).greaterThanOrEqualTo(any(), any(LocalDate.class));
     }
 
     @Test
-    void periodoComInicioDepoisDoFimEhRecusado() {
-        // When / Then
-        assertThatThrownBy(() -> Especificacoes.validarPeriodo(FIM, INICIO))
+    void deveLancarRegraNegocio_quandoInicioDoPeriodoEhDepoisDoFim() {
+        // when
+        Throwable erro = catchThrowable(() -> Especificacoes.validarPeriodo(DIA, DIA.minusDays(1)));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
+                .hasMessageContaining(DIA.toString())
                 .hasMessageContaining("depois da final");
+    }
+
+    @ParameterizedTest(name = "periodo de {0} ate {1} e aceito")
+    @MethodSource("periodosValidos")
+    void naoDeveLancarErro_quandoPeriodoEhValidoOuAberto(LocalDate inicio, LocalDate fim) {
+        // when
+        Throwable erro = catchThrowable(() -> Especificacoes.validarPeriodo(inicio, fim));
+
+        // then
+        assertThat(erro).isNull();
+    }
+
+    @Test
+    void deveUsarDisjuncao_quandoFiltroNaoDeixaPassarNada() {
+        // given
+        Specification<Object> spec = Especificacoes.nenhum();
+
+        // when
+        spec.toPredicate(root, query, cb);
+
+        // then
+        verify(cb).disjunction();
+        verify(cb, never()).conjunction();
     }
 
     static Stream<Arguments> periodosValidos() {
         return Stream.of(
-                Arguments.of(INICIO, INICIO),
-                Arguments.of(INICIO, FIM),
-                Arguments.of(null, FIM),
-                Arguments.of(INICIO, null),
-                Arguments.of(null, null));
-    }
-
-    @ParameterizedTest
-    @MethodSource("periodosValidos")
-    void periodoValidoOuAbertoEhAceito(LocalDate inicio, LocalDate fim) {
-        // When / Then
-        assertThatCode(() -> Especificacoes.validarPeriodo(inicio, fim)).doesNotThrowAnyException();
-    }
-
-    @Test
-    void nenhumNaoDeixaPassarNada() {
-        // Given
-        Specification<Object> spec = Especificacoes.nenhum();
-
-        // When
-        spec.toPredicate(root, query, cb);
-
-        // Then
-        verify(cb).disjunction();
-        verify(cb, never()).conjunction();
+                Arguments.of(DIA, DIA),
+                Arguments.of(null, DIA),
+                Arguments.of(DIA, null));
     }
 }
