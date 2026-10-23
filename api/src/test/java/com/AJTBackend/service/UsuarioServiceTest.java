@@ -27,13 +27,27 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/*
+ * o que testa: as regras sensiveis do UsuarioService: senha sempre em hash,
+ * username unico, senha redefinida pelo admin derrubando as sessoes e obrigando
+ * troca, as travas da propria conta (nao se excluir, nao se rebaixar, nao se
+ * desativar) e o vinculo do usuario MOTORISTA com o cadastro de motorista (HU07).
+ *
+ * como rodar: teste unitario com repositorios mockados e BCrypt de verdade
+ * (custo baixo); o usuario logado e simulado no SecurityContextHolder. sem
+ * spring, sem banco. "mvn test".
+ *
+ * por que existe: um admin que se rebaixa ou se desativa por engano tranca o
+ * sistema inteiro; e uma senha gravada em texto puro e vazamento garantido.
+ * o restante do CRUD fica no UsuarioServiceCrudTest.
+ */
 class UsuarioServiceTest {
 
     private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
@@ -78,47 +92,66 @@ class UsuarioServiceTest {
         return captor.getValue();
     }
 
+    // devolve o proprio usuario logado ("admin", id 1) ja cadastrado
+    private Usuario adminLogadoEditandoASiMesmo() {
+        logadoComo("admin");
+        Usuario admin = usuario(1L, "admin", Role.ADMIN);
+        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
+        return admin;
+    }
+
+    // devolve a maria (id 2) ja cadastrada, com o admin logado
+    private Usuario adminLogadoEditandoAMaria() {
+        logadoComo("admin");
+        Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
+        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
+        return maria;
+    }
+
     // ----- cadastro -----
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "senha \"{0}\" e recusada")
     @NullAndEmptySource
     @ValueSource(strings = {"   "})
-    void criarSemSenhaLancaRegraDeNegocioSemGravar(String senha) {
-        // Given
+    void deveLancarRegraNegocioSemGravar_quandoCadastroNaoTemSenha(String senha) {
+        // given
         UsuarioRequestDTO dto = cadastro("maria", senha, Role.ATENDENTE, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("Senha");
         verify(usuarioRepository, never()).save(any());
     }
 
     @Test
-    void criarGravaOHashDaSenhaEnuncaOTextoPuro() {
-        // Given
+    void deveGravarOHashENuncaOTextoPuro_quandoCriaUsuario() {
+        // given
         when(usuarioRepository.existsByUsername("maria")).thenReturn(false);
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         service.criar(cadastro("maria", "senha123", Role.ATENDENTE, null));
 
-        // Then
+        // then
         Usuario gravado = gravadoPeloSave();
         assertThat(gravado.getSenha()).isNotEqualTo("senha123");
         assertThat(passwordEncoder.matches("senha123", gravado.getSenha())).isTrue();
     }
 
     @Test
-    void criarGravaOsDadosInformadosEObrigaATrocaDeSenhaNoPrimeiroAcesso() {
-        // Given
+    void deveGravarOsDadosEObrigarTrocaNoPrimeiroAcesso_quandoCriaUsuario() {
+        // given
         when(usuarioRepository.existsByUsername("maria")).thenReturn(false);
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         UsuarioResponseDTO criado = service.criar(cadastro("maria", "senha123", Role.ATENDENTE, null));
 
-        // Then
+        // then
         assertThat(criado.username()).isEqualTo("maria");
         assertThat(criado.role()).isEqualTo(Role.ATENDENTE);
         assertThat(criado.trocarSenha()).isTrue();
@@ -127,27 +160,30 @@ class UsuarioServiceTest {
     }
 
     @Test
-    void criarComAtivoFalsoGravaOUsuarioInativo() {
-        // Given
+    void deveGravarInativo_quandoCadastroTrazAtivoFalso() {
+        // given
         when(usuarioRepository.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
         UsuarioRequestDTO dto = new UsuarioRequestDTO("Maria", "maria", "senha123", Role.ATENDENTE, false, null, null);
 
-        // When
+        // when
         UsuarioResponseDTO criado = service.criar(dto);
 
-        // Then
+        // then
         assertThat(criado.ativo()).isFalse();
         assertThat(gravadoPeloSave().getAtivo()).isFalse();
     }
 
     @Test
-    void criarComUsernameDuplicadoLancaExcecaoSemGravar() {
-        // Given
+    void deveLancarUsernameJaCadastradoSemGravar_quandoUsernameJaExiste() {
+        // given
         when(usuarioRepository.existsByUsername("maria")).thenReturn(true);
         UsuarioRequestDTO dto = cadastro("maria", "senha123", Role.ATENDENTE, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(UsernameJaCadastradoException.class)
                 .hasMessageContaining("maria");
         verify(usuarioRepository, never()).save(any());
@@ -156,15 +192,18 @@ class UsuarioServiceTest {
     // ----- username no PUT -----
 
     @Test
-    void putNaoPermiteTrocarParaUsernameDeOutroUsuario() {
-        // Given
+    void deveLancarUsernameJaCadastradoSemAlterar_quandoPutTrocaParaUsernameDeOutro() {
+        // given
         Usuario maria = usuario(1L, "maria", Role.ATENDENTE);
         when(usuarioRepository.findById(1L)).thenReturn(Optional.of(maria));
         when(usuarioRepository.existsByUsername("joao")).thenReturn(true);
         UsuarioRequestDTO dto = new UsuarioRequestDTO("Maria", "joao", null, Role.ATENDENTE, null, null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(UsernameJaCadastradoException.class)
                 .hasMessageContaining("joao");
         assertThat(maria.getUsername()).isEqualTo("maria");
@@ -174,16 +213,14 @@ class UsuarioServiceTest {
     // ----- senha redefinida -----
 
     @Test
-    void adminRedefinindoSenhaDeOutroUsuarioDerrubaSessoesEObrigaTroca() {
-        // Given
-        logadoComo("admin");
-        Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
+    void deveDerrubarSessoesEObrigarTroca_quandoAdminRedefineSenhaDeOutro() {
+        // given
+        Usuario maria = adminLogadoEditandoAMaria();
 
-        // When
+        // when
         service.atualizarParcial(2L, patchSenha("nova-senha-1"));
 
-        // Then
+        // then
         assertThat(maria.getSenhaAlteradaEm()).isNotNull();
         assertThat(maria.getTrocarSenha()).isTrue();
         assertThat(passwordEncoder.matches("nova-senha-1", maria.getSenha())).isTrue();
@@ -191,35 +228,33 @@ class UsuarioServiceTest {
     }
 
     @Test
-    void usuarioRedefinindoAPropriaSenhaNaoPrecisaTrocarDeNovo() {
-        // Given
+    void naoDeveObrigarTrocaDeNovo_quandoUsuarioRedefineAPropriaSenha() {
+        // given
         logadoComo("maria");
         Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
         maria.setTrocarSenha(true);
         when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
 
-        // When
+        // when
         service.atualizarParcial(2L, patchSenha("nova-senha-1"));
 
-        // Then
+        // then
         assertThat(maria.getTrocarSenha()).isFalse();
         assertThat(maria.getSenhaAlteradaEm()).isNotNull();
         assertThat(passwordEncoder.matches("nova-senha-1", maria.getSenha())).isTrue();
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "senha \"{0}\" no patch nao muda nada")
     @NullAndEmptySource
     @ValueSource(strings = {"   "})
-    void patchSemSenhaOuComSenhaEmBrancoMantemASenhaAtual(String senha) {
-        // Given
-        logadoComo("admin");
-        Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
+    void deveManterASenhaAtual_quandoPatchVemSemSenhaOuEmBranco(String senha) {
+        // given
+        Usuario maria = adminLogadoEditandoAMaria();
 
-        // When
+        // when
         service.atualizarParcial(2L, patchSenha(senha));
 
-        // Then
+        // then
         assertThat(maria.getSenha()).isEqualTo("hash");
         assertThat(maria.getSenhaAlteradaEm()).isNull();
         assertThat(maria.getTrocarSenha()).isFalse();
@@ -228,55 +263,58 @@ class UsuarioServiceTest {
     // ----- travas de auto-protecao -----
 
     @Test
-    void naoPodeExcluirOProprioUsuario() {
-        // Given
-        logadoComo("admin");
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(usuario(1L, "admin", Role.ADMIN)));
+    void deveLancarRegraNegocioSemApagar_quandoUsuarioTentaSeExcluir() {
+        // given
+        adminLogadoEditandoASiMesmo();
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(1L))
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(1L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("próprio usuário");
         verify(usuarioRepository, never()).delete(any());
     }
 
     @Test
-    void adminPodeExcluirOutroUsuario() {
-        // Given
-        logadoComo("admin");
-        Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
+    void deveApagar_quandoAdminExcluiOutroUsuario() {
+        // given
+        Usuario maria = adminLogadoEditandoAMaria();
 
-        // When
+        // when
         service.deletar(2L);
 
-        // Then
+        // then
         verify(usuarioRepository).delete(maria);
     }
 
     @Test
-    void excluirUsuarioInexistenteLanca404SemApagarNada() {
-        // Given
+    void deveLancarUsuarioNaoEncontradoSemApagar_quandoExcluiIdInexistente() {
+        // given
         logadoComo("admin");
         when(usuarioRepository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L))
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(UsuarioNaoEncontradoException.class)
                 .hasMessageContaining("9");
         verify(usuarioRepository, never()).delete(any());
     }
 
     @Test
-    void naoPodeRebaixarOProprioPerfil() {
-        // Given
-        logadoComo("admin");
-        Usuario admin = usuario(1L, "admin", Role.ADMIN);
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
-        UsuarioRequestDTO rebaixar = patchRole(Role.ATENDENTE);
+    void deveLancarRegraNegocioSemAlterar_quandoUsuarioTentaRebaixarOProprioPerfil() {
+        // given
+        Usuario admin = adminLogadoEditandoASiMesmo();
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, rebaixar))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patchRole(Role.ATENDENTE)));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("próprio perfil");
         assertThat(admin.getRole()).isEqualTo(Role.ADMIN);
@@ -284,44 +322,40 @@ class UsuarioServiceTest {
     }
 
     @Test
-    void mandarOMesmoPerfilDoProprioUsuarioNaoEhAlteracaoENaoLancaErro() {
-        // Given
-        logadoComo("admin");
-        Usuario admin = usuario(1L, "admin", Role.ADMIN);
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
+    void naoDeveLancarErro_quandoUsuarioMandaOMesmoPerfilQueJaTem() {
+        // given
+        adminLogadoEditandoASiMesmo();
 
-        // When
+        // when
         UsuarioResponseDTO resposta = service.atualizarParcial(1L, patchRole(Role.ADMIN));
 
-        // Then
+        // then
         assertThat(resposta.role()).isEqualTo(Role.ADMIN);
     }
 
     @Test
-    void adminPodeMudarOPerfilDeOutroUsuario() {
-        // Given
-        logadoComo("admin");
-        Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
+    void deveMudarOPerfil_quandoAdminAlteraPerfilDeOutro() {
+        // given
+        Usuario maria = adminLogadoEditandoAMaria();
 
-        // When
+        // when
         UsuarioResponseDTO resposta = service.atualizarParcial(2L, patchRole(Role.ADMIN));
 
-        // Then
+        // then
         assertThat(resposta.role()).isEqualTo(Role.ADMIN);
         assertThat(maria.getRole()).isEqualTo(Role.ADMIN);
     }
 
     @Test
-    void naoPodeDesativarOProprioUsuario() {
-        // Given
-        logadoComo("admin");
-        Usuario admin = usuario(1L, "admin", Role.ADMIN);
-        when(usuarioRepository.findById(1L)).thenReturn(Optional.of(admin));
-        UsuarioRequestDTO desativar = patchAtivo(false);
+    void deveLancarRegraNegocioSemAlterar_quandoUsuarioTentaSeDesativar() {
+        // given
+        Usuario admin = adminLogadoEditandoASiMesmo();
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, desativar))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patchAtivo(false)));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("desativar");
         assertThat(admin.getAtivo()).isTrue();
@@ -329,16 +363,14 @@ class UsuarioServiceTest {
     }
 
     @Test
-    void adminPodeDesativarOutroUsuario() {
-        // Given
-        logadoComo("admin");
-        Usuario maria = usuario(2L, "maria", Role.ATENDENTE);
-        when(usuarioRepository.findById(2L)).thenReturn(Optional.of(maria));
+    void deveDesativar_quandoAdminDesativaOutro() {
+        // given
+        Usuario maria = adminLogadoEditandoAMaria();
 
-        // When
+        // when
         UsuarioResponseDTO resposta = service.atualizarParcial(2L, patchAtivo(false));
 
-        // Then
+        // then
         assertThat(resposta.ativo()).isFalse();
         assertThat(maria.getAtivo()).isFalse();
     }
@@ -346,30 +378,33 @@ class UsuarioServiceTest {
     // ----- HU07: vinculo com o cadastro de motorista -----
 
     @Test
-    void criaUsuarioMotoristaLigadoAoCadastroDeMotorista() {
-        // Given
+    void deveLigarAoCadastroDeMotorista_quandoCriaUsuarioMotorista() {
+        // given
         Motorista carlos = Motorista.builder().id(5L).nome("Carlos").build();
         when(usuarioRepository.existsByUsername("carlos")).thenReturn(false);
         when(motoristaRepository.findById(5L)).thenReturn(Optional.of(carlos));
         when(usuarioRepository.findByMotoristaId(5L)).thenReturn(Optional.empty());
         when(usuarioRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         UsuarioResponseDTO criado = service.criar(cadastro("carlos", "senha123", Role.MOTORISTA, 5L));
 
-        // Then
+        // then
         assertThat(criado.motoristaId()).isEqualTo(5L);
         assertThat(gravadoPeloSave().getMotorista()).isSameAs(carlos);
     }
 
     @Test
-    void soPerfilMotoristaPodeSerLigadoAUmMotorista() {
-        // Given
+    void deveLancarRegraNegocioSemConsultar_quandoPerfilNaoMotoristaTentaSeLigarAMotorista() {
+        // given
         when(usuarioRepository.existsByUsername("ana")).thenReturn(false);
         UsuarioRequestDTO dto = cadastro("ana", "senha123", Role.ATENDENTE, 5L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("perfil Motorista");
         verify(motoristaRepository, never()).findById(any());
@@ -377,37 +412,43 @@ class UsuarioServiceTest {
     }
 
     @Test
-    void ligarAUmMotoristaInexistenteLanca404SemGravar() {
-        // Given
+    void deveLancarMotoristaNaoEncontradoSemGravar_quandoLigaAMotoristaInexistente() {
+        // given
         when(motoristaRepository.findById(5L)).thenReturn(Optional.empty());
         UsuarioRequestDTO dto = cadastro("carlos", "senha123", Role.MOTORISTA, 5L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(MotoristaNaoEncontradoException.class)
                 .hasMessageContaining("5");
         verify(usuarioRepository, never()).save(any());
     }
 
     @Test
-    void cadastroDeMotoristaSoPodeTerUmUsuario() {
-        // Given
+    void deveLancarRegraNegocioSemGravar_quandoMotoristaJaTemOutroUsuario() {
+        // given
         when(usuarioRepository.existsByUsername("carlos2")).thenReturn(false);
         when(motoristaRepository.findById(5L)).thenReturn(Optional.of(Motorista.builder().id(5L).nome("Carlos").build()));
         when(usuarioRepository.findByMotoristaId(5L))
                 .thenReturn(Optional.of(Usuario.builder().id(3L).username("carlos").build()));
         UsuarioRequestDTO dto = cadastro("carlos2", "senha123", Role.MOTORISTA, 5L);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(RegraNegocioException.class)
                 .hasMessageContaining("carlos");
         verify(usuarioRepository, never()).save(any());
     }
 
     @Test
-    void reenviarOMotoristaDoProprioUsuarioNaoContaComoConflito() {
-        // Given
+    void naoDeveContarComoConflito_quandoReenviaOMotoristaDoProprioUsuario() {
+        // given
         Motorista carlos = Motorista.builder().id(5L).nome("Carlos").build();
         Usuario usuario = usuario(2L, "carlos", Role.MOTORISTA);
         usuario.setMotorista(carlos);
@@ -416,24 +457,24 @@ class UsuarioServiceTest {
         when(usuarioRepository.findByMotoristaId(5L)).thenReturn(Optional.of(usuario));
         UsuarioRequestDTO patch = new UsuarioRequestDTO(null, null, null, null, null, 5L, null);
 
-        // When
+        // when
         UsuarioResponseDTO resposta = service.atualizarParcial(2L, patch);
 
-        // Then
+        // then
         assertThat(resposta.motoristaId()).isEqualTo(5L);
     }
 
     @Test
-    void deixarDeSerMotoristaDesfazOVinculo() {
-        // Given
+    void deveDesfazerOVinculo_quandoUsuarioDeixaDeSerMotorista() {
+        // given
         Usuario usuario = usuario(2L, "carlos", Role.MOTORISTA);
         usuario.setMotorista(Motorista.builder().id(5L).build());
         when(usuarioRepository.findById(2L)).thenReturn(Optional.of(usuario));
 
-        // When
+        // when
         UsuarioResponseDTO atualizado = service.atualizarParcial(2L, patchRole(Role.ATENDENTE));
 
-        // Then
+        // then
         assertThat(atualizado.motoristaId()).isNull();
         assertThat(atualizado.role()).isEqualTo(Role.ATENDENTE);
         assertThat(usuario.getMotorista()).isNull();

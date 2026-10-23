@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -33,124 +33,131 @@ class JwtServiceTest {
     private final JwtService jwtService = new JwtService(SECRET, 60_000);
 
     @Test
-    void geraEValidaTokenComUsernameERole() {
-        // Given
+    void deveDevolverUsernameERole_quandoValidaTokenRecemGerado() {
+        // given
         String token = jwtService.gerarToken("maria", Role.GERENTE);
 
-        // When
+        // when
         Claims claims = jwtService.validarToken(token);
 
-        // Then
+        // then
         assertThat(claims.getSubject()).isEqualTo("maria");
         assertThat(claims.get("role", String.class)).isEqualTo("GERENTE");
         assertThat(claims.getIssuedAt()).isNotNull();
     }
 
     @Test
-    void rejeitaTokenExpirado() {
-        // Given
+    void deveLancarExpiredJwt_quandoTokenJaExpirou() {
+        // given
         JwtService expiraNaHora = new JwtService(SECRET, -1_000);
         String token = expiraNaHora.gerarToken("maria", Role.ADMIN);
 
-        // When / Then
-        assertThatThrownBy(() -> jwtService.validarToken(token)).isInstanceOf(ExpiredJwtException.class);
+        // when
+        Throwable erro = catchThrowable(() -> jwtService.validarToken(token));
+
+        // then
+        assertThat(erro).isInstanceOf(ExpiredJwtException.class);
     }
 
     @Test
-    void rejeitaTokenAssinadoComOutraChave() {
-        // Given
+    void deveLancarJwtException_quandoTokenFoiAssinadoComOutraChave() {
+        // given
         JwtService outraChave = new JwtService("outra-chave-totalmente-diferente-com-32-chars!!", 60_000);
         String token = outraChave.gerarToken("maria", Role.ADMIN);
 
-        // When / Then
-        assertThatThrownBy(() -> jwtService.validarToken(token)).isInstanceOf(JwtException.class);
+        // when
+        Throwable erro = catchThrowable(() -> jwtService.validarToken(token));
+
+        // then
+        assertThat(erro).isInstanceOf(JwtException.class);
     }
 
     @Test
-    void rejeitaTokenMalformado() {
-        // Given
-        String malformado = "nao.e.um-jwt";
+    void deveLancarJwtException_quandoTokenEstaMalformado() {
+        // when
+        Throwable erro = catchThrowable(() -> jwtService.validarToken("nao.e.um-jwt"));
 
-        // When / Then
-        assertThatThrownBy(() -> jwtService.validarToken(malformado)).isInstanceOf(JwtException.class);
+        // then
+        assertThat(erro).isInstanceOf(JwtException.class);
     }
 
     @Test
-    void falhaNaInicializacaoComChaveCurta() {
-        // Given
-        String chaveCurta = "curta";
+    void naoDeveInicializar_quandoChaveTemMenosDe32Caracteres() {
+        // when
+        Throwable erro = catchThrowable(() -> new JwtService("curta", 60_000));
 
-        // When / Then
-        assertThatThrownBy(() -> new JwtService(chaveCurta, 60_000))
+        // then
+        assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("32");
     }
 
     @Test
-    void falhaNaInicializacaoSemChave() {
-        // When / Then
-        assertThatThrownBy(() -> new JwtService(null, 60_000))
+    void naoDeveInicializar_quandoChaveNaoFoiConfigurada() {
+        // when
+        Throwable erro = catchThrowable(() -> new JwtService(null, 60_000));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("AJT_JWT_SECRET");
     }
 
     @Test
-    void tokenEmitidoAntesDaTrocaDeSenhaEhConsideradoAntigo() {
-        // Given
+    void deveConsiderarTokenAntigo_quandoSenhaFoiTrocadaDepoisDaEmissao() {
+        // given
         Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
-        LocalDateTime senhaTrocadaDepois = LocalDateTime.now().plusMinutes(1);
 
-        // When
-        boolean antigo = jwtService.emitidoAntesDe(claims, senhaTrocadaDepois);
+        // when
+        boolean antigo = jwtService.emitidoAntesDe(claims, LocalDateTime.now().plusMinutes(1));
 
-        // Then
+        // then
         assertThat(antigo).isTrue();
     }
 
     @Test
-    void tokenEmitidoDepoisDaTrocaDeSenhaContinuaValendo() {
-        // Given
+    void naoDeveConsiderarTokenAntigo_quandoSenhaFoiTrocadaAntesDaEmissao() {
+        // given
         Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
-        LocalDateTime senhaTrocadaAntes = LocalDateTime.now().minusMinutes(1);
 
-        // When
-        boolean antigo = jwtService.emitidoAntesDe(claims, senhaTrocadaAntes);
+        // when
+        boolean antigo = jwtService.emitidoAntesDe(claims, LocalDateTime.now().minusMinutes(1));
 
-        // Then
+        // then
         assertThat(antigo).isFalse();
     }
 
     @Test
-    void usuarioQueNuncaTrocouASenhaNaoTemTokenAntigo() {
-        // Given
+    void naoDeveConsiderarTokenAntigo_quandoSenhaNuncaFoiTrocada() {
+        // given
         Claims claims = jwtService.validarToken(jwtService.gerarToken("maria", Role.ADMIN));
 
-        // When
+        // when
         boolean antigo = jwtService.emitidoAntesDe(claims, null);
 
-        // Then
+        // then
         assertThat(antigo).isFalse();
     }
 
     @Test
-    void tokenSemDataDeEmissaoNaoEhConsideradoAntigo() {
-        // Given
+    void naoDeveConsiderarTokenAntigo_quandoTokenNaoTemDataDeEmissao() {
+        // given
         Claims semIat = mock(Claims.class);
         when(semIat.getIssuedAt()).thenReturn(null);
 
-        // When
+        // when
         boolean antigo = jwtService.emitidoAntesDe(semIat, LocalDateTime.now());
 
-        // Then
+        // then
         assertThat(antigo).isFalse();
     }
 
     @Test
-    void expiracaoEhInformadaEmSegundos() {
-        // When
+    void deveInformarExpiracaoEmSegundos_quandoConfiguradaEmMilissegundos() {
+        // when
         long segundos = jwtService.getExpiracaoSegundos();
 
-        // Then
+        // then
         assertThat(segundos).isEqualTo(60);
     }
 }

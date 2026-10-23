@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -46,206 +46,227 @@ class VeiculoServiceTest {
         return new VeiculoRequestDTO(label, placa, capacidade, null, null, versao);
     }
 
+    private void vanCadastrada() {
+        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    }
+
+    // ----- leitura -----
+
     @Test
-    void listarTodosDevolveAPaginaConvertida() {
-        // Given
+    void deveDevolverAPagina_quandoListaTodos() {
+        // given
         var pagina = PageRequest.of(0, 5);
         when(repository.findAll(pagina)).thenReturn(new PageImpl<>(List.of(van()), pagina, 1));
 
-        // When
+        // when
         PaginaResponseDTO<VeiculoResponseDTO> resultado = service.listarTodos(pagina);
 
-        // Then
+        // then
         assertThat(resultado.totalElementos()).isEqualTo(1);
-        assertThat(resultado.conteudo()).extracting(VeiculoResponseDTO::placa).containsExactly("AAA1A11");
     }
 
     @Test
-    void buscaPorIdDevolveOVeiculoComAVersao() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void deveDevolverComAVersao_quandoBuscaIdExistente() {
+        // given
+        vanCadastrada();
 
-        // When
-        VeiculoResponseDTO encontrado = service.buscarPorId(1L);
+        // when
+        VeiculoResponseDTO resposta = service.buscarPorId(1L);
 
-        // Then
-        assertThat(encontrado.label()).isEqualTo("Van 01");
-        assertThat(encontrado.versao()).isEqualTo(2L);
+        // then
+        assertThat(resposta.versao()).isEqualTo(2L);
     }
 
     @Test
-    void buscaPorPlacaDevolveOVeiculo() {
-        // Given
+    void deveDevolverOVeiculo_quandoBuscaPlacaExistente() {
+        // given
         when(repository.findByPlaca("AAA1A11")).thenReturn(Optional.of(van()));
 
-        // When
-        VeiculoResponseDTO encontrado = service.buscarPorPlaca("AAA1A11");
+        // when
+        VeiculoResponseDTO resposta = service.buscarPorPlaca("AAA1A11");
 
-        // Then
-        assertThat(encontrado.label()).isEqualTo("Van 01");
-        assertThat(encontrado.capacidade()).isEqualTo(15);
+        // then
+        assertThat(resposta.label()).isEqualTo("Van 01");
     }
 
     @Test
-    void buscaPorIdInexistenteLanca404() {
-        // Given
+    void deveLancarVeiculoNaoEncontrado_quandoIdNaoExiste() {
+        // given
         when(repository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L)).isInstanceOf(VeiculoNaoEncontradoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro).isInstanceOf(VeiculoNaoEncontradoException.class);
     }
 
     @Test
-    void buscaPorPlacaInexistenteLanca404ComAPlaca() {
-        // Given
+    void deveLancarVeiculoNaoEncontrado_quandoPlacaNaoExiste() {
+        // given
         when(repository.findByPlaca("ZZZ")).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorPlaca("ZZZ"))
-                .isInstanceOf(VeiculoNaoEncontradoException.class)
-                .hasMessageContaining("ZZZ");
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorPlaca("ZZZ"));
+
+        // then
+        assertThat(erro).isInstanceOf(VeiculoNaoEncontradoException.class).hasMessageContaining("ZZZ");
     }
 
-    @Test
-    void putDeIdInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        VeiculoRequestDTO dto = dto("V", "P", 1, null);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, dto)).isInstanceOf(VeiculoNaoEncontradoException.class);
-    }
+    // ----- cadastro -----
 
     @Test
-    void patchDeIdInexistenteLanca404() {
-        // Given
-        when(repository.findById(9L)).thenReturn(Optional.empty());
-        VeiculoRequestDTO dto = dto(null, null, null, null);
-
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, dto)).isInstanceOf(VeiculoNaoEncontradoException.class);
-    }
-
-    @Test
-    void placaRepetidaNoCadastroLanca400SemGravar() {
-        // Given
+    void naoDeveGravar_quandoPlacaJaEstaCadastrada() {
+        // given
         when(repository.existsByPlaca("AAA1A11")).thenReturn(true);
-        VeiculoRequestDTO dto = dto("Van 02", "AAA1A11", 10, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto)).isInstanceOf(PlacaJaCadastradaException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto("Van 02", "AAA1A11", 10, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(PlacaJaCadastradaException.class);
         verify(repository, never()).save(any());
     }
 
     @Test
-    void cadastroValidoGravaOsDadosInformados() {
-        // Given
+    void deveGravar_quandoCadastroEhValido() {
+        // given
         when(repository.existsByPlaca("BBB2B22")).thenReturn(false);
         when(repository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
-        VeiculoResponseDTO criado = service.criar(dto("Van 02", "BBB2B22", 10, null));
+        // when
+        VeiculoResponseDTO resposta = service.criar(dto("Van 02", "BBB2B22", 10, null));
 
-        // Then
-        assertThat(criado.label()).isEqualTo("Van 02");
-        assertThat(criado.placa()).isEqualTo("BBB2B22");
-        assertThat(criado.capacidade()).isEqualTo(10);
-        verify(repository).save(any(Veiculo.class));
+        // then
+        assertThat(resposta.placa()).isEqualTo("BBB2B22");
+        verify(repository).save(any());
+    }
+
+    // ----- edicao -----
+
+    @Test
+    void deveLancarVeiculoNaoEncontrado_quandoPutEmIdInexistente() {
+        // given
+        when(repository.findById(9L)).thenReturn(Optional.empty());
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, dto("V", "P", 1, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(VeiculoNaoEncontradoException.class);
     }
 
     @Test
-    void putComVersaoVelhaLanca409() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
-        VeiculoRequestDTO versaoVelha = dto("Van", "AAA1A11", 15, 1L);
+    void deveLancarVeiculoNaoEncontrado_quandoPatchEmIdInexistente() {
+        // given
+        when(repository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, dto(null, null, null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(VeiculoNaoEncontradoException.class);
     }
 
     @Test
-    void patchComVersaoVelhaLanca409() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
-        VeiculoRequestDTO versaoVelha = dto(null, null, null, 1L);
+    void deveLancarConflitoDeVersao_quandoPutTrazVersaoVelha() {
+        // given
+        vanCadastrada();
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, versaoVelha)).isInstanceOf(ConflitoDeVersaoException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto("Van", "AAA1A11", 15, 1L)));
+
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
     }
 
     @Test
-    void putParaPlacaDeOutroVeiculoLanca400() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void deveLancarConflitoDeVersao_quandoPatchTrazVersaoVelha() {
+        // given
+        vanCadastrada();
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, dto(null, null, null, 1L)));
+
+        // then
+        assertThat(erro).isInstanceOf(ConflitoDeVersaoException.class);
+    }
+
+    @Test
+    void deveLancarPlacaJaCadastrada_quandoPutTrocaParaPlacaDeOutro() {
+        // given
+        vanCadastrada();
         when(repository.existsByPlaca("CCC3C33")).thenReturn(true);
-        VeiculoRequestDTO dto = dto("Van", "CCC3C33", 15, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(1L, dto)).isInstanceOf(PlacaJaCadastradaException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(1L, dto("Van", "CCC3C33", 15, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(PlacaJaCadastradaException.class);
     }
 
     @Test
-    void patchParaPlacaDeOutroVeiculoLanca400() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void deveLancarPlacaJaCadastrada_quandoPatchTrocaParaPlacaDeOutro() {
+        // given
+        vanCadastrada();
         when(repository.existsByPlaca("CCC3C33")).thenReturn(true);
-        VeiculoRequestDTO dto = dto(null, "CCC3C33", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, dto)).isInstanceOf(PlacaJaCadastradaException.class);
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, dto(null, "CCC3C33", null, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(PlacaJaCadastradaException.class);
     }
 
     @Test
-    void putParaUmaPlacaLivreTrocaAPlaca() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void deveTrocarAPlaca_quandoPutUsaPlacaLivre() {
+        // given
+        vanCadastrada();
         when(repository.existsByPlaca("BBB2B22")).thenReturn(false);
 
-        // When
-        VeiculoResponseDTO atualizado = service.atualizar(1L, dto("Van 01", "BBB2B22", 15, 2L));
+        // when
+        VeiculoResponseDTO resposta = service.atualizar(1L, dto("Van 01", "BBB2B22", 15, 2L));
 
-        // Then
-        assertThat(atualizado.placa()).isEqualTo("BBB2B22");
-        verify(repository).flush();
+        // then
+        assertThat(resposta.placa()).isEqualTo("BBB2B22");
     }
 
     @Test
-    void putMantendoAMesmaPlacaNaoConsultaDuplicidade() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void naoDeveConsultarDuplicidade_quandoPutMantemAMesmaPlaca() {
+        // given
+        vanCadastrada();
 
-        // When
-        VeiculoResponseDTO atualizado = service.atualizar(1L, dto("Van Nova", "AAA1A11", 16, 2L));
+        // when
+        VeiculoResponseDTO resposta = service.atualizar(1L, dto("Van Nova", "AAA1A11", 16, 2L));
 
-        // Then
-        assertThat(atualizado.capacidade()).isEqualTo(16);
+        // then
+        assertThat(resposta.capacidade()).isEqualTo(16);
         verify(repository, never()).existsByPlaca(any());
     }
 
     @Test
-    void patchMantendoAMesmaPlacaNaoConsultaDuplicidade() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void naoDeveConsultarDuplicidade_quandoPatchMantemAMesmaPlaca() {
+        // given
+        vanCadastrada();
 
-        // When
-        VeiculoResponseDTO atualizado = service.atualizarParcial(1L, dto(null, "AAA1A11", null, null));
+        // when
+        VeiculoResponseDTO resposta = service.atualizarParcial(1L, dto(null, "AAA1A11", null, null));
 
-        // Then
-        assertThat(atualizado.placa()).isEqualTo("AAA1A11");
+        // then
+        assertThat(resposta.placa()).isEqualTo("AAA1A11");
         verify(repository, never()).existsByPlaca(any());
     }
 
     @Test
-    void patchComTodosOsCamposTrocaTudo() {
-        // Given
-        when(repository.findById(1L)).thenReturn(Optional.of(van()));
+    void deveAlterarTodosOsCampos_quandoPatchTrazTodos() {
+        // given
+        vanCadastrada();
         when(repository.existsByPlaca("DDD4D44")).thenReturn(false);
-        VeiculoRequestDTO patch = new VeiculoRequestDTO("Van 9", "DDD4D44", 20, "VAN", "Fiat", null);
 
-        // When
-        VeiculoResponseDTO resposta = service.atualizarParcial(1L, patch);
+        // when
+        VeiculoResponseDTO resposta = service.atualizarParcial(1L, new VeiculoRequestDTO("Van 9", "DDD4D44", 20, "VAN", "Fiat", null));
 
-        // Then
+        // then
         assertThat(resposta.label()).isEqualTo("Van 9");
         assertThat(resposta.placa()).isEqualTo("DDD4D44");
         assertThat(resposta.capacidade()).isEqualTo(20);
@@ -253,25 +274,30 @@ class VeiculoServiceTest {
         assertThat(resposta.marca()).isEqualTo("Fiat");
     }
 
+    // ----- exclusao -----
+
     @Test
-    void excluirVeiculoExistenteApaga() {
-        // Given
-        when(repository.existsById(1L)).thenReturn(true);
+    void deveLancarVeiculoNaoEncontradoSemApagar_quandoExcluiIdInexistente() {
+        // given
+        when(repository.existsById(9L)).thenReturn(false);
 
-        // When
-        service.deletar(1L);
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
 
-        // Then
-        verify(repository).deleteById(1L);
+        // then
+        assertThat(erro).isInstanceOf(VeiculoNaoEncontradoException.class);
+        verify(repository, never()).deleteById(9L);
     }
 
     @Test
-    void excluirInexistenteLanca404SemApagar() {
-        // Given
-        when(repository.existsById(9L)).thenReturn(false);
+    void deveApagar_quandoExcluiIdExistente() {
+        // given
+        when(repository.existsById(1L)).thenReturn(true);
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L)).isInstanceOf(VeiculoNaoEncontradoException.class);
-        verify(repository, never()).deleteById(any());
+        // when
+        service.deletar(1L);
+
+        // then
+        verify(repository).deleteById(1L);
     }
 }

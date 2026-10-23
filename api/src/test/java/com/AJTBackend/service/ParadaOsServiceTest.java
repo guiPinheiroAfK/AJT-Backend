@@ -31,13 +31,14 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.mock;
@@ -45,6 +46,19 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+/*
+ * o que testa: o ParadaOsService do ponto de vista de cada perfil: o motorista so muda o
+ * status e so das paradas das proprias OS (404 nas de outro, HU07), o gerente mexe em
+ * qualquer campo, a troca de transfers numa consulta so, as listagens e os 404 de parada
+ * ou OS inexistente.
+ *
+ * como rodar: teste unitario com repositorios mockados; o perfil logado e simulado no
+ * SecurityContextHolder. sem spring, sem banco. "mvn test".
+ *
+ * por que existe: o motorista usa o celular na rua para marcar a parada como concluida.
+ * se ele conseguir mudar local ou ordem, ou enxergar a parada de outro motorista, a rota
+ * do dia vira bagunca. o restante do CRUD fica no ParadaOsServiceCrudTest.
+ */
 class ParadaOsServiceTest {
 
     private final ParadaOsRepository paradaOsRepository = mock(ParadaOsRepository.class);
@@ -53,6 +67,8 @@ class ParadaOsServiceTest {
     private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
     private final ParadaOsService service = new ParadaOsService(paradaOsRepository, ordemServicoRepository, transferRepository,
             new UsuarioLogado(), new AcessoMotorista(new UsuarioLogado(), usuarioRepository));
+
+    private static final Pageable PAGINA = PageRequest.of(0, 5);
 
     @AfterEach
     void limparContexto() {
@@ -99,31 +115,34 @@ class ParadaOsServiceTest {
     // ----- perfil MOTORISTA -----
 
     @Test
-    void motoristaPodeAtualizarSoOStatusDaParada() {
-        // Given
+    void deveAtualizarSoOStatus_quandoMotoristaDonoDaOsFazPatchDeStatus() {
+        // given
         logadoComo("MOTORISTA");
         usuarioLigadoAoMotorista(5L);
         ParadaOs parada = parada();
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
 
-        // When
+        // when
         ParadaOsResponseDTO resposta = service.atualizarParcial(1L, patch(null, StatusParada.CONCLUIDA, null));
 
-        // Then
+        // then
         assertThat(resposta.statusParada()).isEqualTo(StatusParada.CONCLUIDA);
         assertThat(parada.getStatusParada()).isEqualTo(StatusParada.CONCLUIDA);
         assertThat(parada.getLocalParada()).isEqualTo("Portao 3");
         verify(paradaOsRepository).flush();
     }
 
-    @ParameterizedTest
+    @ParameterizedTest(name = "[{index}] motorista mexendo em outro campo -> 403")
     @MethodSource("patchesQueMexemEmOutrosCampos")
-    void motoristaNaoPodeAlterarOutrosCamposDaParada(ParadaOsRequestDTO patch) {
-        // Given
+    void deveNegarSemConsultar_quandoMotoristaMexeEmOutroCampoJuntoComOStatus(ParadaOsRequestDTO patch) {
+        // given
         logadoComo("MOTORISTA");
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patch))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(AccessDeniedException.class)
                 .hasMessageContaining("só pode alterar o status");
         verify(paradaOsRepository, never()).findById(anyLong());
@@ -131,16 +150,19 @@ class ParadaOsServiceTest {
     }
 
     @Test
-    void motoristaNaoMexeEmParadaDeOsDeOutroMotorista() {
-        // Given: 404 e nao 403, o motorista nem fica sabendo que a parada existe (HU07)
+    void deveLancarParadaNaoEncontrada_quandoMotoristaMexeEmParadaDeOutro() {
+        // given
+        // 404 e nao 403, o motorista nem fica sabendo que a parada existe (HU07)
         logadoComo("MOTORISTA");
         usuarioLigadoAoMotorista(6L);
         ParadaOs parada = parada();
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
-        ParadaOsRequestDTO concluir = patch(null, StatusParada.CONCLUIDA, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, concluir))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch(null, StatusParada.CONCLUIDA, null)));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("1");
         assertThat(parada.getStatusParada()).isNotEqualTo(StatusParada.CONCLUIDA);
@@ -148,28 +170,31 @@ class ParadaOsServiceTest {
     }
 
     @Test
-    void motoristaSemCadastroLigadoNaoVeParadas() {
-        // Given
+    void deveLancarParadaNaoEncontrada_quandoMotoristaSemCadastroLigadoBuscaParada() {
+        // given
         logadoComo("MOTORISTA");
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(1L))
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(1L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("1");
     }
 
     @Test
-    void motoristaVeParadaDaPropriaOs() {
-        // Given
+    void deveDevolverAParada_quandoMotoristaBuscaParadaDaPropriaOs() {
+        // given
         logadoComo("MOTORISTA");
         usuarioLigadoAoMotorista(5L);
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
 
-        // When
+        // when
         ParadaOsResponseDTO resposta = service.buscarPorId(1L);
 
-        // Then
+        // then
         assertThat(resposta.id()).isEqualTo(1L);
         assertThat(resposta.osId()).isEqualTo(3L);
         assertThat(resposta.localParada()).isEqualTo("Portao 3");
@@ -178,74 +203,74 @@ class ParadaOsServiceTest {
     // ----- listagens -----
 
     @Test
-    void motoristaListaSoAsParadasDasProprias() {
-        // Given
+    void deveListarSoAsParadasDasPropriasOs_quandoMotoristaComVinculoListaTudo() {
+        // given
         logadoComo("MOTORISTA");
         usuarioLigadoAoMotorista(5L);
-        Pageable pagina = PageRequest.of(0, 5);
-        when(paradaOsRepository.findByOrdemServicoMotoristaId(5L, pagina))
-                .thenReturn(new PageImpl<>(List.of(parada()), pagina, 1));
+        when(paradaOsRepository.findByOrdemServicoMotoristaId(5L, PAGINA))
+                .thenReturn(new PageImpl<>(List.of(parada()), PAGINA, 1));
 
-        // When
-        PaginaResponseDTO<ParadaOsResponseDTO> resultado = service.listarTodos(pagina);
+        // when
+        PaginaResponseDTO<ParadaOsResponseDTO> resultado = service.listarTodos(PAGINA);
 
-        // Then
+        // then
         assertThat(resultado.conteudo()).extracting(ParadaOsResponseDTO::id).containsExactly(1L);
         verify(paradaOsRepository, never()).findAll(any(Pageable.class));
     }
 
     @Test
-    void motoristaSemCadastroLigadoRecebeListaVazia() {
-        // Given
+    void deveDevolverListaVaziaSemConsultar_quandoMotoristaSemCadastroLigadoListaTudo() {
+        // given
         logadoComo("MOTORISTA");
-        Pageable pagina = PageRequest.of(0, 5);
 
-        // When
-        PaginaResponseDTO<ParadaOsResponseDTO> resultado = service.listarTodos(pagina);
+        // when
+        PaginaResponseDTO<ParadaOsResponseDTO> resultado = service.listarTodos(PAGINA);
 
-        // Then
+        // then
         assertThat(resultado.conteudo()).isEmpty();
         verify(paradaOsRepository, never()).findAll(any(Pageable.class));
         verify(paradaOsRepository, never()).findByOrdemServicoMotoristaId(anyLong(), any(Pageable.class));
     }
 
     @Test
-    void gerenteListaTodasAsParadas() {
-        // Given
+    void deveListarTodasAsParadas_quandoGerenteListaTudo() {
+        // given
         logadoComo("GERENTE");
-        Pageable pagina = PageRequest.of(0, 5);
-        when(paradaOsRepository.findAll(pagina)).thenReturn(new PageImpl<>(List.of(parada()), pagina, 1));
+        when(paradaOsRepository.findAll(PAGINA)).thenReturn(new PageImpl<>(List.of(parada()), PAGINA, 1));
 
-        // When
-        PaginaResponseDTO<ParadaOsResponseDTO> resultado = service.listarTodos(pagina);
+        // when
+        PaginaResponseDTO<ParadaOsResponseDTO> resultado = service.listarTodos(PAGINA);
 
-        // Then
+        // then
         assertThat(resultado.conteudo()).extracting(ParadaOsResponseDTO::id).containsExactly(1L);
         assertThat(resultado.totalElementos()).isEqualTo(1);
     }
 
     @Test
-    void gerenteListaAsParadasDeUmaOsEmOrdem() {
-        // Given
+    void deveListarAsParadasDaOs_quandoGerenteListaPorOs() {
+        // given
         logadoComo("GERENTE");
         when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(3L)).thenReturn(List.of(parada()));
 
-        // When
+        // when
         List<ParadaOsResponseDTO> resultado = service.listarPorOrdemServico(3L);
 
-        // Then
+        // then
         assertThat(resultado).extracting(ParadaOsResponseDTO::osId).containsExactly(3L);
     }
 
     @Test
-    void motoristaNaoListaParadasDeOsDeOutroMotorista() {
-        // Given
+    void deveLancarOsNaoEncontradaSemListar_quandoMotoristaListaParadasDaOsDeOutro() {
+        // given
         logadoComo("MOTORISTA");
         usuarioLigadoAoMotorista(6L);
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(ordemServico()));
 
-        // When / Then
-        assertThatThrownBy(() -> service.listarPorOrdemServico(3L))
+        // when
+        Throwable erro = catchThrowable(() -> service.listarPorOrdemServico(3L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(OrdemServicoNaoEncontradoException.class)
                 .hasMessageContaining("3");
         verify(paradaOsRepository, never()).findByOrdemServicoIdOrderByOrdemParadaAsc(anyLong());
@@ -254,16 +279,16 @@ class ParadaOsServiceTest {
     // ----- perfil GERENTE -----
 
     @Test
-    void gerentePodeAlterarQualquerCampo() {
-        // Given
+    void deveAlterarOCampoEGravarNaHora_quandoGerenteFazPatchDeLocal() {
+        // given
         logadoComo("GERENTE");
         ParadaOs parada = parada();
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
 
-        // When
+        // when
         ParadaOsResponseDTO resposta = service.atualizarParcial(1L, patch("Portao 9", null, null));
 
-        // Then
+        // then
         assertThat(resposta.localParada()).isEqualTo("Portao 9");
         assertThat(resposta.ordemParada()).isEqualTo(1);
         assertThat(parada.getLocalParada()).isEqualTo("Portao 9");
@@ -271,32 +296,36 @@ class ParadaOsServiceTest {
     }
 
     @Test
-    void gerenteTrocaOsTransfersDaParadaComUmaUnicaConsulta() {
-        // Given
+    void deveTrocarOsTransfersNumaConsultaSo_quandoGerenteInformaTransferIds() {
+        // given
         logadoComo("GERENTE");
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
         when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).build()));
 
-        // When
+        // when
         ParadaOsResponseDTO resposta = service.atualizarParcial(1L, patch(null, null, Set.of(7L)));
 
-        // Then
+        // then
         assertThat(resposta.transferIds()).containsExactly(7L);
         verify(transferRepository).findAllById(any());
         verify(transferRepository, never()).findById(anyLong());
     }
 
     @Test
-    void buscaTransfersNumaUnicaConsultaEDetectaIdInexistente() {
-        // Given
+    void deveLancarTransferNaoEncontradoSemGravar_quandoUmDosTransferIdsNaoExiste() {
+        // given
         logadoComo("GERENTE");
         ParadaOs parada = parada();
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
         when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).build()));
-        ParadaOsRequestDTO patch = patch(null, null, Set.of(7L, 8L));
+        // ordem fixa (o que existe primeiro), pra o filtro do faltante passar pelos dois ids
+        ParadaOsRequestDTO patch = patch(null, null, new LinkedHashSet<>(List.of(7L, 8L)));
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(1L, patch))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(TransferNaoEncontradoException.class)
                 .hasMessageContaining("8");
         verify(transferRepository, never()).findById(anyLong());
@@ -307,81 +336,93 @@ class ParadaOsServiceTest {
     // ----- parada inexistente -----
 
     @Test
-    void buscarPorIdInexistenteLanca404() {
-        // Given
+    void deveLancarParadaNaoEncontrada_quandoBuscaIdInexistente() {
+        // given
         logadoComo("GERENTE");
         when(paradaOsRepository.findById(9L)).thenReturn(Optional.empty());
 
-        // When / Then
-        assertThatThrownBy(() -> service.buscarPorId(9L))
+        // when
+        Throwable erro = catchThrowable(() -> service.buscarPorId(9L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("9");
     }
 
     @Test
-    void atualizarParcialInexistenteLanca404SemGravar() {
-        // Given
+    void deveLancarParadaNaoEncontradaSemGravar_quandoPatchEmIdInexistente() {
+        // given
         logadoComo("GERENTE");
         when(paradaOsRepository.findById(9L)).thenReturn(Optional.empty());
         ParadaOsRequestDTO patch = patch("X", null, null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizarParcial(9L, patch))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(9L, patch));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("9");
         verify(paradaOsRepository, never()).flush();
     }
 
     @Test
-    void deletarInexistenteLanca404SemApagarNada() {
-        // Given
+    void deveLancarParadaNaoEncontradaSemApagar_quandoExcluiIdInexistente() {
+        // given
         when(paradaOsRepository.existsById(9L)).thenReturn(false);
 
-        // When / Then
-        assertThatThrownBy(() -> service.deletar(9L))
+        // when
+        Throwable erro = catchThrowable(() -> service.deletar(9L));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("9");
         verify(paradaOsRepository, never()).deleteById(anyLong());
     }
 
     @Test
-    void deletarExistenteApagaAParada() {
-        // Given
+    void deveApagarAParada_quandoExcluiIdExistente() {
+        // given
         when(paradaOsRepository.existsById(1L)).thenReturn(true);
 
-        // When
+        // when
         service.deletar(1L);
 
-        // Then
+        // then
         verify(paradaOsRepository).deleteById(1L);
     }
 
     // ----- cadastro e PUT -----
 
     @Test
-    void criarComOsInexistenteLanca404SemGravar() {
-        // Given
+    void deveLancarOsNaoEncontradaSemGravar_quandoCadastroApontaOsInexistente() {
+        // given
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.empty());
         ParadaOsRequestDTO dto = corpo(3L, "Portao 3", null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.criar(dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(OrdemServicoNaoEncontradoException.class)
                 .hasMessageContaining("3");
         verify(paradaOsRepository, never()).save(any());
     }
 
     @Test
-    void criarSemStatusGravaComoPendente() {
-        // Given
+    void deveGravarComoPendente_quandoCadastroNaoTrazStatus() {
+        // given
         OrdemServico os = ordemServico();
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(os));
         when(paradaOsRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         ParadaOsResponseDTO criada = service.criar(corpo(3L, "Portao 3", null));
 
-        // Then
+        // then
         assertThat(criada.statusParada()).isEqualTo(StatusParada.PENDENTE);
         ArgumentCaptor<ParadaOs> captor = ArgumentCaptor.forClass(ParadaOs.class);
         verify(paradaOsRepository).save(captor.capture());
@@ -392,43 +433,46 @@ class ParadaOsServiceTest {
     }
 
     @Test
-    void criarComStatusInformadoRespeitaOStatus() {
-        // Given
+    void deveRespeitarOStatus_quandoCadastroInformaStatus() {
+        // given
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(ordemServico()));
         when(paradaOsRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
 
-        // When
+        // when
         ParadaOsResponseDTO criada = service.criar(corpo(3L, "Portao 3", StatusParada.CONCLUIDA));
 
-        // Then
+        // then
         assertThat(criada.statusParada()).isEqualTo(StatusParada.CONCLUIDA);
     }
 
     @Test
-    void putInexistenteLanca404SemGravar() {
-        // Given
+    void deveLancarParadaNaoEncontradaSemGravar_quandoPutEmIdInexistente() {
+        // given
         when(paradaOsRepository.findById(9L)).thenReturn(Optional.empty());
         ParadaOsRequestDTO dto = corpo(3L, "X", null);
 
-        // When / Then
-        assertThatThrownBy(() -> service.atualizar(9L, dto))
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizar(9L, dto));
+
+        // then
+        assertThat(erro)
                 .isInstanceOf(ParadaOsNaoEncontradaException.class)
                 .hasMessageContaining("9");
         verify(paradaOsRepository, never()).flush();
     }
 
     @Test
-    void putSemStatusVoltaAParadaParaPendenteEGravaAgora() {
-        // Given
+    void deveVoltarParaPendenteEGravarNaHora_quandoPutNaoTrazStatus() {
+        // given
         ParadaOs parada = parada();
         parada.setStatusParada(StatusParada.CONCLUIDA);
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
         when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(ordemServico()));
 
-        // When
+        // when
         ParadaOsResponseDTO resposta = service.atualizar(1L, corpo(3L, "Portao 7", null));
 
-        // Then
+        // then
         assertThat(resposta.statusParada()).isEqualTo(StatusParada.PENDENTE);
         assertThat(resposta.localParada()).isEqualTo("Portao 7");
         assertThat(parada.getLocalParada()).isEqualTo("Portao 7");
