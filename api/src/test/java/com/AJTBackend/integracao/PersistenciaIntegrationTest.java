@@ -7,10 +7,8 @@ import com.AJTBackend.model.enums.Role;
 import com.AJTBackend.repository.MotoristaRepository;
 import com.AJTBackend.repository.OrdemServicoRepository;
 import com.AJTBackend.repository.VeiculoRepository;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.ResultActions;
 
@@ -22,9 +20,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.everyItem;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -42,96 +38,85 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * por que existe: sao coisas que nenhum mock reproduz de verdade — a
  * criptografia do CriptografiaConverter so e exercitada pelo hibernate
  * numa gravacao/leitura real, e a violacao de FK so o postgres detecta.
+ * aqui fica o caminho pela api (status http, json); o mesmo comportamento
+ * so de banco tem o seu teste em repository/ com @DataJpaTest.
  */
 class PersistenciaIntegrationTest extends IntegracaoTestBase {
 
-    private static final String PASSAGEIRO =
+    private static final String PASSAGEIRO_JOHN =
             "{\"nome\":\"John Doe\",\"tipoDocumento\":\"PASSAPORTE\",\"documento\":\"XP9988776\",\"nacionalidade\":\"Americana\"}";
 
     @Autowired private JdbcTemplate jdbcTemplate;
-    @Autowired private ObjectMapper objectMapper;
     @Autowired private MotoristaRepository motoristaRepository;
     @Autowired private VeiculoRepository veiculoRepository;
     @Autowired private OrdemServicoRepository ordemServicoRepository;
 
-    private ResultActions cadastrarPassageiro() throws Exception {
-        return mockMvc.perform(post("/api/passageiros").header("Authorization", bearer(Role.ATENDENTE))
-                .contentType(MediaType.APPLICATION_JSON).content(PASSAGEIRO));
-    }
-
-    private long idDoPassageiroCadastrado() throws Exception {
-        String json = cadastrarPassageiro().andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
-        return objectMapper.readTree(json).get("id").asLong();
-    }
-
     @Test
-    void documentoDoPassageiroFicaCifradoNoBanco() throws Exception {
-        // When
-        ResultActions resposta = cadastrarPassageiro();
+    void deveDevolverEmClaroEGravarCifrado_quandoAtendenteCadastraPassageiro() throws Exception {
+        // when
+        ResultActions resposta = postJson("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_JOHN);
 
-        // Then
-        long id = objectMapper.readTree(resposta.andReturn().getResponse().getContentAsString()).get("id").asLong();
-        String noBanco = jdbcTemplate.queryForObject("SELECT documento FROM passageiros WHERE id = ?", String.class, id);
+        // then
         resposta.andExpect(status().isCreated())
                 .andExpect(jsonPath("$.documento").value("XP9988776"));
+        String noBanco = jdbcTemplate.queryForObject("SELECT documento FROM passageiros WHERE id = ?", String.class, idDe(resposta));
         assertThat(noBanco).startsWith("v1:").doesNotContain("XP9988776");
     }
 
     @Test
-    void documentoDoPassageiroVoltaLegivelNaApiParaOAtendente() throws Exception {
-        // Given
-        long id = idDoPassageiroCadastrado();
+    void deveDevolverODocumentoEmClaro_quandoAtendenteBuscaPassageiro() throws Exception {
+        // given
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_JOHN);
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.ATENDENTE)));
+        // when
+        ResultActions resposta = getComo("/api/passageiros/" + id, bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.documento").value("XP9988776"));
     }
 
     @Test
-    void motoristaNaoLeOCadastroDePassageiros() throws Exception {
-        // Given: LGPD, o motorista so ve os passageiros dos transfers da OS dele, com documento mascarado
-        long id = idDoPassageiroCadastrado();
+    void deveRetornar403_quandoMotoristaBuscaPassageiro() throws Exception {
+        // given
+        long id = criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE), PASSAGEIRO_JOHN);
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/passageiros/" + id).header("Authorization", bearer(Role.MOTORISTA)));
+        // when
+        // motorista nao le o cadastro de passageiros (LGPD)
+        ResultActions resposta = getComo("/api/passageiros/" + id, bearer(Role.MOTORISTA));
 
-        // Then
+        // then
         resposta.andExpect(status().isForbidden());
     }
 
     @Test
-    void excluirMotoristaEmUsoPorOrdemDeServicoRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoExcluiMotoristaEmUsoPorOrdemDeServico() throws Exception {
+        // given
         Motorista motorista = motoristaRepository.save(Motorista.builder()
                 .nome("Carlos").cnh(UUID.randomUUID().toString().substring(0, 11)).build());
         ordemServicoRepository.save(OrdemServico.builder().dataServico(LocalDate.now()).motorista(motorista).build());
 
-        // When
-        ResultActions resposta = mockMvc.perform(delete("/api/motoristas/" + motorista.getId())
-                .header("Authorization", bearer(Role.GERENTE)));
+        // when
+        ResultActions resposta = deleteComo("/api/motoristas/" + motorista.getId(), bearer(Role.GERENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isConflict())
                 .andExpect(jsonPath("$.erro").value("Conflito de dados"));
         assertThat(motoristaRepository.existsById(motorista.getId())).isTrue();
     }
 
     @Test
-    void paginacaoRealDevolveOsTotais() throws Exception {
-        // Given
+    void deveDevolverPaginaComTotais_quandoListaVeiculosPaginado() throws Exception {
+        // given
         for (int i = 0; i < 3; i++) {
             veiculoRepository.save(Veiculo.builder().label("Van " + i)
                     .placa(UUID.randomUUID().toString().substring(0, 7)).capacidade(15).build());
         }
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/veiculos").param("size", "2").param("sort", "id,desc")
-                .header("Authorization", bearer(Role.ATENDENTE)));
+        // when
+        ResultActions resposta = executar(get("/api/veiculos").param("size", "2").param("sort", "id,desc"), bearer(Role.ATENDENTE));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.conteudo.length()").value(2))
                 .andExpect(jsonPath("$.tamanho").value(2))
@@ -141,42 +126,38 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
     }
 
     @Test
-    void ordenarPorCampoInexistenteRetorna400() throws Exception {
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/veiculos").param("sort", "campoQueNaoExiste")
-                .header("Authorization", bearer(Role.ADMIN)));
+    void deveRetornar400_quandoOrdenaPorCampoInexistente() throws Exception {
+        // when
+        ResultActions resposta = executar(get("/api/veiculos").param("sort", "campoQueNaoExiste"), bearer(Role.ADMIN));
 
-        // Then
+        // then
         resposta.andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.mensagem", containsString("campoQueNaoExiste")));
     }
 
     @Test
-    void enumDeStatusEhPersistidoEFiltrado() throws Exception {
-        // Given
-        mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"status\":\"CONFIRMADO\",\"valorBase\":300.00,\"moedaOrigem\":\"BRL\"}"))
-                .andExpect(status().isCreated());
+    void deveFiltrarPeloStatusGravado_quandoBuscaTransfersPorStatus() throws Exception {
+        // given
+        criarPelaApi("/api/transfers", bearer(Role.ATENDENTE),
+                "{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"status\":\"CONFIRMADO\",\"valorBase\":300.00,\"moedaOrigem\":\"BRL\"}");
 
-        // When
-        ResultActions resposta = mockMvc.perform(get("/api/transfers/buscar").param("status", "CONFIRMADO")
-                .header("Authorization", bearer(Role.MOTORISTA)));
+        // when
+        ResultActions resposta = executar(get("/api/transfers/buscar").param("status", "CONFIRMADO"), bearer(Role.MOTORISTA));
 
-        // Then
+        // then
         resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$.conteudo[0].status").value("CONFIRMADO"))
                 .andExpect(jsonPath("$.conteudo[*].status", everyItem(equalTo("CONFIRMADO"))))
                 .andExpect(jsonPath("$.totalElementos", greaterThanOrEqualTo(1)));
     }
 
     @Test
-    void transferApontandoParaOsInexistenteRetorna404() throws Exception {
-        // When
-        ResultActions resposta = mockMvc.perform(post("/api/transfers").header("Authorization", bearer(Role.ATENDENTE))
-                .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"osId\":999999}"));
+    void deveRetornar404_quandoTransferApontaParaOsInexistente() throws Exception {
+        // when
+        ResultActions resposta = postJson("/api/transfers", bearer(Role.ATENDENTE),
+                "{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"osId\":999999}");
 
-        // Then
+        // then
         resposta.andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.mensagem", containsString("999999")));
     }
