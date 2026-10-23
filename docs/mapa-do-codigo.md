@@ -46,9 +46,14 @@ qualquer exceção em qualquer camada  →  exception/GlobalExceptionHandler  �
 | Paginação | `dto/PaginaResponseDTO`; `Pageable` recebido nos controllers |
 | Validação de campos | Bean Validation nos `dto/*RequestDTO`; grupo `dto/validacao/OnPatch` para PATCH |
 | Tratamento de erros | `exception/GlobalExceptionHandler`; 401/403 do Spring em `config/JsonAuthErrorHandler` |
-| Auditoria (quem mudou o quê) | `service/AuditoriaService`, `model/LogAuditoria`, `GET /api/auditoria` |
+| Auditoria (quem mudou o quê) | `service/AuditoriaService`, `model/LogAuditoria`, `GET /api/auditoria` (com `registroId`: histórico de um registro) |
 | Documentação Swagger | anotações nos controllers/DTOs + `config/OpenApiConfig` |
 | Perfis dev/prod, variáveis de ambiente | `resources/application.yml`, `.env.example`, `docker-compose.yml` |
+| Filtros das listagens (status, período, texto) | `repository/Especificacoes` + `dto/Filtro*DTO`; montados no `listar` de cada service (ADR-0017) |
+| Edição simultânea (409) | coluna `versao` + `@Version`; conferência em `service/Versoes` (cadastros) e no próprio service de transfer e OS (ADR-0016) |
+| Motorista só vê as próprias OS | `service/AcessoMotorista`; vínculo `usuarios.motorista_id` (V11); `GET /api/ordens-servico/minhas` (ADR-0018) |
+| Painel do dia e faturamento | `controller/PainelController` → `service/PainelService` (ADR-0019) |
+| PDF da OS | `GET /api/ordens-servico/{id}/pdf` → `service/RelatorioOrdemServicoService` (ADR-0020) |
 
 ## 3. Pacotes e classes
 
@@ -69,7 +74,7 @@ qualquer exceção em qualquer camada  →  exception/GlobalExceptionHandler  �
 `CotacaoClient`: interface Feign para a Frankfurter API (`GET /latest?base=&symbols=`). A URL vem de
 `ajt.cotacao.url`; timeouts em `spring.cloud.openfeign.client.config`.
 
-### `controller/` — HTTP (11)
+### `controller/` — HTTP (12)
 
 Sem regra de negócio: validam a entrada, delegam a **um** service e escolhem o status
 (`201` no POST, `204` no DELETE).
@@ -81,17 +86,20 @@ Sem regra de negócio: validam a entrada, delegam a **um** service e escolhem o 
 | `MotoristaController` | `/api/motoristas` | `GET /buscar?cnh=` |
 | `VeiculoController` | `/api/veiculos` | `GET /buscar?placa=` |
 | `PassageiroController` | `/api/passageiros` | `GET /buscar?nacionalidade=` |
-| `TransferController` | `/api/transfers` | `GET /buscar?status=`, `GET /{id}/passageiros` |
+| `TransferController` | `/api/transfers` | `GET /buscar?status=`, `GET /{id}/passageiros`; filtros `?status&dataInicio&dataFim&busca&osId&semOs` |
 | `PontoColetaController` | `/api/pontos-coleta` | `GET /transfer/{id}` |
-| `OrdemServicoController` | `/api/ordens-servico` | `GET /buscar?status=` |
+| `OrdemServicoController` | `/api/ordens-servico` | `GET /buscar?status=`, `GET /minhas?data=` (só MOTORISTA), `GET /{id}/pdf`; filtros `?status&dataInicio&dataFim&motoristaId&veiculoId` |
 | `ParadaOsController` | `/api/paradas-os` | `GET /ordem-servico/{id}` |
 | `CotacaoController` | `/api/cotacao` | `?de=USD&para=BRL` |
-| `AuditoriaController` | `/api/auditoria` | somente leitura; ADMIN e GERENTE |
+| `AuditoriaController` | `/api/auditoria` | somente leitura; ADMIN e GERENTE; `?tabela=&registroId=` |
+| `PainelController` | `/api/painel` | `GET /resumo?data=`; faturamento só para ADMIN e GERENTE |
+
+Passageiros (`?nome&nacionalidade`) e motoristas (`?nome&cnh`) também aceitam filtro na listagem.
 
 Todo recurso CRUD expõe o mesmo molde: `GET` listar (paginado), `GET /{id}`, `POST`, `PUT /{id}`
 (substituição), `PATCH /{id}` (parcial, validado com `OnPatch`), `DELETE /{id}`.
 
-### `service/` — regras de negócio (13)
+### `service/` — regras de negócio (17)
 
 | Service | Responsabilidade |
 |---|---|
@@ -106,7 +114,11 @@ Todo recurso CRUD expõe o mesmo molde: `GET` listar (paginado), `GET /{id}`, `P
 | `PontoColetaService` | CRUD de pontos de coleta de um transfer |
 | `OrdemServicoService` | CRUD de OS (motorista e veículo opcionais) + auditoria |
 | `ParadaOsService` | CRUD de paradas, vínculo N:N com transfers, restrição do perfil MOTORISTA |
-| `AuditoriaService` | grava e consulta a trilha de auditoria |
+| `AuditoriaService` | grava e consulta a trilha de auditoria (status, valor e histórico por registro) |
+| `AcessoMotorista` | regra da HU07: o MOTORISTA só vê as OS do cadastro ligado ao usuário dele (ADR-0018) |
+| `PainelService` | resumo do dia: contagens por status e faturamento só para ADMIN/GERENTE (ADR-0019) |
+| `RelatorioOrdemServicoService` | PDF da OS com OpenPDF, sem valores nem documentos (ADR-0020) |
+| `Versoes` | confere a versão enviada pelo cliente nos cadastros e lança 409 se estiver velha (ADR-0016) |
 
 Convenção: a classe inteira é `@Transactional(readOnly = true)`; cada método de escrita reafirma
 `@Transactional`.
@@ -115,7 +127,7 @@ Convenção: a classe inteira é `@Transactional(readOnly = true)`; cada método
 
 | Entidade | Tabela | Relacionamentos |
 |---|---|---|
-| `Usuario` | `usuarios` | — |
+| `Usuario` | `usuarios` | `@OneToOne` Motorista (só perfil MOTORISTA, V11) |
 | `Passageiro` | `passageiros` | — (documento cifrado) |
 | `Motorista` | `motoristas` | `@OneToMany` OS |
 | `Veiculo` | `veiculos` | `@OneToMany` OS |
@@ -128,20 +140,24 @@ Convenção: a classe inteira é `@Transactional(readOnly = true)`; cada método
 Enums (`model/enums/`): `Role`, `StatusTransfer`, `StatusOrdemServico`, `StatusParada`, `AcaoParada`
 (gravados como texto, `EnumType.STRING`; ADR-0001).
 
-### `repository/` — dados (9)
+### `repository/` — dados (9 + `Especificacoes`)
 
 Um `JpaRepository` por entidade. Consultas por nome de método (`findByCnh`, `existsByPlaca`...). Exceções:
-`ParadaOsRepository` usa `@EntityGraph` para evitar N+1 (ADR-0007) e `PassageiroRepository` tem uma
-`@Query` JPQL (`findByTransferId`).
+`ParadaOsRepository` usa `@EntityGraph` para evitar N+1 (ADR-0007), `PassageiroRepository` tem uma
+`@Query` JPQL (`findByTransferId`), e `TransferRepository`/`OrdemServicoRepository` têm as consultas
+agregadas do painel (`contarPorStatusNaData`, `somarValorBaseNoPeriodo`). Transfers, OS, passageiros e
+motoristas estendem `JpaSpecificationExecutor` para os filtros; as peças ficam em `Especificacoes` (ADR-0017).
 
-### `dto/` — contratos da API (24 + `validacao/OnPatch`)
+### `dto/` — contratos da API (30 + `validacao/OnPatch`)
 
-- `XRequestDTO`: entrada, com Bean Validation e `@Schema(example)` para o Swagger.
-- `XResponseDTO`: saída. **A entidade JPA nunca é devolvida.**
+- `XRequestDTO`: entrada, com Bean Validation e `@Schema(example)` para o Swagger; traz `versao` opcional (ADR-0016).
+- `XResponseDTO`: saída, com a `versao` atual. **A entidade JPA nunca é devolvida.**
+- `Filtro*DTO`: parâmetros de filtro da listagem (transfer, OS, passageiro, motorista), recebidos com `@ParameterObject`.
 - Especiais: `PaginaResponseDTO<T>` (envelope de páginas), `ErroResponseDTO` (formato único de erro),
-  `LoginRequestDTO`/`LoginResponseDTO`, `TrocaSenhaRequestDTO`, `Cotacao*DTO`, `AuditoriaResponseDTO`.
+  `LoginRequestDTO`/`LoginResponseDTO`, `TrocaSenhaRequestDTO`, `Cotacao*DTO`, `AuditoriaResponseDTO`,
+  `PainelResumoDTO`, `OrdemServicoDoDiaDTO` (OS com as paradas, usado em `/minhas`).
 
-### `exception/` — erros (18)
+### `exception/` — erros (19)
 
 ```
 RecursoNaoEncontradoException (abstract)  →  404
@@ -153,6 +169,7 @@ RegraNegocioException                     →  400   (regra violada: "não pode 
 CredenciaisInvalidasException             →  401
 MuitasTentativasException                 →  429
 CotacaoIndisponivelException              →  502
+ConflitoDeVersaoException                 →  409   (versão velha; o @Version barrando gravação simultânea também vira 409)
 GlobalExceptionHandler                    converte tudo (e 400 de validação, 403, 404 de rota, 409 de FK, 500)
 ```
 
@@ -169,41 +186,57 @@ Um handler cobre a classe-mãe: criar uma nova `XNaoEncontrada` **não** exige n
 | `V5__Seed_Admin` | usuário `admin` inicial |
 | `V6__Seguranca_E_Indices` | `trocar_senha`, `senha_alterada_em`, índices; marca o admin do seed para trocar a senha |
 | `V7__Auditoria_Bigint` | `BIGINT` na auditoria + índice por tabela/data |
+| `V8__Auditoria_Por_Registro` | índice `(tabela_afetada, registro_id, data_hora)` para o histórico de um registro |
+| `V9__Versao_Concorrencia` | coluna `versao` nas 8 tabelas editáveis (lock otimista, ADR-0016) |
+| `V10__Status_Transfer_Com_Os` | corrige transfers antigos: quem está numa OS e ainda estava `AGUARDANDO_OS` passa a `CONFIRMADO` |
+| `V11__Usuario_Motorista` | `usuarios.motorista_id` (único, `ON DELETE SET NULL`) para a HU07 (ADR-0018) |
 
 **Regra de ouro:** migration já aplicada **nunca** é editada (quebra o checksum do Flyway); mudanças viram
 uma migration nova. O Hibernate roda em `ddl-auto: validate`: só confere, nunca altera o schema.
 
-## 5. Testes (551 métodos, 829 execuções) e onde ficam
+## 5. Testes (647 métodos, 889 execuções) e onde ficam
 
-| Nível | Pasta | Roda sem Docker |
-|---|---|:---:|
-| Unitário | `service/*Test`, `config/*Test` | sim |
-| Camada web (`@WebMvcTest`) | `web/` | sim |
-| Repositório (`@DataJpaTest`, PostgreSQL real) | `repository/*RepositoryTest` | não |
-| Integração (`@SpringBootTest`, PostgreSQL real) | `integracao/` | não |
+| Nível | Pasta | Base | Execuções | Roda sem Docker |
+|---|---|---|---:|:---:|
+| Unitário | `config/*Test`, `service/*Test` | nenhuma (Mockito) | 56 + 323 | sim |
+| Repositório (`@DataJpaTest`, PostgreSQL real) | `repository/` | `RepositorioTestBase` | 72 | não |
+| Camada web (`@WebMvcTest`) | `web/` | `WebTestBase`, `ErrosWebTestBase` | 363 | sim |
+| Integração (`@SpringBootTest`, PostgreSQL real) | `integracao/` | `IntegracaoTestBase` | 75 | não |
 
-Detalhes e justificativas: [ADR-0014](adr/0014-estrategia-de-testes-e-demonstracao.md).
+Todo teste se chama `deve…_quando…` (ou `naoDeve…_quando…`) e tem os blocos `// given`, `// when` e
+`// then`, com uma ação só no `when`. Detalhes e justificativas: [ADR-0014](adr/0014-estrategia-de-testes-e-demonstracao.md)
+e [ADR-0021](adr/0021-estrategia-de-testes-v2-slices-e-bdd.md).
+
+Contra a API rodando: `scripts/smoke-test.sh` (sequência da demonstração) e `scripts/api/run-all.sh` (um
+script por recurso, caminho feliz e triste, roda duas vezes seguidas sem sobrar dado, ADR-0022).
 
 ## 6. Checklists
 
 ### Adicionar um recurso novo (ex.: "Hotel")
 
-1. **Migration** `V8__Create_Hotel.sql`: tabela, chaves estrangeiras, índices das colunas de filtro.
-2. **Entidade** em `model/` (`@Entity`, `@Table`, relacionamentos `LAZY`); enum em `model/enums/` se tiver status.
-3. **Repository** em `repository/` (consultas por nome de método).
-4. **DTOs** `HotelRequestDTO` (Bean Validation com tamanhos iguais aos da coluna + `@Schema(example)`) e
-   `HotelResponseDTO`.
+1. **Migration** `V12__Create_Hotel.sql` (a próxima livre): tabela com coluna `versao BIGINT NOT NULL DEFAULT 0`,
+   chaves estrangeiras, índices das colunas de filtro.
+2. **Entidade** em `model/` (`@Entity`, `@Table`, relacionamentos `LAZY`, `@Version` no campo `versao`); enum em
+   `model/enums/` se tiver status.
+3. **Repository** em `repository/` (consultas por nome de método; `JpaSpecificationExecutor` se a listagem
+   tiver filtros, com as peças de `Especificacoes`).
+4. **DTOs** `HotelRequestDTO` (Bean Validation com tamanhos iguais aos da coluna + `@Schema(example)` + `versao`
+   opcional), `HotelResponseDTO` (com `versao`) e `FiltroHotelDTO` se houver filtro.
 5. **Exceções**: `HotelNaoEncontradoException extends RecursoNaoEncontradoException` (e `...JaCadastrada` se
    houver campo único). **Não** precisa mexer no `GlobalExceptionHandler`.
 6. **Service**: `@Transactional(readOnly = true)` na classe, `@Transactional` nas escritas, logs SLF4J,
-   `PaginaResponseDTO` nas listagens; chame `AuditoriaService` se o recurso tiver ciclo de status.
-7. **Controller**: `@Tag`, `@Operation` + `@ApiResponses` em cada método, `@Valid` no POST/PUT,
-   `@Validated(OnPatch.class)` no PATCH, `201` no POST e `204` no DELETE.
-8. **Segurança**: regra em `SecurityConfig` **e** a tabela do javadoc; uma linha em `AutorizacaoWebTest`.
-9. **Testes**: unitário do service; `@MockitoBean` do novo service em `web/WebTestBase`; integração se
-   houver relacionamento.
-10. **Demonstração e docs**: pasta na coleção Postman, passos no `scripts/smoke-test.sh`, seção no `README.md`
-    e uma **ADR** se houve decisão não óbvia.
+   `PaginaResponseDTO` nas listagens, `Versoes.conferir` + `flush()` no PUT e no PATCH; chame `AuditoriaService`
+   se o recurso tiver ciclo de status.
+7. **Controller**: `@Tag`, `@Operation` + um `@ApiResponse` por status em cada método, `@Valid` no POST/PUT,
+   `@Validated(OnPatch.class)` no PATCH, `@ParameterObject` no filtro, `201` no POST e `204` no DELETE.
+8. **Segurança**: regra em `SecurityConfig` **e** a tabela do javadoc; uma linha em `AutorizacaoWebTest` e em
+   `scripts/api/test-permissoes.sh`.
+9. **Testes** (padrão `deve…_quando…` com `// given / when / then`, ADR-0021): unitário do service;
+   `@MockitoBean` do novo service em `web/WebTestBase` e um `HotelErrosWebTest`; `@DataJpaTest` em
+   `repository/` se houver consulta própria; integração só se precisar de HTTP + banco juntos.
+10. **Demonstração e docs**: pasta na coleção Postman, passos no `scripts/smoke-test.sh`, um
+    `scripts/api/test-hoteis.sh` (feliz e triste, sufixo único e limpeza no fim), seção no `README.md` e uma
+    **ADR** se houve decisão não óbvia.
 
 ### Adicionar um campo a um recurso existente
 
@@ -217,5 +250,6 @@ javadoc → `AutorizacaoWebTest` → ADR-0002.
 
 ### Antes de abrir o PR
 
-`mvn test` (com Docker ligado, para rodar os 25 de integração) → `bash scripts/smoke-test.sh` contra a
-API rodando → sem imports não usados → nenhuma classe passando de ~250 linhas sem justificativa.
+`mvn verify` (com Docker ligado, para rodar repositório e integração; a cobertura do JaCoCo não pode cair) →
+`bash scripts/api/run-all.sh` e `bash scripts/smoke-test.sh` contra a API rodando → sem imports não usados →
+nenhuma classe passando de ~250 linhas sem justificativa.
