@@ -26,11 +26,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 abstract class ErrosWebTestBase extends WebTestBase {
 
-    /** usuario com permissao total: o que interessa aqui e a validacao, nao o perfil. */
+    // usuario com permissao total: o que interessa aqui e a validacao, nao o perfil
     protected static RequestPostProcessor admin() {
         return user("admin-teste").roles("ADMIN");
     }
 
+    // o "when" dos testes de erro: dispara como admin e devolve a resposta pro "then" conferir
     protected ResultActions enviar(MockHttpServletRequestBuilder requisicao, String json) throws Exception {
         return mockMvc.perform(requisicao.with(admin()).contentType(MediaType.APPLICATION_JSON).content(json));
     }
@@ -39,7 +40,7 @@ abstract class ErrosWebTestBase extends WebTestBase {
         return mockMvc.perform(requisicao.with(admin()));
     }
 
-    /** pros testes parametrizados por verbo: com json envia o corpo, sem json so chama. */
+    // pros testes parametrizados por verbo: com json envia o corpo, sem json so chama
     protected ResultActions executar(String verbo, String url, String json) throws Exception {
         MockHttpServletRequestBuilder requisicao = request(HttpMethod.valueOf(verbo), url);
         return json == null ? chamar(requisicao) : enviar(requisicao, json);
@@ -50,7 +51,7 @@ abstract class ErrosWebTestBase extends WebTestBase {
      * teste, onde o Sonar (java:S2699) reconhece a verificacao.
      */
 
-    /** 400 de validacao do DTO, com o trecho esperado em um dos detalhes ("campo: mensagem"). */
+    // 400 de validacao do DTO, com o trecho esperado em um dos detalhes ("campo: mensagem")
     protected static ResultMatcher validacao(String trechoDoDetalhe) {
         return ResultMatcher.matchAll(
                 status().isBadRequest(),
@@ -59,7 +60,7 @@ abstract class ErrosWebTestBase extends WebTestBase {
                 jsonPath("$.detalhes", hasItem(containsString(trechoDoDetalhe))));
     }
 
-    /** erro no formato padrao: status http, rotulo "erro" e um trecho da mensagem. */
+    // erro no formato padrao: status http, rotulo "erro" e um trecho da mensagem
     protected static ResultMatcher erro(int status, String erro, String trechoDaMensagem) {
         return ResultMatcher.matchAll(
                 status().is(status),

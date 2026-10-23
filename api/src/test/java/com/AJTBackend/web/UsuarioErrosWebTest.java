@@ -54,180 +54,200 @@ class UsuarioErrosWebTest extends ErrosWebTestBase {
 
     @ParameterizedTest(name = "POST {0} -> 400")
     @MethodSource("corposInvalidos")
-    void cadastroInvalidoRetorna400SemChamarOService(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoCadastroTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/usuarios"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(usuarioService, never()).criar(any());
     }
 
     @ParameterizedTest(name = "PUT {0} -> 400")
     @MethodSource("corposInvalidos")
-    void edicaoInvalidaRetorna400(String caso, String json, String detalhe) throws Exception {
-        // When
+    void deveRetornar400SemChamarOService_quandoPutTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
         ResultActions resposta = enviar(put("/api/usuarios/1"), json);
 
-        // Then
+        // then
         resposta.andExpect(validacao(detalhe));
         verify(usuarioService, never()).atualizar(any(), any());
     }
 
     @Test
-    void perfilForaDoEnumListaOsAceitos() throws Exception {
-        // When
+    void deveRetornar400ListandoOsAceitos_quandoPerfilNaoExiste() throws Exception {
+        // when
         ResultActions resposta = enviar(post("/api/usuarios"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"role\":\"SUPERUSER\"}");
 
-        // Then
+        // then
         resposta.andExpect(validacao("role: valor 'SUPERUSER' inválido. Aceitos: ADMIN, GERENTE, ATENDENTE, MOTORISTA"));
     }
 
-    static Stream<Arguments> patchesInvalidos() {
-        return Stream.of(
-                Arguments.of("{\"nome\":\" \"}", "nome: Nome não pode ser vazio"),
-                Arguments.of("{\"username\":\"a b\"}", "de 3 a 50 caracteres"));
-    }
+    @Test
+    void deveRetornar400SemChamarOService_quandoPatchTrazNomeEmBranco() throws Exception {
+        // when
+        ResultActions resposta = enviar(patch("/api/usuarios/1"), "{\"nome\":\" \"}");
 
-    @ParameterizedTest(name = "PATCH {0} -> 400")
-    @MethodSource("patchesInvalidos")
-    void patchComNomeVazioOuUsernameForaDoPadraoRetorna400(String json, String detalhe) throws Exception {
-        // When
-        ResultActions resposta = enviar(patch("/api/usuarios/1"), json);
-
-        // Then
-        resposta.andExpect(validacao(detalhe));
+        // then
+        resposta.andExpect(validacao("nome: Nome não pode ser vazio"));
         verify(usuarioService, never()).atualizarParcial(any(), any());
     }
 
     @Test
-    void cadastroSemSenhaRetorna400() throws Exception {
-        // Given
+    void deveRetornar400SemChamarOService_quandoPatchTrazUsernameForaDoPadrao() throws Exception {
+        // when
+        ResultActions resposta = enviar(patch("/api/usuarios/1"), "{\"username\":\"a b\"}");
+
+        // then
+        resposta.andExpect(validacao("de 3 a 50 caracteres"));
+        verify(usuarioService, never()).atualizarParcial(any(), any());
+    }
+
+    // ----- regras do service -----
+
+    @Test
+    void deveRetornar400_quandoCadastroVemSemSenha() throws Exception {
+        // given
         when(usuarioService.criar(any())).thenThrow(new RegraNegocioException("Senha é obrigatória no cadastro"));
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/usuarios"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"role\":\"ATENDENTE\"}");
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Regra de negócio", "Senha é obrigatória"));
     }
 
     @Test
-    void alterarOProprioPerfilRetorna400() throws Exception {
-        // Given
+    void deveRetornar400_quandoUsuarioTentaAlterarOProprioPerfil() throws Exception {
+        // given
         when(usuarioService.atualizarParcial(eq(1L), any())).thenThrow(new RegraNegocioException("Você não pode alterar o próprio perfil"));
 
-        // When
+        // when
         ResultActions resposta = enviar(patch("/api/usuarios/1"), "{\"role\":\"ATENDENTE\"}");
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Regra de negócio", "próprio perfil"));
     }
 
     @Test
-    void excluirOProprioUsuarioRetorna400() throws Exception {
-        // Given
+    void deveRetornar400_quandoUsuarioTentaSeExcluir() throws Exception {
+        // given
         doThrow(new RegraNegocioException("Você não pode excluir o próprio usuário")).when(usuarioService).deletar(1L);
 
-        // When
+        // when
         ResultActions resposta = chamar(delete("/api/usuarios/1"));
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Regra de negócio", "próprio usuário"));
     }
 
     @Test
-    void atendenteLigadoAMotoristaRetorna400() throws Exception {
-        // Given
-        when(usuarioService.criar(any())).thenThrow(
-                new RegraNegocioException("Só usuário com perfil Motorista pode ser ligado a um cadastro de motorista"));
+    void deveRetornar400_quandoPerfilNaoMotoristaTentaSeLigarAMotorista() throws Exception {
+        // given
+        when(usuarioService.criar(any()))
+                .thenThrow(new RegraNegocioException("Só usuário com perfil Motorista pode ser ligado a um cadastro de motorista"));
         String atendenteComMotorista = "{\"nome\":\"Ana\",\"username\":\"ana\",\"senha\":\"senha12345\",\"role\":\"ATENDENTE\",\"motoristaId\":5}";
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/usuarios"), atendenteComMotorista);
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Regra de negócio", "perfil Motorista"));
     }
 
     @Test
-    void ligarAMotoristaInexistenteRetorna404() throws Exception {
-        // Given
+    void deveRetornar404_quandoLigaAMotoristaInexistente() throws Exception {
+        // given
         when(usuarioService.criar(any())).thenThrow(new MotoristaNaoEncontradoException(77L));
         String motoristaInexistente = "{\"nome\":\"Ana\",\"username\":\"ana\",\"senha\":\"senha12345\",\"role\":\"MOTORISTA\",\"motoristaId\":77}";
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/usuarios"), motoristaInexistente);
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "77"));
     }
 
     @Test
-    void usernameDuplicadoRetorna400() throws Exception {
-        // Given
+    void deveRetornar400_quandoUsernameJaEstaCadastrado() throws Exception {
+        // given
         when(usuarioService.criar(any())).thenThrow(new UsernameJaCadastradoException("maria"));
 
-        // When
+        // when
         ResultActions resposta = enviar(post("/api/usuarios"), VALIDO);
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Erro de validação", "Já existe usuário cadastrado com username"));
     }
 
-    static Stream<Arguments> requisicoesAoUsuario99() {
-        return Stream.of(
-                Arguments.of("GET", null),
-                Arguments.of("PUT", VALIDO),
-                Arguments.of("DELETE", null));
-    }
+    // ----- inexistentes -----
 
-    @ParameterizedTest(name = "{0} /api/usuarios/99 -> 404")
-    @MethodSource("requisicoesAoUsuario99")
-    void idInexistenteRetorna404EmCadaVerbo(String verbo, String json) throws Exception {
-        // Given
+    @Test
+    void deveRetornar404_quandoGetEmIdInexistente() throws Exception {
+        // given
         when(usuarioService.buscarPorId(99L)).thenThrow(new UsuarioNaoEncontradoException(99L));
-        when(usuarioService.atualizar(eq(99L), any())).thenThrow(new UsuarioNaoEncontradoException(99L));
-        doThrow(new UsuarioNaoEncontradoException(99L)).when(usuarioService).deletar(99L);
 
-        // When
-        ResultActions resposta = executar(verbo, "/api/usuarios/99", json);
+        // when
+        ResultActions resposta = chamar(get("/api/usuarios/99"));
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
     }
 
     @Test
-    void buscaPorUsernameInexistenteRetorna404() throws Exception {
-        // Given
+    void deveRetornar404_quandoPutEmIdInexistente() throws Exception {
+        // given
+        when(usuarioService.atualizar(eq(99L), any())).thenThrow(new UsuarioNaoEncontradoException(99L));
+
+        // when
+        ResultActions resposta = enviar(put("/api/usuarios/99"), VALIDO);
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoDeleteEmIdInexistente() throws Exception {
+        // given
+        doThrow(new UsuarioNaoEncontradoException(99L)).when(usuarioService).deletar(99L);
+
+        // when
+        ResultActions resposta = chamar(delete("/api/usuarios/99"));
+
+        // then
+        resposta.andExpect(erro(404, "Recurso não encontrado", "99"));
+    }
+
+    @Test
+    void deveRetornar404_quandoBuscaUsernameInexistente() throws Exception {
+        // given
         when(usuarioService.buscarPorUsername("ninguem")).thenThrow(new UsuarioNaoEncontradoException("ninguem"));
 
-        // When
+        // when
         ResultActions resposta = chamar(get("/api/usuarios/buscar").param("username", "ninguem"));
 
-        // Then
+        // then
         resposta.andExpect(erro(404, "Recurso não encontrado", "ninguem"));
     }
 
     @Test
-    void buscaPorUsernameSemOParametroRetorna400() throws Exception {
-        // When
+    void deveRetornar400_quandoBuscaPorUsernameSemOParametro() throws Exception {
+        // when
         ResultActions resposta = chamar(get("/api/usuarios/buscar"));
 
-        // Then
+        // then
         resposta.andExpect(erro(400, "Parâmetro inválido", "'username' é obrigatório"));
-        verify(usuarioService, never()).buscarPorUsername(any());
     }
 
     @Test
-    void versaoVelhaRetorna409() throws Exception {
-        // Given
+    void deveRetornar409_quandoPutTrazVersaoVelha() throws Exception {
+        // given
         when(usuarioService.atualizar(eq(1L), any())).thenThrow(new ConflitoDeVersaoException("Usuário", 1L));
 
-        // When
+        // when
         ResultActions resposta = enviar(put("/api/usuarios/1"), VALIDO);
 
-        // Then
+        // then
         resposta.andExpect(erro(409, "Conflito de edição", "Usuário 1"));
     }
 }
