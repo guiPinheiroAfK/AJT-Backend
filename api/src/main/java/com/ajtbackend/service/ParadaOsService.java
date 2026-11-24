@@ -6,11 +6,13 @@ import com.ajtbackend.dto.ParadaOsRequestDTO;
 import com.ajtbackend.dto.ParadaOsResponseDTO;
 import com.ajtbackend.exception.OrdemServicoNaoEncontradoException;
 import com.ajtbackend.exception.ParadaOsNaoEncontradaException;
+import com.ajtbackend.exception.RegraNegocioException;
 import com.ajtbackend.exception.TransferNaoEncontradoException;
 import com.ajtbackend.model.OrdemServico;
 import com.ajtbackend.model.ParadaOs;
 import com.ajtbackend.model.Transfer;
 import com.ajtbackend.model.enums.Role;
+import com.ajtbackend.model.enums.StatusOrdemServico;
 import com.ajtbackend.model.enums.StatusParada;
 import com.ajtbackend.repository.OrdemServicoRepository;
 import com.ajtbackend.repository.ParadaOsRepository;
@@ -58,12 +60,11 @@ public class ParadaOsService {
         return toResponseDTO(buscarVisivel(id));
     }
 
+    // OS inexistente da 404 pra qualquer perfil (como /transfers/{id}/passageiros), e nao lista vazia
     public List<ParadaOsResponseDTO> listarPorOrdemServico(Long osId) {
-        if (acessoMotorista.restrito()) {
-            OrdemServico ordemServico = buscarOrdemServico(osId);
-            if (!acessoMotorista.podeVer(ordemServico)) {
-                throw new OrdemServicoNaoEncontradoException(osId);
-            }
+        OrdemServico ordemServico = buscarOrdemServico(osId);
+        if (!acessoMotorista.podeVer(ordemServico)) {
+            throw new OrdemServicoNaoEncontradoException(osId);
         }
         return paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(osId)
                 .stream()
@@ -84,6 +85,7 @@ public class ParadaOsService {
                 .statusParada(dto.statusParada() != null ? dto.statusParada() : STATUS_PADRAO)
                 .transfers(buscarTransfers(dto.transferIds()))
                 .build();
+        conferirTransfersDaOs(paradaOs);
 
         ParadaOs salva = paradaOsRepository.save(paradaOs);
         log.info("Parada de OS criada: id={}, osId={}", salva.getId(), dto.osId());
@@ -105,6 +107,7 @@ public class ParadaOsService {
         paradaOs.setAcao(dto.acao());
         paradaOs.setStatusParada(dto.statusParada() != null ? dto.statusParada() : STATUS_PADRAO);
         paradaOs.setTransfers(buscarTransfers(dto.transferIds()));
+        conferirTransfersDaOs(paradaOs);
 
         paradaOsRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(paradaOs);
@@ -116,6 +119,7 @@ public class ParadaOsService {
 
         ParadaOs paradaOs = buscarVisivel(id);
         Versoes.conferir(paradaOs.getVersao(), dto.versao(), "Parada", id);
+        validarOsEmAbertoParaMotorista(paradaOs.getOrdemServico());
 
         if (dto.osId() != null) {
             paradaOs.setOrdemServico(buscarOrdemServico(dto.osId()));
@@ -144,6 +148,7 @@ public class ParadaOsService {
         if (dto.transferIds() != null) {
             paradaOs.setTransfers(buscarTransfers(dto.transferIds()));
         }
+        conferirTransfersDaOs(paradaOs);
 
         paradaOsRepository.flush(); // grava agora pra resposta ja levar a versao nova
         return toResponseDTO(paradaOs);
@@ -185,6 +190,29 @@ public class ParadaOsService {
             throw new TransferNaoEncontradoException(faltando);
         }
         return new HashSet<>(encontrados);
+    }
+
+    // a parada faz parte do roteiro de uma OS: so atende transfers que estao nessa mesma OS
+    private static void conferirTransfersDaOs(ParadaOs paradaOs) {
+        OrdemServico ordemServico = paradaOs.getOrdemServico();
+        paradaOs.getTransfers().stream()
+                .filter(transfer -> transfer.getOrdemServico() == null
+                        || !transfer.getOrdemServico().getId().equals(ordemServico.getId()))
+                .findFirst()
+                .ifPresent(transfer -> {
+                    throw new RegraNegocioException("O transfer #" + transfer.getId() + " não está na ordem de serviço #"
+                            + ordemServico.getId() + ". Vincule o transfer à OS antes de colocá-lo no roteiro.");
+                });
+    }
+
+    // OS finalizada ou cancelada ja saiu da rua: o motorista nao mexe mais no andamento das paradas
+    private void validarOsEmAbertoParaMotorista(OrdemServico ordemServico) {
+        boolean encerrada = ordemServico.getStatus() == StatusOrdemServico.FINALIZADA
+                || ordemServico.getStatus() == StatusOrdemServico.CANCELADA;
+        if (encerrada && usuarioLogado.temPerfil(Role.MOTORISTA)) {
+            throw new RegraNegocioException("A ordem de serviço #" + ordemServico.getId() + " está "
+                    + ordemServico.getStatus() + ": o andamento das paradas não pode mais ser alterado.");
+        }
     }
 
     /**

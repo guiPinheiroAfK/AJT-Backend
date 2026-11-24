@@ -5,6 +5,7 @@ import com.ajtbackend.dto.PaginaResponseDTO;
 import com.ajtbackend.dto.ParadaOsRequestDTO;
 import com.ajtbackend.dto.ParadaOsResponseDTO;
 import com.ajtbackend.exception.OrdemServicoNaoEncontradoException;
+import com.ajtbackend.exception.RegraNegocioException;
 import com.ajtbackend.exception.ParadaOsNaoEncontradaException;
 import com.ajtbackend.exception.TransferNaoEncontradoException;
 import com.ajtbackend.model.Motorista;
@@ -12,6 +13,7 @@ import com.ajtbackend.model.OrdemServico;
 import com.ajtbackend.model.ParadaOs;
 import com.ajtbackend.model.Transfer;
 import com.ajtbackend.model.Usuario;
+import com.ajtbackend.model.enums.StatusOrdemServico;
 import com.ajtbackend.model.enums.StatusParada;
 import com.ajtbackend.repository.OrdemServicoRepository;
 import com.ajtbackend.repository.ParadaOsRepository;
@@ -250,6 +252,7 @@ class ParadaOsServiceTest {
     void deveListarAsParadasDaOs_quandoGerenteListaPorOs() {
         // given
         logadoComo("GERENTE");
+        when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(ordemServico()));
         when(paradaOsRepository.findByOrdemServicoIdOrderByOrdemParadaAsc(3L)).thenReturn(List.of(parada()));
 
         // when
@@ -300,7 +303,7 @@ class ParadaOsServiceTest {
         // given
         logadoComo("GERENTE");
         when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
-        when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).build()));
+        when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).ordemServico(ordemServico()).build()));
 
         // when
         ParadaOsResponseDTO resposta = service.atualizarParcial(1L, patch(null, null, Set.of(7L)));
@@ -477,5 +480,85 @@ class ParadaOsServiceTest {
         assertThat(resposta.localParada()).isEqualTo("Portao 7");
         assertThat(parada.getLocalParada()).isEqualTo("Portao 7");
         verify(paradaOsRepository).flush();
+    }
+
+    // ---------------- roteiro x OS ----------------
+
+    @Test
+    void deveLancarRegraNegocio_quandoParadaRecebeTransferDeOutraOs() {
+        // given
+        logadoComo("GERENTE");
+        when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada()));
+        OrdemServico outraOs = OrdemServico.builder().id(8L).dataServico(LocalDate.now()).build();
+        when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).ordemServico(outraOs).build()));
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch(null, null, Set.of(7L))));
+
+        // then
+        assertThat(erro).isInstanceOf(RegraNegocioException.class).hasMessageContaining("#7").hasMessageContaining("#3");
+        verify(paradaOsRepository, never()).flush();
+    }
+
+    @Test
+    void deveLancarRegraNegocio_quandoParadaRecebeTransferSemOs() {
+        // given
+        logadoComo("GERENTE");
+        when(ordemServicoRepository.findById(3L)).thenReturn(Optional.of(ordemServico()));
+        when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).build()));
+        ParadaOsRequestDTO dto = new ParadaOsRequestDTO(3L, 1, "Hotel", null, null, null, null, null, Set.of(7L), null);
+
+        // when
+        Throwable erro = catchThrowable(() -> service.criar(dto));
+
+        // then
+        assertThat(erro).isInstanceOf(RegraNegocioException.class);
+        verify(paradaOsRepository, never()).save(any());
+    }
+
+    @Test
+    void deveLancarRegraNegocio_quandoMotoristaMudaParadaDeOsFinalizada() {
+        // given
+        logadoComo("MOTORISTA");
+        usuarioLigadoAoMotorista(5L);
+        ParadaOs parada = parada();
+        parada.getOrdemServico().setStatus(StatusOrdemServico.FINALIZADA);
+        when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
+
+        // when
+        Throwable erro = catchThrowable(() -> service.atualizarParcial(1L, patch(null, StatusParada.CONCLUIDA, null)));
+
+        // then
+        assertThat(erro).isInstanceOf(RegraNegocioException.class).hasMessageContaining("FINALIZADA");
+        assertThat(parada.getStatusParada()).isEqualTo(StatusParada.PENDENTE);
+    }
+
+    @Test
+    void deveDeixarGerenteCorrigirParada_quandoOsEstaCancelada() {
+        // given
+        logadoComo("GERENTE");
+        ParadaOs parada = parada();
+        parada.getOrdemServico().setStatus(StatusOrdemServico.CANCELADA);
+        when(paradaOsRepository.findById(1L)).thenReturn(Optional.of(parada));
+
+        // when
+        ParadaOsResponseDTO resposta = service.atualizarParcial(1L, patch(null, StatusParada.CANCELADA, null));
+
+        // then
+        assertThat(resposta.statusParada()).isEqualTo(StatusParada.CANCELADA);
+    }
+
+    @Test
+    void deveLancarOsNaoEncontrada_quandoGerenteListaParadasDeOsInexistente() {
+        // given
+        logadoComo("GERENTE");
+        when(ordemServicoRepository.findById(99L)).thenReturn(Optional.empty());
+
+        // when
+        Throwable erro = catchThrowable(() -> service.listarPorOrdemServico(99L));
+
+        // then: 404, e nao uma lista vazia
+        assertThat(erro).isInstanceOf(OrdemServicoNaoEncontradoException.class);
+        verify(paradaOsRepository, never()).findByOrdemServicoIdOrderByOrdemParadaAsc(anyLong());
     }
 }
