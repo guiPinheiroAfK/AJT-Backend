@@ -32,7 +32,9 @@ import java.util.List;
  * |                                            |               |   no PATCH, so statusParada)  |                 |
  * | passageiros (ver nota abaixo)              | ADMIN, GERENTE| ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
  * |                                            |   ATENDENTE   |                               |                 |
- * | transfers, pontos-coleta                   | todos         | ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
+ * | transfers (motorista: so os das OS dele)   | todos         | ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
+ * | pontos-coleta                              | ADMIN, GERENTE| ADMIN, GERENTE, ATENDENTE     | ADMIN, GERENTE  |
+ * |                                            |   ATENDENTE   |                               |                 |
  * | auditoria (so leitura)                     | ADMIN, GERENTE| -                             | -               |
  * | painel/resumo (faturamento so ADMIN/GERENTE)| todos         | -                             | -               |
  * | cotacao, auth/me, auth/senha               | todos         | todos                         | -               |
@@ -40,7 +42,8 @@ import java.util.List;
  * nota: o MOTORISTA ve os passageiros da OS por /api/transfers/{id}/passageiros, com o
  * documento mascarado (PassageiroService), nunca o cadastro completo.
  * nota 2 (HU07): o MOTORISTA so enxerga as OS e paradas do cadastro ligado ao usuario dele
- * (AcessoMotorista) e tem GET /api/ordens-servico/minhas so pra ele.
+ * (AcessoMotorista) e tem GET /api/ordens-servico/minhas so pra ele. Pelo mesmo motivo ele so ve
+ * os transfers dessas OS (sem os valores) e, dos motoristas, so o proprio cadastro.
  */
 @Configuration
 @EnableWebSecurity
@@ -84,6 +87,8 @@ public class SecurityConfig {
                         // cadastro de passageiros tem documento (LGPD): motorista nao lista. os passageiros
                         // da OS dele chegam por /api/transfers/{id}/passageiros, com o documento mascarado
                         .requestMatchers(HttpMethod.GET, "/api/passageiros/**").hasAnyRole(ADMIN, GERENTE, ATENDENTE)
+                        // pontos de coleta sao do agendamento (atendimento), nao do roteiro do motorista
+                        .requestMatchers(HttpMethod.GET, "/api/pontos-coleta/**").hasAnyRole(ADMIN, GERENTE, ATENDENTE)
                         // "minhas OS do dia" (HU07) so faz sentido pro motorista
                         .requestMatchers(HttpMethod.GET, "/api/ordens-servico/minhas").hasRole(MOTORISTA)
                         .requestMatchers(HttpMethod.GET, API).authenticated()
