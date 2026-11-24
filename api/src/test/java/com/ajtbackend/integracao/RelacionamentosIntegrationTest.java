@@ -1,6 +1,9 @@
 package com.ajtbackend.integracao;
 
+import com.ajtbackend.model.Motorista;
+import com.ajtbackend.model.Usuario;
 import com.ajtbackend.model.enums.Role;
+import com.ajtbackend.repository.MotoristaRepository;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.Test;
@@ -42,6 +45,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
             + "\"destino\":\"Hotel\"";
 
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private MotoristaRepository motoristaRepository;
 
     private long criarPassageiro(String nome, String documento) throws Exception {
         return criarPelaApi("/api/passageiros", bearer(Role.ATENDENTE),
@@ -63,6 +67,19 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         long ana = criarPassageiro("Ana", documentoAna);
         long bia = criarPassageiro("Bia", documentoBia);
         return criarTransfer(",\"passageiroIds\":[" + ana + "," + bia + "]");
+    }
+
+    // HU07: motorista dono do transfer = OS do dia 25 com ele, o transfer dentro dela e o usuario MOTORISTA ligado
+    private String motoristaDoTransfer(long transferId) throws Exception {
+        Motorista motorista = motoristaRepository.save(Motorista.builder()
+                .nome("Motorista do transfer " + transferId).cnh("HU07-" + transferId).build());
+        long osId = criarOs("{\"dataServico\":\"2026-09-25\",\"motoristaId\":" + motorista.getId() + "}");
+        patchJson("/api/transfers/" + transferId, bearer(Role.GERENTE), "{\"osId\":" + osId + "}")
+                .andExpect(status().isOk());
+        Usuario usuario = criarUsuario(Role.MOTORISTA, "senha-teste-123");
+        usuario.setMotorista(motorista);
+        usuarioRepository.save(usuario);
+        return "Bearer " + jwtService.gerarToken(usuario.getUsername(), Role.MOTORISTA);
     }
 
     private Integer vinculosDoTransfer(long transferId) {
@@ -91,22 +108,39 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     void deveDevolverOsIdsDosPassageiros_quandoMotoristaBuscaOTransfer() throws Exception {
         // given
         long transferId = transferComAnaEBia("AA999", "BB000");
+        String motorista = motoristaDoTransfer(transferId);
 
         // when
-        ResultActions resposta = getComo("/api/transfers/" + transferId, bearer(Role.MOTORISTA));
+        ResultActions resposta = getComo("/api/transfers/" + transferId, motorista);
 
-        // then
+        // then: ve o transfer da OS dele, mas sem os valores (informacao financeira, ADR-0019)
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.passageiroIds", hasSize(2)));
+                .andExpect(jsonPath("$.passageiroIds", hasSize(2)))
+                .andExpect(jsonPath("$.valorBase").value(nullValue()));
+    }
+
+    @Test
+    void deveRetornar404_quandoMotoristaBuscaTransferOuPassageirosDeOsQueNaoEDele() throws Exception {
+        // given
+        long transferId = transferComAnaEBia("AA321", "BB654");
+
+        // when
+        ResultActions transfer = getComo("/api/transfers/" + transferId, bearer(Role.MOTORISTA));
+        ResultActions passageiros = getComo("/api/transfers/" + transferId + "/passageiros", bearer(Role.MOTORISTA));
+
+        // then: nem fica sabendo que o transfer existe
+        transfer.andExpect(status().isNotFound());
+        passageiros.andExpect(status().isNotFound());
     }
 
     @Test
     void deveListarPorNomeComDocumentoMascarado_quandoMotoristaListaPassageirosDoTransfer() throws Exception {
         // given
         long transferId = transferComAnaEBia("AA111", "BB222");
+        String motorista = motoristaDoTransfer(transferId);
 
         // when
-        ResultActions resposta = getComo("/api/transfers/" + transferId + "/passageiros", bearer(Role.MOTORISTA));
+        ResultActions resposta = getComo("/api/transfers/" + transferId + "/passageiros", motorista);
 
         // then
         resposta.andExpect(status().isOk())
@@ -299,7 +333,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
     void deveMostrarCriacaoEMudancaDeStatus_quandoGerenteConsultaAuditoriaDeTransfers() throws Exception {
         // given
         long transferId = criarTransfer("");
-        patchJson("/api/transfers/" + transferId, bearer(Role.ATENDENTE), "{\"status\":\"CONFIRMADO\"}")
+        patchJson("/api/transfers/" + transferId, bearer(Role.ATENDENTE), "{\"status\":\"CANCELADO\"}")
                 .andExpect(status().isOk());
 
         // when
@@ -309,7 +343,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         // then
         resposta.andExpect(status().isOk())
                 .andExpect(jsonPath("$.conteudo[?(@.registroId == " + transferId + ")].mensagem",
-                        hasItem(containsString("AGUARDANDO_OS -> CONFIRMADO"))))
+                        hasItem(containsString("AGUARDANDO_OS -> CANCELADO"))))
                 .andExpect(jsonPath("$.conteudo[?(@.registroId == " + transferId + ")].mensagem",
                         hasItem(containsString("Transfer criado"))));
     }
@@ -403,7 +437,7 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         // when
         // a gerente salva primeiro, em cima da versao que carregou
         ResultActions resposta = patchJson("/api/transfers/" + transferId, bearer(Role.GERENTE),
-                "{\"status\":\"CONFIRMADO\",\"versao\":" + versao + "}");
+                "{\"status\":\"CANCELADO\",\"versao\":" + versao + "}");
 
         // then
         resposta.andExpect(status().isOk())
@@ -415,13 +449,13 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         // given
         long transferId = criarTransfer("");
         Long versao = versaoDoTransfer(transferId);
-        patchJson("/api/transfers/" + transferId, bearer(Role.GERENTE), "{\"status\":\"CONFIRMADO\",\"versao\":" + versao + "}")
+        patchJson("/api/transfers/" + transferId, bearer(Role.GERENTE), "{\"status\":\"CANCELADO\",\"versao\":" + versao + "}")
                 .andExpect(status().isOk());
 
         // when
         // a atendente tinha carregado a mesma versao e tenta salvar depois
         ResultActions resposta = patchJson("/api/transfers/" + transferId, bearer(Role.ATENDENTE),
-                "{\"status\":\"CANCELADO\",\"versao\":" + versao + "}");
+                "{\"status\":\"AGUARDANDO_OS\",\"versao\":" + versao + "}");
 
         // then
         resposta.andExpect(status().isConflict())
@@ -433,16 +467,16 @@ class RelacionamentosIntegrationTest extends IntegracaoTestBase {
         // given
         long transferId = criarTransfer("");
         Long versao = versaoDoTransfer(transferId);
-        patchJson("/api/transfers/" + transferId, bearer(Role.GERENTE), "{\"status\":\"CONFIRMADO\",\"versao\":" + versao + "}")
+        patchJson("/api/transfers/" + transferId, bearer(Role.GERENTE), "{\"status\":\"CANCELADO\",\"versao\":" + versao + "}")
                 .andExpect(status().isOk());
-        patchJson("/api/transfers/" + transferId, bearer(Role.ATENDENTE), "{\"status\":\"CANCELADO\",\"versao\":" + versao + "}")
+        patchJson("/api/transfers/" + transferId, bearer(Role.ATENDENTE), "{\"status\":\"AGUARDANDO_OS\",\"versao\":" + versao + "}")
                 .andExpect(status().isConflict());
 
         // when
         ResultActions resposta = getComo("/api/transfers/" + transferId, bearer(Role.GERENTE));
 
         // then
-        resposta.andExpect(jsonPath("$.status").value("CONFIRMADO"));
+        resposta.andExpect(jsonPath("$.status").value("CANCELADO"));
     }
 
     @Test
