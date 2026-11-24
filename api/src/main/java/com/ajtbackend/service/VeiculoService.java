@@ -14,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -35,14 +36,20 @@ public class VeiculoService {
     }
 
     public VeiculoResponseDTO buscarPorPlaca(String placa) {
-        Veiculo veiculo = veiculoRepository.findByPlaca(placa)
+        Veiculo veiculo = veiculoRepository.findByPlaca(normalizarPlaca(placa))
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(placa));
         return toResponseDTO(veiculo);
     }
 
+    // a validacao aceita "abc-1d23" e "ABC1D23": grava sempre do mesmo jeito (maiusculo, sem hifen),
+    // senao a mesma placa entraria duas vezes passando pela checagem de duplicada
+    static String normalizarPlaca(String placa) {
+        return placa.trim().replace("-", "").toUpperCase(Locale.ROOT);
+    }
+
     @Transactional
     public VeiculoResponseDTO criar(VeiculoRequestDTO dto) {
-        String placa = dto.placa();
+        String placa = normalizarPlaca(dto.placa());
         if (veiculoRepository.existsByPlaca(placa)) {
             log.warn("Tentativa de cadastro com placa ja existente: {}", placa);
             throw new PlacaJaCadastradaException(placa);
@@ -50,7 +57,7 @@ public class VeiculoService {
 
         Veiculo veiculo = Veiculo.builder()
                 .label(dto.label())
-                .placa(dto.placa())
+                .placa(placa)
                 .capacidade(dto.capacidade())
                 .tipo(dto.tipo())
                 .marca(dto.marca())
@@ -67,12 +74,13 @@ public class VeiculoService {
                 .orElseThrow(() -> new VeiculoNaoEncontradoException(id));
         Versoes.conferir(veiculo.getVersao(), dto.versao(), "Veículo", id);
 
-        if (!dto.placa().equals(veiculo.getPlaca()) && veiculoRepository.existsByPlaca(dto.placa())) {
-            throw new PlacaJaCadastradaException(dto.placa());
+        String placa = normalizarPlaca(dto.placa());
+        if (!placa.equals(veiculo.getPlaca()) && veiculoRepository.existsByPlaca(placa)) {
+            throw new PlacaJaCadastradaException(placa);
         }
 
         veiculo.setLabel(dto.label());
-        veiculo.setPlaca(dto.placa());
+        veiculo.setPlaca(placa);
         veiculo.setCapacidade(dto.capacidade());
         veiculo.setTipo(dto.tipo());
         veiculo.setMarca(dto.marca());
@@ -91,10 +99,11 @@ public class VeiculoService {
             veiculo.setLabel(dto.label());
         }
         if (dto.placa() != null) {
-            if (!dto.placa().equals(veiculo.getPlaca()) && veiculoRepository.existsByPlaca(dto.placa())) {
-                throw new PlacaJaCadastradaException(dto.placa());
+            String placa = normalizarPlaca(dto.placa());
+            if (!placa.equals(veiculo.getPlaca()) && veiculoRepository.existsByPlaca(placa)) {
+                throw new PlacaJaCadastradaException(placa);
             }
-            veiculo.setPlaca(dto.placa());
+            veiculo.setPlaca(placa);
         }
         if (dto.capacidade() != null) {
             veiculo.setCapacidade(dto.capacidade());
