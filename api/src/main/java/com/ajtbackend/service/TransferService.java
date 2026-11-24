@@ -16,6 +16,7 @@ import com.ajtbackend.model.enums.StatusOrdemServico;
 import com.ajtbackend.model.enums.StatusTransfer;
 import com.ajtbackend.repository.Especificacoes;
 import com.ajtbackend.repository.OrdemServicoRepository;
+import com.ajtbackend.repository.ParadaOsRepository;
 import com.ajtbackend.repository.PassageiroRepository;
 import com.ajtbackend.repository.TransferRepository;
 import lombok.RequiredArgsConstructor;
@@ -45,11 +46,16 @@ public class TransferService {
     private static final Logger log = LoggerFactory.getLogger(TransferService.class);
     private static final String TABELA = "transfers";
     private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    // status que so existem dentro de uma OS: sem OS, o transfer fica aguardando ou cancelado
+    private static final Set<StatusTransfer> STATUS_SO_COM_OS =
+            Set.of(StatusTransfer.CONFIRMADO, StatusTransfer.EM_ANDAMENTO, StatusTransfer.CONCLUIDO);
 
     private final TransferRepository transferRepository;
     private final OrdemServicoRepository ordemServicoRepository;
     private final PassageiroRepository passageiroRepository;
+    private final ParadaOsRepository paradaOsRepository;
     private final ValorTransferService valorTransferService;
+    private final AcessoMotorista acessoMotorista;
     private final AuditoriaService auditoriaService;
     private final TransactionTemplate transactionTemplate;
 
@@ -64,18 +70,34 @@ public class TransferService {
                 Especificacoes.dataEntre("dataTransfer", filtro.dataInicio(), filtro.dataFim()),
                 Especificacoes.algumContem(filtro.busca(), "origem", "destino"),
                 Especificacoes.igual("ordemServico.id", filtro.osId()),
-                semOs);
+                semOs,
+                restricaoDoMotorista());
         return PaginaResponseDTO.de(transferRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
+    // HU07: o MOTORISTA so enxerga transfers das OS dele; os outros dao 404
     public TransferResponseDTO buscarPorId(Long id) {
         Transfer transfer = transferRepository.findById(id)
                 .orElseThrow(() -> new TransferNaoEncontradoException(id));
+        if (acessoMotorista.restrito()
+                && (transfer.getOrdemServico() == null || !acessoMotorista.podeVer(transfer.getOrdemServico()))) {
+            throw new TransferNaoEncontradoException(id);
+        }
         return toResponseDTO(transfer);
     }
 
     public PaginaResponseDTO<TransferResponseDTO> buscarPorStatus(StatusTransfer status, Pageable pageable) {
-        return PaginaResponseDTO.de(transferRepository.findByStatus(status, pageable), this::toResponseDTO);
+        Specification<Transfer> spec = Specification.allOf(Especificacoes.igual("status", status), restricaoDoMotorista());
+        return PaginaResponseDTO.de(transferRepository.findAll(spec, pageable), this::toResponseDTO);
+    }
+
+    private Specification<Transfer> restricaoDoMotorista() {
+        if (!acessoMotorista.restrito()) {
+            return null;
+        }
+        return acessoMotorista.motoristaId()
+                .<Specification<Transfer>>map(id -> Especificacoes.igual("ordemServico.motorista.id", id))
+                .orElseGet(Especificacoes::nenhum);
     }
 
     /*
@@ -141,6 +163,7 @@ public class TransferService {
                 transfer.setPassageiros(buscarPassageiros(dto.passageiroIds()));
             }
             aplicarRegrasDaOs(transfer, osAnterior, dataAnterior);
+            sairDasParadasDaOsAnterior(transfer, osAnterior);
 
             auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado",
                     statusAnterior, transfer.getStatus(), valorAnterior, transfer.getValorBase());
@@ -152,7 +175,10 @@ public class TransferService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public TransferResponseDTO atualizarParcial(Long id, TransferRequestDTO dto) {
         String moedaDto = ValorTransferService.normalizarMoeda(dto.moedaOrigem());
-        BigDecimal valorBaseFinal = dto.valorBase() != null ? dto.valorBase() : valorBaseRecalculado(id, dto, moedaDto);
+        // valor ou moeda estrangeira mudou sem valorBase explicito: o valor em reais e recalculado.
+        // se a cotacao falhar ele fica nulo (como no PUT), nunca com o valor da moeda antiga
+        boolean recalcula = dto.valorBase() == null && (dto.valorOriginal() != null || moedaDto != null);
+        BigDecimal valorBaseFinal = recalcula ? valorBaseRecalculado(id, dto, moedaDto) : dto.valorBase();
 
         return transactionTemplate.execute(tx -> {
             Transfer transfer = transferRepository.findById(id)
@@ -163,8 +189,12 @@ public class TransferService {
             OrdemServico osAnterior = transfer.getOrdemServico();
             LocalDate dataAnterior = transfer.getDataTransfer();
 
-            aplicarCamposEnviados(transfer, dto, moedaDto, valorBaseFinal);
+            aplicarCamposEnviados(transfer, dto, moedaDto);
+            if (dto.valorBase() != null || recalcula) {
+                transfer.setValorBase(valorBaseFinal);
+            }
             aplicarRegrasDaOs(transfer, osAnterior, dataAnterior);
+            sairDasParadasDaOsAnterior(transfer, osAnterior);
 
             auditoriaService.registrarAtualizacao(TABELA, id, "Transfer atualizado",
                     statusAnterior, transfer.getStatus(), valorAnterior, transfer.getValorBase());
@@ -173,11 +203,8 @@ public class TransferService {
         });
     }
 
-    // so consulta a cotacao se o valor em moeda estrangeira mudou e o valor base nao veio explicito
+    // so e chamado quando o valor em moeda estrangeira (ou a moeda) mudou e o valor base nao veio explicito
     private BigDecimal valorBaseRecalculado(Long id, TransferRequestDTO dto, String moedaDto) {
-        if (dto.valorOriginal() == null && moedaDto == null) {
-            return null;
-        }
         // execute() so devolve null se o callback devolver null; aqui ele lanca 404 antes disso
         Transfer atual = Objects.requireNonNull(transactionTemplate.execute(tx -> transferRepository.findById(id)
                 .orElseThrow(() -> new TransferNaoEncontradoException(id))));
@@ -187,7 +214,7 @@ public class TransferService {
     }
 
     // PATCH: so muda o que veio no corpo
-    private void aplicarCamposEnviados(Transfer transfer, TransferRequestDTO dto, String moedaDto, BigDecimal valorBase) {
+    private void aplicarCamposEnviados(Transfer transfer, TransferRequestDTO dto, String moedaDto) {
         if (dto.dataTransfer() != null) {
             transfer.setDataTransfer(dto.dataTransfer());
         }
@@ -208,9 +235,6 @@ public class TransferService {
         }
         if (moedaDto != null) {
             transfer.setMoedaOrigem(moedaDto);
-        }
-        if (valorBase != null) {
-            transfer.setValorBase(valorBase);
         }
         if (dto.osId() != null) {
             transfer.setOrdemServico(buscarOrdemServico(dto.osId()));
@@ -236,6 +260,7 @@ public class TransferService {
      * 2. a OS agrupa os transfers de um dia, entao a data do transfer tem que ser a da OS
      * 3. o status acompanha o vinculo: com OS, "aguardando OS" vira CONFIRMADO, e ao sair da OS
      *    CONFIRMADO volta pra AGUARDANDO_OS
+     * 4. sem OS, o transfer nao pode ficar confirmado, em andamento ou concluido
      * as duas primeiras so sao conferidas quando a OS ou a data mudam, pra nao travar a edicao
      * de transfers antigos de uma OS ja finalizada.
      */
@@ -244,6 +269,10 @@ public class TransferService {
         if (os == null) {
             if (osAnterior != null && transfer.getStatus() == StatusTransfer.CONFIRMADO) {
                 transfer.setStatus(StatusTransfer.AGUARDANDO_OS);
+            }
+            if (STATUS_SO_COM_OS.contains(transfer.getStatus())) {
+                throw new RegraNegocioException("Um transfer sem ordem de serviço só pode estar aguardando OS ou cancelado. "
+                        + "Vincule o transfer a uma OS antes de marcar como " + transfer.getStatus() + ".");
             }
             return;
         }
@@ -262,6 +291,15 @@ public class TransferService {
         if (transfer.getStatus() == StatusTransfer.AGUARDANDO_OS) {
             transfer.setStatus(StatusTransfer.CONFIRMADO);
         }
+    }
+
+    // o transfer saiu da OS (ou mudou de OS): deixa de constar no roteiro de paradas da OS antiga
+    private void sairDasParadasDaOsAnterior(Transfer transfer, OrdemServico osAnterior) {
+        if (osAnterior == null || transfer.getOrdemServico() == osAnterior) {
+            return;
+        }
+        paradaOsRepository.findByOrdemServicoIdAndTransfersId(osAnterior.getId(), transfer.getId())
+                .forEach(parada -> parada.getTransfers().remove(transfer));
     }
 
     // RNF008: o cliente editou em cima de uma versao velha (outra pessoa salvou no meio tempo)
@@ -294,7 +332,9 @@ public class TransferService {
         return new HashSet<>(encontrados);
     }
 
+    // valores sao informacao financeira (ADR-0019): o MOTORISTA recebe o transfer sem eles
     private TransferResponseDTO toResponseDTO(Transfer transfer) {
+        boolean semValores = acessoMotorista.restrito();
         return new TransferResponseDTO(
                 transfer.getId(),
                 transfer.getDataTransfer(),
@@ -302,9 +342,9 @@ public class TransferService {
                 transfer.getOrigem(),
                 transfer.getDestino(),
                 transfer.getStatus(),
-                transfer.getValorBase(),
-                transfer.getValorOriginal(),
-                transfer.getMoedaOrigem(),
+                semValores ? null : transfer.getValorBase(),
+                semValores ? null : transfer.getValorOriginal(),
+                semValores ? null : transfer.getMoedaOrigem(),
                 transfer.getOrdemServico() != null ? transfer.getOrdemServico().getId() : null,
                 transfer.getPassageiros().stream().map(Passageiro::getId).collect(Collectors.toSet()),
                 transfer.getVersao()

@@ -13,6 +13,7 @@ import com.ajtbackend.model.Transfer;
 import com.ajtbackend.model.enums.StatusOrdemServico;
 import com.ajtbackend.model.enums.StatusTransfer;
 import com.ajtbackend.repository.OrdemServicoRepository;
+import com.ajtbackend.repository.ParadaOsRepository;
 import com.ajtbackend.repository.PassageiroRepository;
 import com.ajtbackend.repository.TransferRepository;
 import jakarta.persistence.criteria.CriteriaBuilder;
@@ -71,6 +72,8 @@ class TransferServiceRegrasTest {
     private final PassageiroRepository passageiroRepository = mock(PassageiroRepository.class);
     private final AuditoriaService auditoriaService = mock(AuditoriaService.class);
     private final CotacaoService cotacaoService = mock(CotacaoService.class);
+    private final ParadaOsRepository paradaOsRepository = mock(ParadaOsRepository.class);
+    private final AcessoMotorista acessoMotorista = mock(AcessoMotorista.class);
     private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
     private TransferService service;
 
@@ -78,7 +81,8 @@ class TransferServiceRegrasTest {
     void setUp() {
         when(transactionTemplate.execute(any())).thenAnswer(inv -> inv.<TransactionCallback<?>>getArgument(0).doInTransaction(null));
         service = new TransferService(repository, ordemServicoRepository, passageiroRepository,
-                new ValorTransferService(cotacaoService), auditoriaService, transactionTemplate);
+                paradaOsRepository,
+                new ValorTransferService(cotacaoService), acessoMotorista, auditoriaService, transactionTemplate);
     }
 
     private static Transfer transfer(StatusTransfer status, OrdemServico os) {
@@ -245,16 +249,17 @@ class TransferServiceRegrasTest {
     }
 
     @Test
-    void naoDeveVoltarPraAguardandoOs_quandoSaiDaOsEmAndamento() {
+    void deveLancarRegraNegocioSemAuditar_quandoTransferEmAndamentoSaiDaOs() {
         // given
         when(repository.findById(5L)).thenReturn(Optional.of(transfer(StatusTransfer.EM_ANDAMENTO, os(3L, StatusOrdemServico.EM_ANDAMENTO))));
         TransferRequestDTO put = new TransferRequestDTO(DIA, LocalTime.NOON, "A", "B", StatusTransfer.EM_ANDAMENTO, new BigDecimal("1"), null, "BRL", null, null, null);
 
         // when
-        TransferResponseDTO salvo = service.atualizar(5L, put);
+        Throwable erro = catchThrowable(() -> service.atualizar(5L, put));
 
-        // then
-        assertThat(salvo.status()).isEqualTo(StatusTransfer.EM_ANDAMENTO); // so CONFIRMADO volta
+        // then: so CONFIRMADO volta pra "aguardando OS"; em andamento sem OS nao existe
+        assertThat(erro).isInstanceOf(RegraNegocioException.class).hasMessageContaining("sem ordem de serviço");
+        verify(auditoriaService, never()).registrarAtualizacao(any(), any(), any(), any(), any(), any(), any());
     }
 
     @Test
