@@ -13,9 +13,9 @@ abre com um cabeçalho **o que testa / como rodar / por que existe**, e cada tes
 
 | | |
 |---|---|
-| Classes de teste | 56 (mais 2 classes base, sem teste próprio) |
-| Métodos de teste | 690 |
-| Execuções (com os casos dos testes parametrizados) | 946 |
+| Classes de teste | 57 (mais 2 classes base, sem teste próprio) |
+| Métodos de teste | 691 |
+| Execuções (com os casos dos testes parametrizados) | 955 |
 | Cobertura (JaCoCo) | **100%** de linhas, branches, instruções e métodos |
 | SonarQube | 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, nota A em tudo |
 

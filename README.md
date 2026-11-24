@@ -8,7 +8,7 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 
 | Indicador | Situação atual |
 |---|---|
-| Testes | 946 execuções, 0 falhas (unitários, repository, web e integração) |
+| Testes | 955 execuções, 0 falhas (unitários, repository, web e integração) |
 | Cobertura (JaCoCo) | 100% de linhas e de branches |
 | SonarQube | Quality Gate aprovado: 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, notas A |
 | Banco | PostgreSQL 16, migrations Flyway V1 a V12 |
@@ -137,7 +137,7 @@ cd api
 mvn clean verify
 ```
 
-Resultado esperado: `Tests run: 946, Failures: 0, Errors: 0, Skipped: 0` e `BUILD SUCCESS`.
+Resultado esperado: `Tests run: 955, Failures: 0, Errors: 0, Skipped: 0` e `BUILD SUCCESS`.
 
 | Nível | Onde | O que prova | Precisa de Docker? |
 |---|---|---|:---:|
@@ -401,7 +401,7 @@ Regras extras:
 - O MOTORISTA não lista passageiros (o cadastro tem documento); os passageiros da OS dele chegam por `GET /api/transfers/{id}/passageiros`, com o documento mascarado.
 - O MOTORISTA só enxerga os **transfers das OS dele**, sem `valorBase`, `valorOriginal` e `moedaOrigem` (informação financeira); transfer de outra OS dá 404.
 - Dos motoristas, o MOTORISTA só enxerga o **próprio cadastro** (CNH, telefone e posição dos outros são dados pessoais).
-- Atrás do nginx, o IP usado no bloqueio de login vem do `X-Forwarded-For` (`server.forward-headers-strategy: native`). Além do limite por conta, um mesmo IP é bloqueado depois de 10 vezes esse limite somando todas as contas.
+- Atrás do nginx, o IP usado no bloqueio de login vem do `X-Real-IP`, aceito só quando a conexão vem da rede interna (o próprio nginx); direto da internet vale o IP da conexão. Além do limite por conta, um mesmo IP é bloqueado depois de 10 vezes esse limite somando todas as contas.
 
 Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), documento do passageiro cifrado com AES-256-GCM, CORS restrito às origens configuradas, CSRF desligado de propósito por ser uma API stateless com token Bearer (ADR-0015), container rodando sem root.
 
