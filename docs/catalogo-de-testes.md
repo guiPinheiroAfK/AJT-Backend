@@ -13,9 +13,9 @@ abre com um cabeçalho **o que testa / como rodar / por que existe**, e cada tes
 
 | | |
 |---|---|
-| Classes de teste | 55 (mais 2 classes base, sem teste próprio) |
-| Métodos de teste | 660 |
-| Execuções (com os casos dos testes parametrizados) | 914 |
+| Classes de teste | 56 (mais 2 classes base, sem teste próprio) |
+| Métodos de teste | 690 |
+| Execuções (com os casos dos testes parametrizados) | 946 |
 | Cobertura (JaCoCo) | **100%** de linhas, branches, instruções e métodos |
 | SonarQube | 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, nota A em tudo |
 
@@ -56,7 +56,7 @@ Detalhes e justificativas: [ADR-0014](adr/0014-estrategia-de-testes-e-demonstrac
 | **HU04** Agendar transfer (origem, destino, data/hora, valor, passageiros) | `TransferServiceTest`, `TransferServiceRegrasTest`, `TransferErrosWebTest`, `ValidacaoWebTest`, `RelacionamentosIntegrationTest` |
 | **HU05** Pontos de coleta com ordem de parada | `PontoColetaServiceTest`, `PontoColetaErrosWebTest`, `PontoColetaRepositoryTest`, `ParadaOsServiceTest`, `ParadaOsServiceCrudTest`, `ParadaOsErrosWebTest` |
 | **HU06** Ordem de serviço agrupando transfers do dia | `OrdemServicoServiceTest`, `OrdemServicoErrosWebTest`, `TransferServiceTest` (vínculo com a OS), `RelacionamentosIntegrationTest` |
-| **HU07** Motorista vê só as próprias OS do dia, com as paradas | `AcessoMotoristaTest`, `FiltrosEMinhasOsIntegrationTest`, `OrdemServicoServiceTest`, `ParadaOsServiceTest`, `ParadaOsRepositoryTest`, `UsuarioServiceTest`, `UsuarioRepositoryTest` |
+| **HU07** Motorista vê só as próprias OS do dia, com as paradas | `AcessoMotoristaTest`, `TransferServiceAcessoEValorTest`, `FiltrosEMinhasOsIntegrationTest`, `OrdemServicoServiceTest`, `ParadaOsServiceTest`, `ParadaOsRepositoryTest`, `UsuarioServiceTest`, `UsuarioRepositoryTest` |
 | **HU08** Painel com indicadores do dia | `PainelServiceTest`, `ConsultasDoPainelRepositoryTest`, `RelacionamentosIntegrationTest` (painel com e sem faturamento) |
 | **HU09** Gerenciar usuários e perfis | `UsuarioServiceTest`, `UsuarioServiceCrudTest`, `UsuarioErrosWebTest`, `UsuarioRepositoryTest`, `AutorizacaoWebTest`, `UsuarioLogadoTest` |
 | **HU10** Relatório PDF da OS | `RelatorioOrdemServicoServiceTest`, `RelacionamentosIntegrationTest` (PDF real), `OrdemServicoErrosWebTest` (PDF de OS inexistente), `FiltrosEMinhasOsIntegrationTest` (PDF da OS de outro motorista) |
@@ -158,6 +158,11 @@ Formato de cada entrada: **o que cobre**, **requisitos**, **caminhos tristes** e
 - Cobre: as bordas da regra do transfer com a OS (sair da OS sem estar confirmado, mudar só a data dentro da mesma OS, OS finalizada), o PATCH que troca só a moeda e a exclusão auditada.
 - Requisitos: HU04, RF009, RF010.
 - Caminhos tristes: id inexistente em cada operação (o 404 sai antes de consultar o câmbio), período invertido no filtro, entrada em OS finalizada.
+
+**TransferServiceAcessoEValorTest** — 11 métodos / 11 execuções
+- Cobre: o MOTORISTA só enxerga transfers das OS dele e sem os valores (busca, listagem e busca por status); o PATCH que muda o valor em moeda estrangeira com a cotação fora do ar deixa o valor em reais vazio (nunca o da quantia antiga); transfer sem OS não nasce concluído; quem sai da OS sai também do roteiro de paradas dela.
+- Requisitos: HU04, HU07, RF010, RF011, RF016.
+- Caminhos tristes: transfer de OS de outro motorista ou sem OS (404 pro motorista), motorista sem cadastro ligado, cotação indisponível, status CONCLUIDO sem OS.
 
 **ValorTransferServiceTest** — 13 métodos / 13 execuções
 - Cobre: o valor em reais do transfer: valor base informado é respeitado, BRL usa o valor original e moeda estrangeira converte pela cotação com duas casas (HALF_UP).
