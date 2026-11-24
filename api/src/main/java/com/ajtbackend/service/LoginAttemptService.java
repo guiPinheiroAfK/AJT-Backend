@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * - so o IP: bloqueia depois de FATOR_POR_IP vezes isso, somando todas as contas. Sem esse
  *   limite, um IP podia trocar de username a cada tentativa (cada erro custa um BCrypt) e
  *   ainda encher o cache ate expulsar a chave de uma conta ja bloqueada.
- * O IP vem do X-Forwarded-For quando a API esta atras do nginx (server.forward-headers-strategy).
+ * O IP vem do X-Real-IP quando a API esta atras do nginx (ver IpDoCliente).
  * Em memoria: suficiente pra uma instancia; com varias instancias, mover pra Redis.
  */
 @Service
