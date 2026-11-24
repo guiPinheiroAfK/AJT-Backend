@@ -61,6 +61,9 @@ server:
   error:
     include-stacktrace: never
     include-message: never
+  # atras do nginx (EC2 e docker compose) o IP do cliente chega no X-Forwarded-For.
+  # o Tomcat so confia nesse cabecalho quando a requisicao vem de rede interna (o proprio nginx)
+  forward-headers-strategy: native
 
 jwt:
   secret: ${AJT_JWT_SECRET}
