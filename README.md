@@ -282,7 +282,77 @@ Em produção a aplicação roda numa EC2 **sem Docker**, montada pelo script [`
    | 80 (HTTP) | `0.0.0.0/0` | abrir o sistema no navegador |
 
    Não abra a **5432** (PostgreSQL) nem a **8080** (API): as duas só escutam dentro da máquina.
+   Prefere criar o grupo por comando em vez de clicar no console? Veja
+   [Security Group pela linha de comando](#security-group-pela-linha-de-comando-opcional).
 4. (Opcional) Associe um **Elastic IP**, para o endereço não mudar quando a instância reiniciar.
+
+#### Security Group pela linha de comando (opcional)
+
+O jeito mais simples é o **AWS CloudShell** (ícone `>_` no topo do console da AWS): ele já vem com a AWS CLI
+e com o login da sua conta, então nenhuma chave de acesso precisa ser criada nem guardada no seu computador.
+Abra o CloudShell **na mesma região** em que vai criar a EC2 e rode:
+
+```bash
+# 1. Seu IP, para liberar o SSH só para você.
+#    Abra https://checkip.amazonaws.com no navegador do SEU computador e cole o número aqui.
+#    (Não use curl dentro do CloudShell: ele mostraria o IP do CloudShell, e não o seu.)
+MEU_IP=203.0.113.10
+
+# 2. VPC padrão da região
+VPC_ID=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true \
+    --query 'Vpcs[0].VpcId' --output text)
+
+# 3. Cria o grupo "ajt-web" (se ele já existir, só busca o id)
+SG_ID=$(aws ec2 create-security-group --group-name ajt-web \
+        --description "AJT: SSH so do meu IP e HTTP publico" \
+        --vpc-id "$VPC_ID" --query GroupId --output text 2>/dev/null \
+    || aws ec2 describe-security-groups \
+        --filters Name=group-name,Values=ajt-web Name=vpc-id,Values="$VPC_ID" \
+        --query 'SecurityGroups[0].GroupId' --output text)
+echo "Security Group: $SG_ID"
+
+# 4. Regras de entrada: 22 (SSH) só do seu IP e 80 (HTTP) para todos
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" \
+    --protocol tcp --port 22 --cidr "$MEU_IP/32"
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" \
+    --protocol tcp --port 80 --cidr 0.0.0.0/0
+
+# 5. Conferência: só podem aparecer as portas 22 e 80 (nada de 5432 nem 8080)
+aws ec2 describe-security-groups --group-ids "$SG_ID" \
+    --query 'SecurityGroups[0].IpPermissions[].{porta:FromPort,origem:IpRanges[0].CidrIp}' \
+    --output table
+```
+
+Se rodar de novo, o passo 4 avisa `InvalidPermission.Duplicate`: a regra já existe e o aviso pode ser ignorado.
+
+**Conectar pelo botão "Connect" do console (EC2 Instance Connect).** Essa conexão não sai do seu IP, e sim
+de uma faixa de endereços da AWS. Para ela funcionar, libere também essa faixa na porta 22 (o CloudShell já
+define a variável `AWS_REGION`):
+
+```bash
+PL_ID=$(aws ec2 describe-managed-prefix-lists \
+    --filters Name=prefix-list-name,Values=com.amazonaws.$AWS_REGION.ec2-instance-connect \
+    --query 'PrefixLists[0].PrefixListId' --output text)
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" \
+    --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,PrefixListIds=[{PrefixListId=$PL_ID}]"
+```
+
+**Usar o grupo na EC2:**
+
+- Ao criar a instância pelo console: em **Network settings**, escolha **Select existing security group** e
+  marque o `ajt-web`.
+- Numa instância que já existe (troca os grupos dela pelo `ajt-web`):
+
+  ```bash
+  aws ec2 modify-instance-attribute --instance-id i-0123456789abcdef0 --groups "$SG_ID"
+  ```
+
+**Se o seu IP mudar** (internet de casa costuma mudar), o SSH para de responder. Troque a regra da porta 22:
+
+```bash
+aws ec2 revoke-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$IP_ANTIGO/32"
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$MEU_IP/32"
+```
 
 ### 2. Rodar o script
 
