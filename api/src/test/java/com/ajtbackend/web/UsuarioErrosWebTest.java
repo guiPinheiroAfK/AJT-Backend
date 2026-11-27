@@ -180,6 +180,40 @@ class UsuarioErrosWebTest extends ErrosWebTestBase {
         resposta.andExpect(erro(400, "Erro de validação", "Já existe usuário cadastrado com username"));
     }
 
+    // ----- cadastro publico (/api/auth/registro) -----
+
+    static Stream<Arguments> registrosInvalidos() {
+        return Stream.of(
+                Arguments.of("sem nome", "{\"username\":\"maria\",\"senha\":\"senha12345\"}", "nome: Nome é obrigatório"),
+                Arguments.of("nome so com espacos", "{\"nome\":\"   \",\"username\":\"maria\",\"senha\":\"senha12345\"}", "nome: Nome é obrigatório"),
+                Arguments.of("username com espaco", "{\"nome\":\"Maria\",\"username\":\"maria souza\",\"senha\":\"senha12345\"}", "de 3 a 50 caracteres"),
+                Arguments.of("sem senha", "{\"nome\":\"Maria\",\"username\":\"maria\"}", "senha: Senha é obrigatória"),
+                Arguments.of("senha curta", "{\"nome\":\"Maria\",\"username\":\"maria\",\"senha\":\"1234567\"}", "entre 8 e 72 caracteres"));
+    }
+
+    @ParameterizedTest(name = "registro {0} -> 400")
+    @MethodSource("registrosInvalidos")
+    void deveRetornar400SemChamarOService_quandoCadastroPublicoTemCorpoInvalido(String caso, String json, String detalhe) throws Exception {
+        // when
+        ResultActions resposta = enviar(post("/api/auth/registro"), json);
+
+        // then
+        resposta.andExpect(validacao(detalhe));
+        verify(usuarioService, never()).registrar(any());
+    }
+
+    @Test
+    void deveRetornar400_quandoCadastroPublicoUsaUsernameJaCadastrado() throws Exception {
+        // given
+        when(usuarioService.registrar(any())).thenThrow(new UsernameJaCadastradoException("maria"));
+
+        // when
+        ResultActions resposta = enviar(post("/api/auth/registro"), "{\"nome\":\"Maria\",\"username\":\"maria\",\"senha\":\"senha12345\"}");
+
+        // then
+        resposta.andExpect(erro(400, "Erro de validação", "Já existe usuário cadastrado com username"));
+    }
+
     // ----- inexistentes -----
 
     @Test
