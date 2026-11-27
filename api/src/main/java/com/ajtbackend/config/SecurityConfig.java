@@ -78,6 +78,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll() // preflight CORS
                         .requestMatchers("/error").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // "Criar conta": a conta nasce inativa, so entra depois que o admin libera
+                        .requestMatchers(HttpMethod.POST, "/api/auth/registro").permitAll()
                         .requestMatchers("/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll() // so habilitado no profile dev
                         .requestMatchers("/api/auth/**").authenticated()
 
