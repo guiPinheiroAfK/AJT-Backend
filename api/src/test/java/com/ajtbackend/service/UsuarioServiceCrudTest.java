@@ -2,10 +2,12 @@ package com.ajtbackend.service;
 
 import com.ajtbackend.config.UsuarioLogado;
 import com.ajtbackend.dto.PaginaResponseDTO;
+import com.ajtbackend.dto.RegistroRequestDTO;
 import com.ajtbackend.dto.UsuarioRequestDTO;
 import com.ajtbackend.dto.UsuarioResponseDTO;
 import com.ajtbackend.exception.ConflitoDeVersaoException;
 import com.ajtbackend.exception.MotoristaNaoEncontradoException;
+import com.ajtbackend.exception.UsernameJaCadastradoException;
 import com.ajtbackend.exception.UsuarioNaoEncontradoException;
 import com.ajtbackend.model.Motorista;
 import com.ajtbackend.model.Usuario;
@@ -16,6 +18,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -115,6 +118,41 @@ class UsuarioServiceCrudTest {
         // then
         assertThat(criada.ativo()).isTrue();
         assertThat(criada.trocarSenha()).isTrue();
+    }
+
+    // ----- cadastro publico ("Criar conta") -----
+
+    @Test
+    void deveNascerInativoComoAtendenteESemTrocaDeSenha_quandoPessoaSeCadastra() {
+        // given
+        when(repository.existsByUsername("ana")).thenReturn(false);
+        ArgumentCaptor<Usuario> salvo = ArgumentCaptor.forClass(Usuario.class);
+        when(repository.save(salvo.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        UsuarioResponseDTO criada = service.registrar(new RegistroRequestDTO("  Ana Lima ", "ana", "senha12345"));
+
+        // then
+        assertThat(criada.ativo()).isFalse();
+        assertThat(criada.role()).isEqualTo(Role.ATENDENTE);
+        assertThat(criada.trocarSenha()).isFalse();
+        assertThat(criada.nome()).isEqualTo("Ana Lima");
+        assertThat(salvo.getValue().getMotorista()).isNull();
+        assertThat(salvo.getValue().getSenha()).isNotEqualTo("senha12345");
+        assertThat(encoder.matches("senha12345", salvo.getValue().getSenha())).isTrue();
+    }
+
+    @Test
+    void deveLancarUsernameJaCadastradoSemSalvar_quandoCadastroPublicoRepeteUsername() {
+        // given
+        when(repository.existsByUsername("maria")).thenReturn(true);
+
+        // when
+        Throwable erro = catchThrowable(() -> service.registrar(new RegistroRequestDTO("Maria", "maria", "senha12345")));
+
+        // then
+        assertThat(erro).isInstanceOf(UsernameJaCadastradoException.class);
+        verify(repository, never()).save(any());
     }
 
     // ----- leitura -----

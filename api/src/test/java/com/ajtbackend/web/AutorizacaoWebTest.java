@@ -60,6 +60,20 @@ class AutorizacaoWebTest extends WebTestBase {
     }
 
     @Test
+    void deveDeixarPassar_quandoCadastroPublicoSemToken() throws Exception {
+        // given
+        String novaConta = "{\"nome\":\"Maria\",\"username\":\"maria\",\"senha\":\"senha12345\"}";
+
+        // when
+        ResultActions resposta = mockMvc.perform(request(HttpMethod.POST, "/api/auth/registro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(novaConta));
+
+        // then
+        resposta.andExpect(status().isCreated());
+    }
+
+    @Test
     void deveRetornar401_quandoMeSemToken() throws Exception {
         // when
         ResultActions resposta = mockMvc.perform(get("/api/auth/me"));
