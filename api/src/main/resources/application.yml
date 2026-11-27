@@ -2,14 +2,22 @@ spring:
   application:
     name: ajt-backend
 
+  config:
+    # carrega o .env no dev local (IDE ou mvn, de api/ ou da raiz); o mais proximo vence.
+    # Variaveis de ambiente reais (docker, prod) tem prioridade e la o arquivo nem existe.
+    import:
+      - "optional:file:../.env[.properties]"
+      - "optional:file:./.env[.properties]"
+
   profiles:
     # "dev" liga SQL no log e Swagger; em producao use AJT_PROFILE=prod
     active: ${AJT_PROFILE:dev}
 
   datasource:
     url: ${AJT_DB_URL:jdbc:postgresql://localhost:5454/ajt_db}
-    username: ${AJT_DB_USER:postgres}
-    password: ${AJT_DB_PASSWORD:postgres}
+    # sem valor padrao: usuario e senha vem do .env (dev) ou do ambiente (prod)
+    username: ${AJT_DB_USER}
+    password: ${AJT_DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
