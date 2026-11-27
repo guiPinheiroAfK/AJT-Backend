@@ -159,15 +159,15 @@ class PersistenciaIntegrationTest extends IntegracaoTestBase {
     void deveFiltrarPeloStatusGravado_quandoBuscaTransfersPorStatus() throws Exception {
         // given
         criarPelaApi("/api/transfers", bearer(Role.ATENDENTE),
-                "{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"status\":\"CONFIRMADO\",\"valorBase\":300.00,\"moedaOrigem\":\"BRL\"}");
+                "{\"dataTransfer\":\"2026-09-21\",\"horaTransfer\":\"15:00:00\",\"origem\":\"GRU\",\"destino\":\"Hotel\",\"status\":\"CANCELADO\",\"valorBase\":300.00,\"moedaOrigem\":\"BRL\"}");
 
         // when
-        ResultActions resposta = executar(get("/api/transfers/buscar").param("status", "CONFIRMADO"), bearer(Role.MOTORISTA));
+        ResultActions resposta = executar(get("/api/transfers/buscar").param("status", "CANCELADO"), bearer(Role.GERENTE));
 
         // then
         resposta.andExpect(status().isOk())
-                .andExpect(jsonPath("$.conteudo[0].status").value("CONFIRMADO"))
-                .andExpect(jsonPath("$.conteudo[*].status", everyItem(equalTo("CONFIRMADO"))))
+                .andExpect(jsonPath("$.conteudo[0].status").value("CANCELADO"))
+                .andExpect(jsonPath("$.conteudo[*].status", everyItem(equalTo("CANCELADO"))))
                 .andExpect(jsonPath("$.totalElementos", greaterThanOrEqualTo(1)));
     }
 

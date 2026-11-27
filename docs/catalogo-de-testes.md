@@ -13,9 +13,9 @@ abre com um cabeçalho **o que testa / como rodar / por que existe**, e cada tes
 
 | | |
 |---|---|
-| Classes de teste | 55 (mais 2 classes base, sem teste próprio) |
-| Métodos de teste | 660 |
-| Execuções (com os casos dos testes parametrizados) | 914 |
+| Classes de teste | 57 (mais 2 classes base, sem teste próprio) |
+| Métodos de teste | 697 |
+| Execuções (com os casos dos testes parametrizados) | 965 |
 | Cobertura (JaCoCo) | **100%** de linhas, branches, instruções e métodos |
 | SonarQube | 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, nota A em tudo |
 
@@ -56,9 +56,9 @@ Detalhes e justificativas: [ADR-0014](adr/0014-estrategia-de-testes-e-demonstrac
 | **HU04** Agendar transfer (origem, destino, data/hora, valor, passageiros) | `TransferServiceTest`, `TransferServiceRegrasTest`, `TransferErrosWebTest`, `ValidacaoWebTest`, `RelacionamentosIntegrationTest` |
 | **HU05** Pontos de coleta com ordem de parada | `PontoColetaServiceTest`, `PontoColetaErrosWebTest`, `PontoColetaRepositoryTest`, `ParadaOsServiceTest`, `ParadaOsServiceCrudTest`, `ParadaOsErrosWebTest` |
 | **HU06** Ordem de serviço agrupando transfers do dia | `OrdemServicoServiceTest`, `OrdemServicoErrosWebTest`, `TransferServiceTest` (vínculo com a OS), `RelacionamentosIntegrationTest` |
-| **HU07** Motorista vê só as próprias OS do dia, com as paradas | `AcessoMotoristaTest`, `FiltrosEMinhasOsIntegrationTest`, `OrdemServicoServiceTest`, `ParadaOsServiceTest`, `ParadaOsRepositoryTest`, `UsuarioServiceTest`, `UsuarioRepositoryTest` |
+| **HU07** Motorista vê só as próprias OS do dia, com as paradas | `AcessoMotoristaTest`, `TransferServiceAcessoEValorTest`, `FiltrosEMinhasOsIntegrationTest`, `OrdemServicoServiceTest`, `ParadaOsServiceTest`, `ParadaOsRepositoryTest`, `UsuarioServiceTest`, `UsuarioRepositoryTest` |
 | **HU08** Painel com indicadores do dia | `PainelServiceTest`, `ConsultasDoPainelRepositoryTest`, `RelacionamentosIntegrationTest` (painel com e sem faturamento) |
-| **HU09** Gerenciar usuários e perfis | `UsuarioServiceTest`, `UsuarioServiceCrudTest`, `UsuarioErrosWebTest`, `UsuarioRepositoryTest`, `AutorizacaoWebTest`, `UsuarioLogadoTest` |
+| **HU09** Gerenciar usuários e perfis (inclui o cadastro público com liberação pelo admin) | `UsuarioServiceTest`, `UsuarioServiceCrudTest`, `UsuarioErrosWebTest`, `UsuarioRepositoryTest`, `AutorizacaoWebTest`, `UsuarioLogadoTest`, `AutenticacaoIntegrationTest` (cadastro público ponta a ponta) |
 | **HU10** Relatório PDF da OS | `RelatorioOrdemServicoServiceTest`, `RelacionamentosIntegrationTest` (PDF real), `OrdemServicoErrosWebTest` (PDF de OS inexistente), `FiltrosEMinhasOsIntegrationTest` (PDF da OS de outro motorista) |
 | **HU11** Histórico de status e valor do transfer | `AuditoriaServiceTest`, `LogAuditoriaRepositoryTest`, `RelacionamentosIntegrationTest` (trilha gravada e consultada), `TransferServiceTest` (auditoria de cada escrita) |
 
@@ -159,6 +159,11 @@ Formato de cada entrada: **o que cobre**, **requisitos**, **caminhos tristes** e
 - Requisitos: HU04, RF009, RF010.
 - Caminhos tristes: id inexistente em cada operação (o 404 sai antes de consultar o câmbio), período invertido no filtro, entrada em OS finalizada.
 
+**TransferServiceAcessoEValorTest** — 11 métodos / 11 execuções
+- Cobre: o MOTORISTA só enxerga transfers das OS dele e sem os valores (busca, listagem e busca por status); o PATCH que muda o valor em moeda estrangeira com a cotação fora do ar deixa o valor em reais vazio (nunca o da quantia antiga); transfer sem OS não nasce concluído; quem sai da OS sai também do roteiro de paradas dela.
+- Requisitos: HU04, HU07, RF010, RF011, RF016.
+- Caminhos tristes: transfer de OS de outro motorista ou sem OS (404 pro motorista), motorista sem cadastro ligado, cotação indisponível, status CONCLUIDO sem OS.
+
 **ValorTransferServiceTest** — 13 métodos / 13 execuções
 - Cobre: o valor em reais do transfer: valor base informado é respeitado, BRL usa o valor original e moeda estrangeira converte pela cotação com duas casas (HALF_UP).
 - Requisitos: RF006, RF016.
@@ -189,10 +194,10 @@ Formato de cada entrada: **o que cobre**, **requisitos**, **caminhos tristes** e
 - Requisitos: HU09, HU07, RNF001.
 - Caminhos tristes: cadastro sem senha, username de outro, se excluir, se rebaixar, se desativar, ligar motorista a usuário de outro perfil, motorista inexistente ou já ligado a outro usuário.
 
-**UsuarioServiceCrudTest** — 19 métodos / 20 execuções
-- Cobre: o restante do CRUD de usuário: cadastro ativo por padrão, PUT completo e PATCH de username e de motorista.
+**UsuarioServiceCrudTest** — 21 métodos / 22 execuções
+- Cobre: o restante do CRUD de usuário: cadastro ativo por padrão, PUT completo e PATCH de username e de motorista. Também o cadastro público: conta inativa, perfil Atendente, sem troca de senha e senha gravada só como hash.
 - Requisitos: HU09.
-- Caminhos tristes: buscas inexistentes, cadastro com senha em branco, motorista inexistente no vínculo, versão velha. Também cobre o PUT sem `ativo`, que não muda a situação do usuário.
+- Caminhos tristes: buscas inexistentes, cadastro com senha em branco, cadastro público com username repetido (não salva nada), motorista inexistente no vínculo, versão velha. Também cobre o PUT sem `ativo`, que não muda a situação do usuário.
 
 **AuthServiceTest** — 11 métodos / 11 execuções
 - Cobre: o login (token com os dados certos e último acesso atualizado) e a troca de senha.
@@ -251,6 +256,11 @@ Formato de cada entrada: **o que cobre**, **requisitos**, **caminhos tristes** e
 - Requisitos: HU02, RNF007.
 - Caminhos tristes: mesmo documento com pontuação, espaços ou caixa diferentes dá o mesmo hash; tipo ou chave diferentes dão outro; tipo e documento nulos; JVM sem HmacSHA256; backfill sem pendências.
 
+**IpDoClienteTest** — 1 método / 9 execuções
+- Cobre: o IP usado no bloqueio de login atrás do nginx (EC2 e docker compose): o `X-Real-IP` só vale quando a conexão vem de loopback ou rede privada.
+- Requisitos: HU01, RNF002.
+- Caminhos tristes: cabeçalho forjado direto da internet (ignorado), faixa 172.32 fora da rede privada, cabeçalho ausente, em branco ou com espaços.
+
 **OpenApiConfigTest** — 2 métodos / 2 execuções
 - Cobre: a documentação Swagger: esquema Bearer JWT e as respostas 401 e 403 em toda operação, menos no login.
 - Requisitos: RNF002.
@@ -304,17 +314,17 @@ Cada classe `*ErrosWebTest` segue o mesmo roteiro para um recurso:
 - Requisitos: HU05, HU07, RF008, RF011.
 - Caminhos tristes: OS e ordem obrigatórias, ordem positiva, coordenadas, limite de transfers, ação ou status fora do enum, OS, transfer ou parada inexistentes, motorista mexendo em campo que não é o status (403) e versão velha.
 
-**UsuarioErrosWebTest** — 17 métodos / 31 execuções
+**UsuarioErrosWebTest** — 19 métodos / 37 execuções
 - Requisitos: HU09, RF011.
-- Caminhos tristes: nome, formato do username, tamanho da senha, perfil ausente ou fora do enum; as regras do service (senha obrigatória no cadastro, não se excluir nem se rebaixar, vínculo com motorista só para o perfil Motorista); username duplicado, id ou username inexistentes e versão velha.
+- Caminhos tristes: nome, formato do username, tamanho da senha, perfil ausente ou fora do enum; no cadastro público (`/api/auth/registro`), nome vazio, username fora do padrão, senha ausente ou curta e username repetido; as regras do service (senha obrigatória no cadastro, não se excluir nem se rebaixar, vínculo com motorista só para o perfil Motorista); username duplicado, id ou username inexistentes e versão velha.
 
 **ValidacaoWebTest** — 14 métodos / 14 execuções
 - Cobre: a validação na fronteira HTTP que vale para todos os recursos e a paginação padrão (20 por página, no máximo 100, ordenada por id).
 - Requisitos: RF006, RF010, RF015.
 - Caminhos tristes: campos obrigatórios e tamanhos do transfer, enum inválido (lista os aceitos), JSON malformado, PATCH só com espaços, tipo errado na URL, moeda inválida, login sem campos e tamanho de página absurdo.
 
-**AutorizacaoWebTest** — 8 métodos / 42 execuções
-- Cobre: a matriz de permissões rota a rota (o que cada perfil pode e não pode fazer), o login público, o CORS do front e os headers de segurança (`nosniff`, `X-Frame-Options: DENY`).
+**AutorizacaoWebTest** — 9 métodos / 43 execuções
+- Cobre: a matriz de permissões rota a rota (o que cada perfil pode e não pode fazer), o login e o cadastro públicos, o CORS do front e os headers de segurança (`nosniff`, `X-Frame-Options: DENY`).
 - Requisitos: HU09, RF011, RNF002.
 - Caminhos tristes: sem token (401 no formato padrão), escrita na auditoria (405), preflight de origem desconhecida recusado e cada perfil numa rota proibida (403).
 
@@ -377,9 +387,9 @@ Cada classe `*ErrosWebTest` segue o mesmo roteiro para um recurso:
 
 ### 3.5 Integração — a aplicação inteira (`integracao/`)
 
-**AutenticacaoIntegrationTest** — 11 métodos / 11 execuções
-- Cobre: o fluxo de autenticação ponta a ponta: o admin do seed precisa trocar a senha, login, `/auth/me` e troca de senha.
-- Requisitos: HU01, RF001, RNF001, RNF002.
+**AutenticacaoIntegrationTest** — 12 métodos / 12 execuções
+- Cobre: o fluxo de autenticação ponta a ponta: o admin do seed precisa trocar a senha, login, `/auth/me` e troca de senha. E o cadastro público: a conta criada sem token só entra depois que o admin libera (ADR-0024).
+- Requisitos: HU01, HU09, RF001, RNF001, RNF002.
 - Caminhos tristes: token antigo recusado depois da troca de senha, usuário desativado perdendo o acesso na hora, perfil alterado valendo sem novo login, bloqueio por tentativas, escrita só com cookie e sem token (401, premissa do CSRF desligado, ADR-0015).
 
 **CotacaoIntegrationTest** — 5 métodos / 5 execuções

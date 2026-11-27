@@ -57,7 +57,7 @@ qualquer exceção em qualquer camada  →  exception/GlobalExceptionHandler  �
 
 ## 3. Pacotes e classes
 
-### `config/` — segurança e infraestrutura transversal (7)
+### `config/` — segurança e infraestrutura transversal (10)
 
 | Classe | Responsabilidade |
 |---|---|
@@ -67,6 +67,9 @@ qualquer exceção em qualquer camada  →  exception/GlobalExceptionHandler  �
 | `UsuarioLogado` | **único** ponto que lê o `SecurityContextHolder` (username, "é o usuário X?", "tem o perfil Y?") |
 | `JsonAuthErrorHandler` | devolve 401/403 do Spring Security no mesmo JSON de erro da API |
 | `CriptografiaConverter` | `AttributeConverter` JPA: AES-256-GCM, formato `v1:` + Base64(IV + cifra + tag) |
+| `DocumentoHash` | HMAC do documento do passageiro (`documento_hash`), para achar duplicado sem decifrar |
+| `DocumentoHashBackfill` | na subida, preenche o hash dos passageiros gravados antes da V12 |
+| `IpDoCliente` | IP de quem fez a requisição (bloqueio de login): usa o `X-Real-IP` do nginx só se a conexão vier da rede interna (ADR-0023) |
 | `OpenApiConfig` | metadados do Swagger, esquema Bearer, respostas 401/403 globais |
 
 ### `client/` — integrações externas (1)
@@ -81,7 +84,7 @@ Sem regra de negócio: validam a entrada, delegam a **um** service e escolhem o 
 
 | Controller | Base | Observações |
 |---|---|---|
-| `AuthController` | `/api/auth` | `POST /login` (público), `GET /me`, `PUT /senha` |
+| `AuthController` | `/api/auth` | `POST /login` e `POST /registro` (públicos; o cadastro nasce inativo, ADR-0024), `GET /me`, `PUT /senha` |
 | `UsuarioController` | `/api/usuarios` | só ADMIN |
 | `MotoristaController` | `/api/motoristas` | `GET /buscar?cnh=` |
 | `VeiculoController` | `/api/veiculos` | `GET /buscar?placa=` |
@@ -154,7 +157,7 @@ motoristas estendem `JpaSpecificationExecutor` para os filtros; as peças ficam 
 - `XResponseDTO`: saída, com a `versao` atual. **A entidade JPA nunca é devolvida.**
 - `Filtro*DTO`: parâmetros de filtro da listagem (transfer, OS, passageiro, motorista), recebidos com `@ParameterObject`.
 - Especiais: `PaginaResponseDTO<T>` (envelope de páginas), `ErroResponseDTO` (formato único de erro),
-  `LoginRequestDTO`/`LoginResponseDTO`, `TrocaSenhaRequestDTO`, `Cotacao*DTO`, `AuditoriaResponseDTO`,
+  `LoginRequestDTO`/`LoginResponseDTO`, `RegistroRequestDTO`, `TrocaSenhaRequestDTO`, `Cotacao*DTO`, `AuditoriaResponseDTO`,
   `PainelResumoDTO`, `OrdemServicoDoDiaDTO` (OS com as paradas, usado em `/minhas`).
 
 ### `exception/` — erros (19)

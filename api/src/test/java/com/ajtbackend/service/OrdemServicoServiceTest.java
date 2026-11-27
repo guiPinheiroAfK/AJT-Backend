@@ -13,9 +13,11 @@ import com.ajtbackend.exception.RegraNegocioException;
 import com.ajtbackend.exception.VeiculoNaoEncontradoException;
 import com.ajtbackend.model.Motorista;
 import com.ajtbackend.model.OrdemServico;
+import com.ajtbackend.model.ParadaOs;
 import com.ajtbackend.model.Transfer;
 import com.ajtbackend.model.Veiculo;
 import com.ajtbackend.model.enums.StatusOrdemServico;
+import com.ajtbackend.model.enums.StatusTransfer;
 import com.ajtbackend.repository.MotoristaRepository;
 import com.ajtbackend.repository.OrdemServicoRepository;
 import com.ajtbackend.repository.VeiculoRepository;
@@ -448,5 +450,68 @@ class OrdemServicoServiceTest {
         // then
         verify(repository).deleteById(1L);
         verify(auditoriaService).registrar("ordens_servico", 1L, "Ordem de serviço removida");
+    }
+
+    // ---------------- cancelamento ----------------
+
+    // OS 1 com quatro transfers: confirmado (2), concluido (3), em andamento (4) e cancelado (5); o 2 e o 4 estao na parada
+    private OrdemServico osComTransfersEParada(StatusOrdemServico status) {
+        OrdemServico os = os(1L, 5L);
+        os.setStatus(status);
+        Transfer confirmado = Transfer.builder().id(2L).status(StatusTransfer.CONFIRMADO).ordemServico(os).build();
+        Transfer concluido = Transfer.builder().id(3L).status(StatusTransfer.CONCLUIDO).ordemServico(os).build();
+        Transfer emAndamento = Transfer.builder().id(4L).status(StatusTransfer.EM_ANDAMENTO).ordemServico(os).build();
+        Transfer cancelado = Transfer.builder().id(5L).status(StatusTransfer.CANCELADO).ordemServico(os).build();
+        os.setTransfers(new ArrayList<>(List.of(confirmado, concluido, emAndamento, cancelado)));
+        os.setParadas(new ArrayList<>(List.of(ParadaOs.builder().id(9L).ordemServico(os)
+                .transfers(new java.util.HashSet<>(Set.of(confirmado, emAndamento))).build())));
+        when(repository.findById(1L)).thenReturn(Optional.of(os));
+        return os;
+    }
+
+    @Test
+    void deveDevolverPraAguardandoOsSoOsNaoConcluidos_quandoOsECancelada() {
+        // given
+        OrdemServico os = osComTransfersEParada(StatusOrdemServico.ABERTA);
+        Transfer confirmado = os.getTransfers().get(0);
+        Transfer concluido = os.getTransfers().get(1);
+
+        // when
+        service.atualizarParcial(1L, dto(null, null, null, StatusOrdemServico.CANCELADA, null));
+
+        // then: os pendentes saem da OS (e do roteiro) pra entrar em outra; concluido e cancelado ficam
+        assertThat(confirmado.getOrdemServico()).isNull();
+        assertThat(confirmado.getStatus()).isEqualTo(StatusTransfer.AGUARDANDO_OS);
+        assertThat(concluido.getOrdemServico()).isSameAs(os);
+        assertThat(os.getTransfers()).extracting(Transfer::getId).containsExactly(3L, 5L);
+        assertThat(os.getParadas().get(0).getTransfers()).isEmpty();
+        verify(auditoriaService).registrar(eq("transfers"), eq(2L), any());
+        verify(auditoriaService).registrar(eq("transfers"), eq(4L), any());
+    }
+
+    @Test
+    void deveLiberarOsTransfers_quandoPutCancelaAOs() {
+        // given
+        OrdemServico os = osComTransfersEParada(StatusOrdemServico.EM_ANDAMENTO);
+
+        // when
+        service.atualizar(1L, dto(DIA, null, null, StatusOrdemServico.CANCELADA, null));
+
+        // then
+        assertThat(os.getTransfers()).extracting(Transfer::getId).containsExactly(3L, 5L);
+    }
+
+    @Test
+    void naoDeveMexerNosTransfers_quandoOsJaEstavaCanceladaOuNaoFoiCancelada() {
+        // given
+        OrdemServico jaCancelada = osComTransfersEParada(StatusOrdemServico.CANCELADA);
+
+        // when
+        service.atualizarParcial(1L, dto(null, null, null, StatusOrdemServico.CANCELADA, null));
+        service.atualizarParcial(1L, dto(null, null, null, StatusOrdemServico.FINALIZADA, null));
+
+        // then
+        assertThat(jaCancelada.getTransfers()).hasSize(4);
+        verify(auditoriaService, never()).registrar(eq("transfers"), anyLong(), any());
     }
 }

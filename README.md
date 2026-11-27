@@ -8,10 +8,10 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 
 | Indicador | Situação atual |
 |---|---|
-| Testes | 914 execuções, 0 falhas (unitários, repository, web e integração) |
+| Testes | 965 execuções, 0 falhas (unitários, repository, web e integração) |
 | Cobertura (JaCoCo) | 100% de linhas e de branches |
 | SonarQube | Quality Gate aprovado: 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, notas A |
-| Banco | PostgreSQL 16, migrations Flyway V1 a V11 |
+| Banco | PostgreSQL 16, migrations Flyway V1 a V12 |
 
 ---
 
@@ -23,12 +23,13 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 4. [Análise no SonarQube](#análise-no-sonarqube)
 5. [Scripts de verificação, smoke test e Postman](#scripts-de-verificação-smoke-test-e-postman)
 6. [Tudo em containers (Docker Compose)](#tudo-em-containers-docker-compose)
-7. [Problemas comuns](#problemas-comuns)
-8. [Estrutura do repositório](#estrutura-do-repositório)
-9. [Segurança e controle de acesso](#segurança-e-controle-de-acesso)
-10. [Contrato da API para o front](#contrato-da-api-para-o-front)
-11. [Domínio principal](#domínio-principal)
-12. [Documentação de arquitetura](#documentação-de-arquitetura)
+7. [Deploy na AWS (EC2)](#deploy-na-aws-ec2)
+8. [Problemas comuns](#problemas-comuns)
+9. [Estrutura do repositório](#estrutura-do-repositório)
+10. [Segurança e controle de acesso](#segurança-e-controle-de-acesso)
+11. [Contrato da API para o front](#contrato-da-api-para-o-front)
+12. [Domínio principal](#domínio-principal)
+13. [Documentação de arquitetura](#documentação-de-arquitetura)
 
 ---
 
@@ -107,28 +108,16 @@ O PostgreSQL fica em `localhost:5454` (só na própria máquina). Para conferir:
 
 ### 3. Rodar o back-end
 
-O Maven **não lê o `.env`**, então as variáveis precisam ser carregadas antes. Escolha um dos jeitos:
+A própria aplicação lê o `.env` da raiz do repositório (o `application.yml` importa o arquivo), então não é preciso carregar as variáveis antes:
 
-**PowerShell**
-
-```powershell
-Get-Content .env | ForEach-Object { if ($_ -match '^([A-Z_]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2]) } }
+```bash
 cd api
 mvn spring-boot:run
 ```
 
-**Git Bash / Linux / macOS**
+**IntelliJ:** abra o projeto (o `pom.xml` fica em `api/`) e rode a classe `com.ajtbackend.AJTBackendApplication`. O `.env` é encontrado tanto com a pasta de trabalho na raiz quanto em `api/`.
 
-```bash
-set -a && source .env && set +a
-cd api && mvn spring-boot:run
-```
-
-**IntelliJ**
-
-1. Abra o projeto no IntelliJ (o `pom.xml` fica em `api/`).
-2. Em *Run → Edit Configurations → AJTBackendApplication*, cole as variáveis do `.env` em **Environment variables** (formato `CHAVE=valor;CHAVE=valor`).
-3. Rode a classe `com.ajtbackend.AJTBackendApplication`.
+Variáveis definidas no ambiente (terminal, Run Configuration, systemd, Docker) têm prioridade sobre o `.env`.
 
 A API sobe em **http://localhost:8080**.
 
@@ -148,7 +137,7 @@ cd api
 mvn clean verify
 ```
 
-Resultado esperado: `Tests run: 914, Failures: 0, Errors: 0, Skipped: 0` e `BUILD SUCCESS`.
+Resultado esperado: `Tests run: 955, Failures: 0, Errors: 0, Skipped: 0` e `BUILD SUCCESS`.
 
 | Nível | Onde | O que prova | Precisa de Docker? |
 |---|---|---|:---:|
@@ -239,7 +228,16 @@ AJT_PASS=<senha do admin> bash scripts/smoke-test.sh
 
 **Postman / Insomnia:** importe `postman/AJT-Backend.postman_collection.json` e rode *Autenticação → Login* primeiro. O token e os ids criados ficam salvos em variáveis para as requisições seguintes. O request "Trocar senha" muda a senha do admin de verdade.
 
-> Scripts, smoke test e coleção criam e apagam registros: não aponte para um banco de produção.
+**Seed de demonstração** (`scripts/seed-demo.sh`, precisa de `jq`): popula a API com usuários de cada perfil, motoristas, veículos, passageiros, transfers em todos os status e OS com paradas, em datas próximas de hoje. Os dados entram pela API, então passam pelas regras de negócio, pela criptografia e pela auditoria. Detalhes em [docs/seed-demo.md](docs/seed-demo.md).
+
+```bash
+AJT_URL=http://localhost:9090 AJT_PASS=<senha do admin> bash scripts/seed-demo.sh   # Docker Compose
+AJT_URL=http://<IP da EC2> AJT_PASS=<senha do admin> bash scripts/seed-demo.sh      # EC2 (rode do seu computador)
+```
+
+O seed não apaga nada: rodar duas vezes no mesmo banco gera `[FAIL]` nos registros duplicados.
+
+> Scripts, smoke test e coleção criam e apagam registros: não aponte para um banco de produção. O seed é a exceção pensada para a EC2 da demonstração.
 
 ---
 
@@ -269,11 +267,180 @@ A imagem da API é multi-stage (build com Maven, runtime só com o JRE) e roda s
 
 ---
 
+## Deploy na AWS (EC2)
+
+Em produção a aplicação roda numa EC2 **sem Docker**, montada pelo script [`deploy/provisionar-ec2.sh`](deploy/provisionar-ec2.sh). Ele deixa tudo na mesma máquina:
+
+| Peça | Como fica |
+|---|---|
+| PostgreSQL | instalado pelo apt, escutando só em `localhost` (a 5432 não fica acessível de fora) |
+| Back-end | JAR do Spring Boot rodando em segundo plano como serviço do systemd (`ajt-backend`), em `127.0.0.1:8080` |
+| Front-end | build de produção do Angular servido pelo nginx na porta 80, com fallback de rotas SPA (`/login`, `/admin/...` devolvem o `index.html`) |
+| API | o nginx repassa `/api` para o back-end, então front e API ficam no mesmo endereço (sem `localhost` no código e sem problema de CORS) |
+| Segredos | senha do banco, segredo do JWT e chave de criptografia gerados na hora em `/etc/ajt/ajt.env` (só o root lê; nada vai para o Git) |
+
+### 1. Criar a EC2
+
+1. Instância **Ubuntu Server 24.04 ou 22.04**. Uma `t2.micro`/`t3.micro` (free tier) funciona: o script cria 2 GB de swap para o build caber na memória, mas a primeira execução demora mais (uns 15 minutos). Uma `t3.small` é bem mais rápida.
+2. Disco de pelo menos **16 GB** (dependências do Maven e do npm).
+3. **Security Group**, regras de entrada:
+
+   | Porta | Origem | Para quê |
+   |---|---|---|
+   | 22 (SSH) | só o seu IP | acessar a máquina |
+   | 80 (HTTP) | `0.0.0.0/0` | abrir o sistema no navegador |
+
+   Não abra a **5432** (PostgreSQL) nem a **8080** (API): as duas só escutam dentro da máquina.
+   Prefere criar o grupo por comando em vez de clicar no console? Veja
+   [Security Group pela linha de comando](#security-group-pela-linha-de-comando-opcional).
+4. (Opcional) Associe um **Elastic IP**, para o endereço não mudar quando a instância reiniciar.
+
+#### Security Group pela linha de comando (opcional)
+
+O jeito mais simples é o **AWS CloudShell** (ícone `>_` no topo do console da AWS, ou o botão **CloudShell** no canto
+inferior esquerdo): ele já vem com a AWS CLI, `curl` e `jq`, e já está logado na sua conta, então nenhuma chave de
+acesso precisa ser criada nem guardada no seu computador. Abra o CloudShell **na mesma região** em que vai criar a
+EC2 (a região aparece no canto superior direito do console).
+
+**Cole um comando por vez** e aperte Enter antes do próximo. Alguns terminais do navegador juntam várias linhas coladas
+de uma vez numa linha só, e aí nada funciona. Cada comando abaixo cabe numa linha.
+
+1. **Seu IP**, para liberar o SSH só para você. Abra <https://checkip.amazonaws.com> no navegador do **seu**
+   computador e cole o número no lugar de `203.0.113.10`. (Não use `curl` dentro do CloudShell: ele mostraria o IP
+   do CloudShell, e não o seu.)
+
+   ```bash
+   MEU_IP=203.0.113.10
+   ```
+
+2. **VPC padrão** da região (deve mostrar algo como `vpc-0123...`):
+
+   ```bash
+   VPC_ID=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text); echo $VPC_ID
+   ```
+
+3. **Criar o grupo** `ajt-web` (deve mostrar um `sg-...`):
+
+   ```bash
+   SG_ID=$(aws ec2 create-security-group --group-name ajt-web --description "AJT: SSH so do meu IP e HTTP publico" --vpc-id "$VPC_ID" --query GroupId --output text); echo $SG_ID
+   ```
+
+   - Se o grupo **já existe** (`InvalidGroup.Duplicate`), pegue o id dele:
+
+     ```bash
+     SG_ID=$(aws ec2 describe-security-groups --filters Name=group-name,Values=ajt-web Name=vpc-id,Values="$VPC_ID" --query 'SecurityGroups[0].GroupId' --output text); echo $SG_ID
+     ```
+
+   - Se aparecer **`None`** ou ficar vazio, o grupo **não foi criado**. Rode o `create-security-group` sem o
+     `SG_ID=$(...)` em volta (só o `aws ec2 create-security-group --group-name ajt-web --description "AJT" --vpc-id "$VPC_ID"`)
+     para ver a mensagem de erro, e resolva antes de seguir.
+
+4. **Porta 22 (SSH) só do seu IP:**
+
+   ```bash
+   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$MEU_IP/32"
+   ```
+
+5. **Porta 80 (HTTP) para todos:**
+
+   ```bash
+   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 80 --cidr 0.0.0.0/0
+   ```
+
+6. **Conferir.** Uma linha por regra; só podem aparecer a 22 (do seu IP) e a 80, nada de 5432 nem 8080:
+
+   ```bash
+   aws ec2 describe-security-group-rules --filters Name=group-id,Values="$SG_ID" --query 'SecurityGroupRules[?!IsEgress].{porta:FromPort,origem:CidrIpv4}' --output table
+   ```
+
+Se rodar um passo de novo, o `authorize` avisa `InvalidPermission.Duplicate`: a regra já existe e o aviso pode ser ignorado.
+
+**Conectar pelo botão "Conectar" do console (EC2 Instance Connect).** Essa conexão não sai do seu IP, e sim de uma
+faixa de endereços da AWS para a região. Para ela funcionar, libere também essa faixa na porta 22. Primeiro
+descubra a faixa (deve mostrar algo como `3.16.146.0/29`):
+
+```bash
+CIDR_EIC=$(curl -s https://ip-ranges.amazonaws.com/ip-ranges.json | jq -r --arg r "$AWS_REGION" '.prefixes[] | select(.service=="EC2_INSTANCE_CONNECT" and .region==$r) | .ip_prefix'); echo $CIDR_EIC
+```
+
+E libere:
+
+```bash
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$CIDR_EIC"
+```
+
+(O CloudShell já define a variável `AWS_REGION`. Se ela estiver vazia, rode antes `AWS_REGION=us-east-2`, trocando
+pela sua região. Se o primeiro comando não mostrar nada, a região digitada não está certa.)
+
+**Usar o grupo na EC2:**
+
+- Ao criar a instância pelo console: em **Configurações de rede**, escolha **Selecionar grupo de segurança existente**
+  e marque o `ajt-web`.
+- Numa instância que já existe (troca os grupos dela pelo `ajt-web`):
+
+  ```bash
+  aws ec2 modify-instance-attribute --instance-id i-0123456789abcdef0 --groups "$SG_ID"
+  ```
+
+**Se o seu IP mudar** (internet de casa costuma mudar), o SSH direto para de responder; o botão Conectar do console
+continua funcionando. Para trocar a regra da porta 22:
+
+```bash
+aws ec2 revoke-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$IP_ANTIGO/32"
+```
+```bash
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$MEU_IP/32"
+```
+
+### 2. Rodar o script
+
+Conecte na instância por SSH e rode:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/guiPinheiroAfK/AJT-Backend/main/deploy/provisionar-ec2.sh -o provisionar-ec2.sh
+sudo bash provisionar-ec2.sh
+```
+
+O script instala Java 17, Maven, Node.js 24, PostgreSQL, nginx e git, cria o banco, baixa os dois repositórios, compila o back-end, gera o build do Angular, configura o systemd e o nginx e liga o firewall do Ubuntu (SSH e HTTP). No fim ele confere se a API e o site responderam e mostra o endereço:
+
+```
+ AJT no ar: http://<IP público da EC2>
+```
+
+Primeiro acesso: `admin` / `admin123`. O sistema obriga a trocar a senha no primeiro login.
+
+Variáveis opcionais, passadas antes do `bash`:
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `DOMINIO` | IP público da EC2 | domínio ou IP usado no CORS (só na primeira execução) |
+| `BRANCH` | `main` | branch dos dois repositórios |
+| `BACK_REPO` / `FRONT_REPO` | repositórios do GitHub do projeto | usar um fork |
+| `USAR_UFW` | `1` | `0` deixa a proteção só com o Security Group |
+
+Exemplo: `sudo BRANCH=develop bash provisionar-ec2.sh`.
+
+### 3. Atualizar e acompanhar
+
+Para publicar uma versão nova, rode o mesmo script de novo: ele baixa o código, refaz os builds e reinicia o serviço, **sem trocar as senhas já geradas** (trocar a chave de criptografia deixaria os documentos dos passageiros ilegíveis).
+
+```bash
+sudo systemctl status ajt-backend     # situação do back-end
+sudo journalctl -u ajt-backend -f     # log do back-end
+sudo systemctl restart ajt-backend    # reiniciar o back-end
+sudo nginx -t && sudo systemctl reload nginx
+sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log   # acessos e erros do nginx
+sudo cat /etc/ajt/ajt.env             # variáveis de produção (só o root lê)
+```
+
+---
+
 ## Problemas comuns
 
 | Sintoma | Causa provável | Como resolver |
 |---|---|---|
-| `Could not resolve placeholder 'AJT_JWT_SECRET'` | o `.env` não foi carregado | carregue as variáveis (passo 3) ou configure na Run Configuration da IDE |
+| `Could not resolve placeholder 'AJT_JWT_SECRET'` (ou `AJT_DB_USER`/`AJT_DB_PASSWORD`) | o `.env` não foi encontrado | confira se o `.env` existe na raiz do repositório (passo 1) ou configure as variáveis na Run Configuration da IDE |
+| `docker compose` diz `defina AJT_DB_PASSWORD no .env` | o `.env` não tem a senha do banco | copie o `.env.example` para `.env` (passo 1) |
 | `invalid target release: 17` ou `UnsupportedClassVersionError` | Java 8 no `PATH` | aponte `JAVA_HOME` para um JDK 17 e coloque o `bin` dele na frente do `PATH` |
 | IntelliJ não acha `com.AJTBackend...` ou marca tudo em vermelho | o pacote virou `com.ajtbackend` (minúsculo) | *File → Invalidate Caches → Invalidate and Restart* e, se precisar, `mvn clean` |
 | `Connection refused` na porta 5454 | banco não subiu | abra o Docker Desktop e rode `docker compose up -d postgres` |
@@ -300,7 +467,7 @@ AJT-Backend/
 │   │   └── service/        # regras de negócio, transações, auditoria e PDF
 │   ├── src/main/resources/
 │   │   ├── application.yml
-│   │   └── db/migration/   # migrações Flyway (V1 a V11)
+│   │   └── db/migration/   # migrações Flyway (V1 a V12)
 │   ├── src/test/java/com/ajtbackend/
 │   │   ├── config/ service/    # unitários
 │   │   ├── repository/         # @DataJpaTest contra PostgreSQL real
@@ -308,6 +475,8 @@ AJT-Backend/
 │   │   └── integracao/         # @SpringBootTest + Testcontainers + WireMock
 │   ├── Dockerfile
 │   └── pom.xml
+├── deploy/
+│   └── provisionar-ec2.sh   # instala e configura tudo numa EC2 (systemd + nginx + PostgreSQL)
 ├── scripts/
 │   ├── smoke-test.sh        # sequência da demonstração, confere os status
 │   └── api/                 # um script por recurso (test-*.sh) + common.sh + run-all.sh
@@ -330,7 +499,8 @@ Autenticação via `Authorization: Bearer <token>`. Perfil e status do usuário 
 | `ordens-servico/minhas` | só MOTORISTA | n/a | n/a |
 | `paradas-os` | todos | ADMIN, GERENTE (MOTORISTA: só `PATCH` de `statusParada`) | ADMIN, GERENTE |
 | `passageiros` | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
-| `transfers`, `pontos-coleta` | todos | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
+| `transfers` | todos (MOTORISTA: só os das OS dele, sem valores) | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
+| `pontos-coleta` | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
 | `auditoria` (somente leitura) | ADMIN, GERENTE | n/a | n/a |
 | `painel/resumo` | todos (faturamento só para ADMIN e GERENTE) | n/a | n/a |
 | `cotacao`, `auth/me`, `auth/senha` | todos | todos | n/a |
@@ -339,6 +509,11 @@ Regras extras:
 
 - O **MOTORISTA só enxerga as próprias ordens de serviço** (e as paradas delas): as OS cujo motorista é o cadastro ligado ao usuário dele (`usuarios.motorista_id`, migration V11).
 - O MOTORISTA não lista passageiros (o cadastro tem documento); os passageiros da OS dele chegam por `GET /api/transfers/{id}/passageiros`, com o documento mascarado.
+- O MOTORISTA só enxerga os **transfers das OS dele**, sem `valorBase`, `valorOriginal` e `moedaOrigem` (informação financeira); transfer de outra OS dá 404.
+- Dos motoristas, o MOTORISTA só enxerga o **próprio cadastro** (CNH, telefone e posição dos outros são dados pessoais).
+- Atrás do nginx, o IP usado no bloqueio de login vem do `X-Real-IP`, aceito só quando a conexão vem da rede interna (o próprio nginx); direto da internet vale o IP da conexão. Além do limite por conta, um mesmo IP é bloqueado depois de 10 vezes esse limite somando todas as contas.
+
+Cadastro público: qualquer pessoa pode criar uma conta pela tela "Criar conta", mas ela nasce **inativa** e com perfil Atendente. Só entra depois que um ADMIN libera em Usuários, onde também define o perfil (ADR-0024).
 
 Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), documento do passageiro cifrado com AES-256-GCM, CORS restrito às origens configuradas, CSRF desligado de propósito por ser uma API stateless com token Bearer (ADR-0015), container rodando sem root.
 
@@ -346,6 +521,7 @@ Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), docum
 
 ## Contrato da API para o front
 
+- **Criar conta (público):** `POST /api/auth/registro` `{ nome, username, senha }` → `201` com o usuário, **inativo** e com perfil `ATENDENTE`, sem token. O login só funciona depois que um ADMIN liga o `ativo` em `/api/usuarios` (e, se quiser, troca o perfil).
 - **Login:** `POST /api/auth/login` → `{ token, tipo, expiraEm (segundos), username, role, trocarSenha }`
 - **Sessão:** `GET /api/auth/me` devolve o usuário logado (use ao recarregar a página).
 - **Troca de senha:** `PUT /api/auth/senha` `{ senhaAtual, novaSenha }` → devolve um **token novo** (o antigo deixa de valer).
@@ -416,7 +592,7 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 
 ## Documentação de arquitetura
 
-- [docs/README.md](docs/README.md): índice das decisões de arquitetura (ADRs 0000 a 0022) e ordem de leitura sugerida.
+- [docs/README.md](docs/README.md): índice das decisões de arquitetura (ADRs 0000 a 0024; a 0023 explica o deploy na EC2 e a 0024 o cadastro público) e ordem de leitura sugerida.
 - [docs/mapa-do-codigo.md](docs/mapa-do-codigo.md): onde está cada coisa e o checklist para adicionar recursos, campos e regras.
 - [docs/catalogo-de-testes.md](docs/catalogo-de-testes.md): o que cada teste cobre, ligado aos requisitos.
 
@@ -434,5 +610,7 @@ As ADRs são escritas na branch eterna `documentacao` e entram na `main` periodi
 ## Status
 
 Entrega final da disciplina de Back-end (Spring Boot).
+
+**Regras de negócio da OS:** transfer sem OS só pode estar `AGUARDANDO_OS` ou `CANCELADO`; cancelar uma OS devolve os transfers ainda não concluídos para `AGUARDANDO_OS` (saem da OS e do roteiro, para entrar em outra); a parada só atende transfers da própria OS; e o motorista não altera paradas de OS finalizada ou cancelada. Placa (maiúscula, sem hífen) e CNH (sem espaços nas pontas) são gravadas num formato só.
 
 **Limitações conhecidas:** o backend apenas *sinaliza* `trocarSenha: true` (quem força a tela de troca é o front); o contador de tentativas de login fica em memória (com várias instâncias, migrar para Redis).

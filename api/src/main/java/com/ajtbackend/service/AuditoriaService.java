@@ -3,6 +3,7 @@ package com.ajtbackend.service;
 import com.ajtbackend.config.UsuarioLogado;
 import com.ajtbackend.dto.AuditoriaResponseDTO;
 import com.ajtbackend.dto.PaginaResponseDTO;
+import com.ajtbackend.exception.RegraNegocioException;
 import com.ajtbackend.model.LogAuditoria;
 import com.ajtbackend.repository.LogAuditoriaRepository;
 import lombok.RequiredArgsConstructor;
@@ -87,11 +88,15 @@ public class AuditoriaService {
     /**
      * tabela filtra por recurso; tabela + registroId devolve o historico de um registro
      * so (ex: o historico de um transfer, HU11). registroId sozinho nao faz sentido
-     * (ids se repetem entre tabelas), entao e ignorado sem tabela.
+     * (ids se repetem entre tabelas): da 400 em vez de devolver o log inteiro calado.
      */
     public PaginaResponseDTO<AuditoriaResponseDTO> listar(String tabela, Long registroId, Pageable pageable) {
         Page<LogAuditoria> pagina;
-        if (tabela == null || tabela.isBlank()) {
+        boolean semTabela = tabela == null || tabela.isBlank();
+        if (semTabela && registroId != null) {
+            throw new RegraNegocioException("Informe a tabela junto com o registroId (ex.: ?tabela=transfers&registroId=7).");
+        }
+        if (semTabela) {
             pagina = logAuditoriaRepository.findAll(pageable);
         } else if (registroId != null) {
             pagina = logAuditoriaRepository.findByTabelaAfetadaAndRegistroId(tabela, registroId, pageable);

@@ -60,6 +60,20 @@ class AutorizacaoWebTest extends WebTestBase {
     }
 
     @Test
+    void deveDeixarPassar_quandoCadastroPublicoSemToken() throws Exception {
+        // given
+        String novaConta = "{\"nome\":\"Maria\",\"username\":\"maria\",\"senha\":\"senha12345\"}";
+
+        // when
+        ResultActions resposta = mockMvc.perform(request(HttpMethod.POST, "/api/auth/registro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(novaConta));
+
+        // then
+        resposta.andExpect(status().isCreated());
+    }
+
+    @Test
     void deveRetornar401_quandoMeSemToken() throws Exception {
         // when
         ResultActions resposta = mockMvc.perform(get("/api/auth/me"));
@@ -94,6 +108,9 @@ class AutorizacaoWebTest extends WebTestBase {
             // leitura liberada pra qualquer perfil autenticado
             "MOTORISTA, GET,    /api/transfers/1/passageiros, 200",
             "MOTORISTA, GET,    /api/transfers,         200",
+            // pontos de coleta sao do agendamento (atendimento), nao do roteiro do motorista
+            "MOTORISTA, GET,    /api/pontos-coleta,     403",
+            "ATENDENTE, GET,    /api/pontos-coleta,     200",
             "MOTORISTA, GET,    /api/ordens-servico,    200",
             // "minhas OS do dia" (HU07): so o motorista
             "MOTORISTA, GET,    /api/ordens-servico/minhas, 200",

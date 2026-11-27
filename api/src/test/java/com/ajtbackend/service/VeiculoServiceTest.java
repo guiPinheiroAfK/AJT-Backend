@@ -300,4 +300,47 @@ class VeiculoServiceTest {
         // then
         verify(repository).deleteById(1L);
     }
+
+    // ---------------- placa normalizada ----------------
+
+    @Test
+    void deveGravarAPlacaMaiusculaESemHifen_quandoCadastraNoFormatoMisturado() {
+        // given
+        when(repository.existsByPlaca("ABC1D23")).thenReturn(false);
+        when(repository.save(org.mockito.ArgumentMatchers.any(Veiculo.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        VeiculoResponseDTO resposta = service.criar(dto("Van", " abc-1d23 ", 15, null));
+
+        // then: "abc-1d23", "ABC-1D23" e "ABC1D23" sao a mesma placa
+        assertThat(resposta.placa()).isEqualTo("ABC1D23");
+        verify(repository).existsByPlaca("ABC1D23");
+    }
+
+    @Test
+    void deveRecusarComoDuplicada_quandoEditaPraMesmaPlacaEmOutroFormato() {
+        // given
+        vanCadastrada();
+        when(repository.existsByPlaca("BBB2B22")).thenReturn(true);
+
+        // when
+        Throwable put = org.assertj.core.api.Assertions.catchThrowable(() -> service.atualizar(1L, dto("Van", "bbb-2b22", 15, null)));
+        Throwable patch = org.assertj.core.api.Assertions.catchThrowable(() -> service.atualizarParcial(1L, dto(null, "bbb-2b22", null, null)));
+
+        // then
+        assertThat(put).isInstanceOf(com.ajtbackend.exception.PlacaJaCadastradaException.class);
+        assertThat(patch).isInstanceOf(com.ajtbackend.exception.PlacaJaCadastradaException.class);
+    }
+
+    @Test
+    void deveEncontrar_quandoBuscaPlacaEmMinusculaComHifen() {
+        // given
+        when(repository.findByPlaca("AAA1A11")).thenReturn(Optional.of(van()));
+
+        // when
+        VeiculoResponseDTO resposta = service.buscarPorPlaca("aaa-1a11");
+
+        // then
+        assertThat(resposta.id()).isEqualTo(1L);
+    }
 }
