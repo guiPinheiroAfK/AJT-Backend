@@ -47,8 +47,12 @@ class DocumentoHashTest {
 
     @Test
     void deveIgnorarMaiusculasEHifen_quandoDocumentoEhPassaporte() {
-        // when / then
-        assertThat(hash.calcular("PASSAPORTE", "xp-998877")).isEqualTo(hash.calcular("PASSAPORTE", "XP998877"));
+        // when
+        String comHifenEMinusculas = hash.calcular("PASSAPORTE", "xp-998877");
+        String limpo = hash.calcular("PASSAPORTE", "XP998877");
+
+        // then
+        assertThat(comHifenEMinusculas).isEqualTo(limpo);
     }
 
     @Test
@@ -56,15 +60,22 @@ class DocumentoHashTest {
         // given
         String cpf = hash.calcular("CPF", "52998224725");
 
-        // when / then
-        assertThat(hash.calcular("RG", "52998224725")).isNotEqualTo(cpf);
-        assertThat(new DocumentoHash(OUTRA_CHAVE).calcular("CPF", "52998224725")).isNotEqualTo(cpf);
+        // when
+        String outroTipo = hash.calcular("RG", "52998224725");
+        String outraChave = new DocumentoHash(OUTRA_CHAVE).calcular("CPF", "52998224725");
+
+        // then
+        assertThat(outroTipo).isNotEqualTo(cpf);
+        assertThat(outraChave).isNotEqualTo(cpf);
     }
 
     @Test
     void naoDeveQuebrar_quandoTipoEDocumentoSaoNulos() {
-        // when / then
-        assertThat(hash.calcular(null, null)).hasSize(64);
+        // when
+        String semNada = hash.calcular(null, null);
+
+        // then
+        assertThat(semNada).hasSize(64);
     }
 
     @Test
