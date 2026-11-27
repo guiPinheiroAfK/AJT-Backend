@@ -38,7 +38,11 @@ public class PontoColetaService {
         return toResponseDTO(pontoColeta);
     }
 
+    // transfer inexistente da 404 (como /transfers/{id}/passageiros), e nao lista vazia
     public List<PontoColetaResponseDTO> listarPorTransfer(Long transferId) {
+        if (!transferRepository.existsById(transferId)) {
+            throw new TransferNaoEncontradoException(transferId);
+        }
         return pontoColetaRepository.findByTransferIdOrderByOrdemParadaAsc(transferId)
                 .stream()
                 .map(this::toResponseDTO)
