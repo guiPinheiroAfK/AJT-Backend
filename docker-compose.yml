@@ -3,6 +3,7 @@ services:
   postgres:
     image: postgres:16
     container_name: ajt-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ajt_db
       POSTGRES_USER: ${AJT_DB_USER:-postgres}
@@ -22,6 +23,7 @@ services:
     build:
       context: ./api
     container_name: ajt-backend
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -44,6 +46,7 @@ services:
     build:
       context: ${AJT_FRONT_DIR:-../AJT-Frontend}
     container_name: ajt-frontend
+    restart: unless-stopped
     depends_on:
       - app
     ports:

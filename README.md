@@ -282,7 +282,106 @@ Em produção a aplicação roda numa EC2 **sem Docker**, montada pelo script [`
    | 80 (HTTP) | `0.0.0.0/0` | abrir o sistema no navegador |
 
    Não abra a **5432** (PostgreSQL) nem a **8080** (API): as duas só escutam dentro da máquina.
+   Prefere criar o grupo por comando em vez de clicar no console? Veja
+   [Security Group pela linha de comando](#security-group-pela-linha-de-comando-opcional).
 4. (Opcional) Associe um **Elastic IP**, para o endereço não mudar quando a instância reiniciar.
+
+#### Security Group pela linha de comando (opcional)
+
+O jeito mais simples é o **AWS CloudShell** (ícone `>_` no topo do console da AWS, ou o botão **CloudShell** no canto
+inferior esquerdo): ele já vem com a AWS CLI, `curl` e `jq`, e já está logado na sua conta, então nenhuma chave de
+acesso precisa ser criada nem guardada no seu computador. Abra o CloudShell **na mesma região** em que vai criar a
+EC2 (a região aparece no canto superior direito do console).
+
+**Cole um comando por vez** e aperte Enter antes do próximo. Alguns terminais do navegador juntam várias linhas coladas
+de uma vez numa linha só, e aí nada funciona. Cada comando abaixo cabe numa linha.
+
+1. **Seu IP**, para liberar o SSH só para você. Abra <https://checkip.amazonaws.com> no navegador do **seu**
+   computador e cole o número no lugar de `203.0.113.10`. (Não use `curl` dentro do CloudShell: ele mostraria o IP
+   do CloudShell, e não o seu.)
+
+   ```bash
+   MEU_IP=203.0.113.10
+   ```
+
+2. **VPC padrão** da região (deve mostrar algo como `vpc-0123...`):
+
+   ```bash
+   VPC_ID=$(aws ec2 describe-vpcs --filters Name=is-default,Values=true --query 'Vpcs[0].VpcId' --output text); echo $VPC_ID
+   ```
+
+3. **Criar o grupo** `ajt-web` (deve mostrar um `sg-...`):
+
+   ```bash
+   SG_ID=$(aws ec2 create-security-group --group-name ajt-web --description "AJT: SSH so do meu IP e HTTP publico" --vpc-id "$VPC_ID" --query GroupId --output text); echo $SG_ID
+   ```
+
+   - Se o grupo **já existe** (`InvalidGroup.Duplicate`), pegue o id dele:
+
+     ```bash
+     SG_ID=$(aws ec2 describe-security-groups --filters Name=group-name,Values=ajt-web Name=vpc-id,Values="$VPC_ID" --query 'SecurityGroups[0].GroupId' --output text); echo $SG_ID
+     ```
+
+   - Se aparecer **`None`** ou ficar vazio, o grupo **não foi criado**. Rode o `create-security-group` sem o
+     `SG_ID=$(...)` em volta (só o `aws ec2 create-security-group --group-name ajt-web --description "AJT" --vpc-id "$VPC_ID"`)
+     para ver a mensagem de erro, e resolva antes de seguir.
+
+4. **Porta 22 (SSH) só do seu IP:**
+
+   ```bash
+   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$MEU_IP/32"
+   ```
+
+5. **Porta 80 (HTTP) para todos:**
+
+   ```bash
+   aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 80 --cidr 0.0.0.0/0
+   ```
+
+6. **Conferir.** Uma linha por regra; só podem aparecer a 22 (do seu IP) e a 80, nada de 5432 nem 8080:
+
+   ```bash
+   aws ec2 describe-security-group-rules --filters Name=group-id,Values="$SG_ID" --query 'SecurityGroupRules[?!IsEgress].{porta:FromPort,origem:CidrIpv4}' --output table
+   ```
+
+Se rodar um passo de novo, o `authorize` avisa `InvalidPermission.Duplicate`: a regra já existe e o aviso pode ser ignorado.
+
+**Conectar pelo botão "Conectar" do console (EC2 Instance Connect).** Essa conexão não sai do seu IP, e sim de uma
+faixa de endereços da AWS para a região. Para ela funcionar, libere também essa faixa na porta 22. Primeiro
+descubra a faixa (deve mostrar algo como `3.16.146.0/29`):
+
+```bash
+CIDR_EIC=$(curl -s https://ip-ranges.amazonaws.com/ip-ranges.json | jq -r --arg r "$AWS_REGION" '.prefixes[] | select(.service=="EC2_INSTANCE_CONNECT" and .region==$r) | .ip_prefix'); echo $CIDR_EIC
+```
+
+E libere:
+
+```bash
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$CIDR_EIC"
+```
+
+(O CloudShell já define a variável `AWS_REGION`. Se ela estiver vazia, rode antes `AWS_REGION=us-east-2`, trocando
+pela sua região. Se o primeiro comando não mostrar nada, a região digitada não está certa.)
+
+**Usar o grupo na EC2:**
+
+- Ao criar a instância pelo console: em **Configurações de rede**, escolha **Selecionar grupo de segurança existente**
+  e marque o `ajt-web`.
+- Numa instância que já existe (troca os grupos dela pelo `ajt-web`):
+
+  ```bash
+  aws ec2 modify-instance-attribute --instance-id i-0123456789abcdef0 --groups "$SG_ID"
+  ```
+
+**Se o seu IP mudar** (internet de casa costuma mudar), o SSH direto para de responder; o botão Conectar do console
+continua funcionando. Para trocar a regra da porta 22:
+
+```bash
+aws ec2 revoke-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$IP_ANTIGO/32"
+```
+```bash
+aws ec2 authorize-security-group-ingress --group-id "$SG_ID" --protocol tcp --port 22 --cidr "$MEU_IP/32"
+```
 
 ### 2. Rodar o script
 
