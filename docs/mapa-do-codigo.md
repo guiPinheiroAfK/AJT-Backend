@@ -84,7 +84,7 @@ Sem regra de negócio: validam a entrada, delegam a **um** service e escolhem o 
 
 | Controller | Base | Observações |
 |---|---|---|
-| `AuthController` | `/api/auth` | `POST /login` (público), `GET /me`, `PUT /senha` |
+| `AuthController` | `/api/auth` | `POST /login` e `POST /registro` (públicos; o cadastro nasce inativo, ADR-0024), `GET /me`, `PUT /senha` |
 | `UsuarioController` | `/api/usuarios` | só ADMIN |
 | `MotoristaController` | `/api/motoristas` | `GET /buscar?cnh=` |
 | `VeiculoController` | `/api/veiculos` | `GET /buscar?placa=` |
@@ -157,7 +157,7 @@ motoristas estendem `JpaSpecificationExecutor` para os filtros; as peças ficam 
 - `XResponseDTO`: saída, com a `versao` atual. **A entidade JPA nunca é devolvida.**
 - `Filtro*DTO`: parâmetros de filtro da listagem (transfer, OS, passageiro, motorista), recebidos com `@ParameterObject`.
 - Especiais: `PaginaResponseDTO<T>` (envelope de páginas), `ErroResponseDTO` (formato único de erro),
-  `LoginRequestDTO`/`LoginResponseDTO`, `TrocaSenhaRequestDTO`, `Cotacao*DTO`, `AuditoriaResponseDTO`,
+  `LoginRequestDTO`/`LoginResponseDTO`, `RegistroRequestDTO`, `TrocaSenhaRequestDTO`, `Cotacao*DTO`, `AuditoriaResponseDTO`,
   `PainelResumoDTO`, `OrdemServicoDoDiaDTO` (OS com as paradas, usado em `/minhas`).
 
 ### `exception/` — erros (19)
