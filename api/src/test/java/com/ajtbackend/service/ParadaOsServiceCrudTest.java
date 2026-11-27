@@ -305,7 +305,7 @@ class ParadaOsServiceCrudTest {
     void deveAlterarCadaCampo_quandoGerenteFazPatchCompleto() {
         // given
         gerenteComParadaEOsCadastradas();
-        when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).build()));
+        when(transferRepository.findAllById(any())).thenReturn(List.of(Transfer.builder().id(7L).ordemServico(OS).build()));
 
         // when
         ParadaOsResponseDTO tudo = service.atualizarParcial(1L, new ParadaOsRequestDTO(3L, 5, "Hotel B", 1.0, 2.0, LocalTime.MIDNIGHT,

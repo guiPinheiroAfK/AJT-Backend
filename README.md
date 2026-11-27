@@ -8,7 +8,7 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 
 | Indicador | Situação atual |
 |---|---|
-| Testes | 914 execuções, 0 falhas (unitários, repository, web e integração) |
+| Testes | 955 execuções, 0 falhas (unitários, repository, web e integração) |
 | Cobertura (JaCoCo) | 100% de linhas e de branches |
 | SonarQube | Quality Gate aprovado: 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, notas A |
 | Banco | PostgreSQL 16, migrations Flyway V1 a V12 |
@@ -137,7 +137,7 @@ cd api
 mvn clean verify
 ```
 
-Resultado esperado: `Tests run: 914, Failures: 0, Errors: 0, Skipped: 0` e `BUILD SUCCESS`.
+Resultado esperado: `Tests run: 955, Failures: 0, Errors: 0, Skipped: 0` e `BUILD SUCCESS`.
 
 | Nível | Onde | O que prova | Precisa de Docker? |
 |---|---|---|:---:|
@@ -389,7 +389,8 @@ Autenticação via `Authorization: Bearer <token>`. Perfil e status do usuário 
 | `ordens-servico/minhas` | só MOTORISTA | n/a | n/a |
 | `paradas-os` | todos | ADMIN, GERENTE (MOTORISTA: só `PATCH` de `statusParada`) | ADMIN, GERENTE |
 | `passageiros` | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
-| `transfers`, `pontos-coleta` | todos | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
+| `transfers` | todos (MOTORISTA: só os das OS dele, sem valores) | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
+| `pontos-coleta` | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE, ATENDENTE | ADMIN, GERENTE |
 | `auditoria` (somente leitura) | ADMIN, GERENTE | n/a | n/a |
 | `painel/resumo` | todos (faturamento só para ADMIN e GERENTE) | n/a | n/a |
 | `cotacao`, `auth/me`, `auth/senha` | todos | todos | n/a |
@@ -398,6 +399,9 @@ Regras extras:
 
 - O **MOTORISTA só enxerga as próprias ordens de serviço** (e as paradas delas): as OS cujo motorista é o cadastro ligado ao usuário dele (`usuarios.motorista_id`, migration V11).
 - O MOTORISTA não lista passageiros (o cadastro tem documento); os passageiros da OS dele chegam por `GET /api/transfers/{id}/passageiros`, com o documento mascarado.
+- O MOTORISTA só enxerga os **transfers das OS dele**, sem `valorBase`, `valorOriginal` e `moedaOrigem` (informação financeira); transfer de outra OS dá 404.
+- Dos motoristas, o MOTORISTA só enxerga o **próprio cadastro** (CNH, telefone e posição dos outros são dados pessoais).
+- Atrás do nginx, o IP usado no bloqueio de login vem do `X-Real-IP`, aceito só quando a conexão vem da rede interna (o próprio nginx); direto da internet vale o IP da conexão. Além do limite por conta, um mesmo IP é bloqueado depois de 10 vezes esse limite somando todas as contas.
 
 Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), documento do passageiro cifrado com AES-256-GCM, CORS restrito às origens configuradas, CSRF desligado de propósito por ser uma API stateless com token Bearer (ADR-0015), container rodando sem root.
 
@@ -493,5 +497,7 @@ As ADRs são escritas na branch eterna `documentacao` e entram na `main` periodi
 ## Status
 
 Entrega final da disciplina de Back-end (Spring Boot).
+
+**Regras de negócio da OS:** transfer sem OS só pode estar `AGUARDANDO_OS` ou `CANCELADO`; cancelar uma OS devolve os transfers ainda não concluídos para `AGUARDANDO_OS` (saem da OS e do roteiro, para entrar em outra); a parada só atende transfers da própria OS; e o motorista não altera paradas de OS finalizada ou cancelada. Placa (maiúscula, sem hífen) e CNH (sem espaços nas pontas) são gravadas num formato só.
 
 **Limitações conhecidas:** o backend apenas *sinaliza* `trocarSenha: true` (quem força a tela de troca é o front); o contador de tentativas de login fica em memória (com várias instâncias, migrar para Redis).

@@ -101,4 +101,36 @@ class LoginAttemptServiceTest {
             service.registrarFalha(ip, username);
         }
     }
+
+    // ---------------- limite por IP (varias contas) ----------------
+
+    @Test
+    void deveBloquearOIpEmQualquerConta_quandoErraEmMuitasContasDiferentes() {
+        // given: 3 x 10 = 30 erros espalhados em 30 usernames, nenhum deles chegou ao limite da conta
+        for (int i = 0; i < 30; i++) {
+            service.registrarFalha(IP, "usuario" + i);
+        }
+
+        // when
+        boolean mesmoIp = service.bloqueado(IP, "admin");
+        boolean outroIp = service.bloqueado("10.0.0.9", "admin");
+
+        // then: o IP para de gastar BCrypt e nao consegue mais expulsar chaves do cache
+        assertThat(mesmoIp).isTrue();
+        assertThat(outroIp).isFalse();
+    }
+
+    @Test
+    void naoDeveLiberarOIp_quandoAcertaASenhaDeUmaConta() {
+        // given
+        for (int i = 0; i < 30; i++) {
+            service.registrarFalha(IP, "usuario" + i);
+        }
+
+        // when
+        service.registrarSucesso(IP, "minha-conta");
+
+        // then: logar na propria conta nao zera o limite do IP
+        assertThat(service.bloqueado(IP, "admin")).isTrue();
+    }
 }

@@ -94,6 +94,9 @@ class AutorizacaoWebTest extends WebTestBase {
             // leitura liberada pra qualquer perfil autenticado
             "MOTORISTA, GET,    /api/transfers/1/passageiros, 200",
             "MOTORISTA, GET,    /api/transfers,         200",
+            // pontos de coleta sao do agendamento (atendimento), nao do roteiro do motorista
+            "MOTORISTA, GET,    /api/pontos-coleta,     403",
+            "ATENDENTE, GET,    /api/pontos-coleta,     200",
             "MOTORISTA, GET,    /api/ordens-servico,    200",
             // "minhas OS do dia" (HU07): so o motorista
             "MOTORISTA, GET,    /api/ordens-servico/minhas, 200",

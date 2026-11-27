@@ -39,7 +39,8 @@ import static org.mockito.Mockito.when;
 class MotoristaServiceTest {
 
     private final MotoristaRepository repository = mock(MotoristaRepository.class);
-    private final MotoristaService service = new MotoristaService(repository);
+    private final AcessoMotorista acessoMotorista = mock(AcessoMotorista.class);
+    private final MotoristaService service = new MotoristaService(repository, acessoMotorista);
 
     private static Motorista carlos() {
         return Motorista.builder().id(1L).versao(3L).nome("Carlos").cnh("111").telefone("45").build();
@@ -316,5 +317,75 @@ class MotoristaServiceTest {
 
         // then
         verify(repository).deleteById(1L);
+    }
+
+    // ---------------- MOTORISTA so ve o proprio cadastro ----------------
+
+    private void logadoComoMotorista(Long meuId) {
+        when(acessoMotorista.restrito()).thenReturn(true);
+        when(acessoMotorista.motoristaId()).thenReturn(java.util.Optional.ofNullable(meuId));
+    }
+
+    @Test
+    void deveDevolverOProprioCadastro_quandoMotoristaBuscaOSeuId() {
+        // given
+        logadoComoMotorista(1L);
+        when(repository.findById(1L)).thenReturn(java.util.Optional.of(carlos()));
+
+        // when
+        MotoristaResponseDTO resposta = service.buscarPorId(1L);
+
+        // then
+        assertThat(resposta.id()).isEqualTo(1L);
+    }
+
+    @Test
+    void deveLancarNaoEncontrado_quandoMotoristaBuscaCadastroDeOutroPorIdOuCnh() {
+        // given
+        logadoComoMotorista(2L);
+        when(repository.findById(1L)).thenReturn(java.util.Optional.of(carlos()));
+        when(repository.findByCnh("111")).thenReturn(java.util.Optional.of(carlos()));
+
+        // when
+        Throwable porId = org.assertj.core.api.Assertions.catchThrowable(() -> service.buscarPorId(1L));
+        Throwable porCnh = org.assertj.core.api.Assertions.catchThrowable(() -> service.buscarPorCnh(" 111 "));
+
+        // then: CNH, telefone e posicao dos outros motoristas sao dados pessoais
+        assertThat(porId).isInstanceOf(MotoristaNaoEncontradoException.class);
+        assertThat(porCnh).isInstanceOf(MotoristaNaoEncontradoException.class);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void deveListarSoOProprioOuNada_quandoMotoristaLista() {
+        // given
+        when(repository.findAll(org.mockito.ArgumentMatchers.any(org.springframework.data.jpa.domain.Specification.class),
+                org.mockito.ArgumentMatchers.any(org.springframework.data.domain.Pageable.class)))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(java.util.List.of()));
+        com.ajtbackend.dto.FiltroMotoristaDTO filtro = new com.ajtbackend.dto.FiltroMotoristaDTO(null, null);
+        org.springframework.data.domain.Pageable pagina = org.springframework.data.domain.PageRequest.of(0, 5);
+
+        // when
+        logadoComoMotorista(1L);
+        service.listar(filtro, pagina);
+        logadoComoMotorista(null);
+        service.listar(filtro, pagina);
+
+        // then: as duas listagens consultam com a restricao (o proprio id ou nenhum)
+        verify(acessoMotorista, org.mockito.Mockito.times(2)).motoristaId();
+    }
+
+    @Test
+    void deveGravarACnhSemEspacos_quandoCadastraComEspacosNasPontas() {
+        // given
+        when(repository.existsByCnh("999")).thenReturn(false);
+        when(repository.save(org.mockito.ArgumentMatchers.any(Motorista.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        // when
+        MotoristaResponseDTO resposta = service.criar(dto("Ana", "  999 ", "45", null));
+
+        // then: " 999 " e "999" sao a mesma CNH (a checagem de duplicada usa o valor limpo)
+        assertThat(resposta.cnh()).isEqualTo("999");
+        verify(repository).existsByCnh("999");
     }
 }

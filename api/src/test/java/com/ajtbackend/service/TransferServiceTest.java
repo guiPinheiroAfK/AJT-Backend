@@ -14,6 +14,7 @@ import com.ajtbackend.model.Transfer;
 import com.ajtbackend.model.enums.StatusOrdemServico;
 import com.ajtbackend.model.enums.StatusTransfer;
 import com.ajtbackend.repository.OrdemServicoRepository;
+import com.ajtbackend.repository.ParadaOsRepository;
 import com.ajtbackend.repository.PassageiroRepository;
 import com.ajtbackend.repository.TransferRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,6 +66,8 @@ class TransferServiceTest {
     private final PassageiroRepository passageiroRepository = mock(PassageiroRepository.class);
     private final AuditoriaService auditoriaService = mock(AuditoriaService.class);
     private final CotacaoService cotacaoService = mock(CotacaoService.class);
+    private final ParadaOsRepository paradaOsRepository = mock(ParadaOsRepository.class);
+    private final AcessoMotorista acessoMotorista = mock(AcessoMotorista.class);
     private final TransactionTemplate transactionTemplate = mock(TransactionTemplate.class);
 
     private TransferService service;
@@ -80,7 +83,8 @@ class TransferServiceTest {
             return t;
         });
         service = new TransferService(transferRepository, ordemServicoRepository, passageiroRepository,
-                new ValorTransferService(cotacaoService), auditoriaService, transactionTemplate);
+                paradaOsRepository,
+                new ValorTransferService(cotacaoService), acessoMotorista, auditoriaService, transactionTemplate);
     }
 
     @Test
@@ -131,14 +135,14 @@ class TransferServiceTest {
         Transfer existente = Transfer.builder().id(5L).dataTransfer(LocalDate.now()).horaTransfer(LocalTime.NOON)
                 .origem("A").destino("B").build();
         when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
-        TransferRequestDTO patch = patchDeStatus(StatusTransfer.CONFIRMADO, null);
+        TransferRequestDTO patch = patchDeStatus(StatusTransfer.CANCELADO, null);
 
         // when
         TransferResponseDTO resposta = service.atualizarParcial(5L, patch);
 
         // then
-        assertThat(resposta.status()).isEqualTo(StatusTransfer.CONFIRMADO);
-        assertThat(existente.getStatus()).isEqualTo(StatusTransfer.CONFIRMADO);
+        assertThat(resposta.status()).isEqualTo(StatusTransfer.CANCELADO);
+        assertThat(existente.getStatus()).isEqualTo(StatusTransfer.CANCELADO);
         verify(cotacaoService, never()).obterCotacao(anyString(), anyString());
         verify(transferRepository).flush();
     }
@@ -358,14 +362,14 @@ class TransferServiceTest {
         Transfer existente = Transfer.builder().id(5L).dataTransfer(LocalDate.now()).horaTransfer(LocalTime.NOON)
                 .origem("A").destino("B").status(StatusTransfer.AGUARDANDO_OS).build();
         when(transferRepository.findById(5L)).thenReturn(Optional.of(existente));
-        TransferRequestDTO patch = patchDeStatus(StatusTransfer.CONFIRMADO, null);
+        TransferRequestDTO patch = patchDeStatus(StatusTransfer.CANCELADO, null);
 
         // when
         service.atualizarParcial(5L, patch);
 
         // then
         verify(auditoriaService).registrarAtualizacao(eq("transfers"), eq(5L), eq("Transfer atualizado"),
-                eq(StatusTransfer.AGUARDANDO_OS), eq(StatusTransfer.CONFIRMADO), isNull(), isNull());
+                eq(StatusTransfer.AGUARDANDO_OS), eq(StatusTransfer.CANCELADO), isNull(), isNull());
     }
 
     private Transfer capturarTransferGravado() {

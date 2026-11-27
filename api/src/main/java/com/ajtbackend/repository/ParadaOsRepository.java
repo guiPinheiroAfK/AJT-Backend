@@ -21,4 +21,8 @@ public interface ParadaOsRepository extends JpaRepository<ParadaOs, Long> {
 
     // HU07: paradas das OS de um motorista (o que o perfil MOTORISTA enxerga na listagem geral)
     Page<ParadaOs> findByOrdemServicoMotoristaId(Long motoristaId, Pageable pageable);
+
+    // paradas de uma OS que atendem um transfer (pra tirar o transfer do roteiro quando ele sai da OS)
+    @EntityGraph(attributePaths = "transfers")
+    List<ParadaOs> findByOrdemServicoIdAndTransfersId(Long osId, Long transferId);
 }
