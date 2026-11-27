@@ -3,6 +3,7 @@ package com.ajtbackend.controller;
 import com.ajtbackend.config.IpDoCliente;
 import com.ajtbackend.dto.LoginRequestDTO;
 import com.ajtbackend.dto.LoginResponseDTO;
+import com.ajtbackend.dto.RegistroRequestDTO;
 import com.ajtbackend.dto.TrocaSenhaRequestDTO;
 import com.ajtbackend.dto.UsuarioResponseDTO;
 import com.ajtbackend.service.AuthService;
@@ -13,11 +14,12 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
-@Tag(name = "Autenticação", description = "Login, sessão atual e troca de senha. O login é a única rota pública.")
+@Tag(name = "Autenticação", description = "Login, cadastro público, sessão atual e troca de senha. Login e cadastro são as únicas rotas públicas.")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -36,6 +38,16 @@ public class AuthController {
     public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO dto,
                                                   HttpServletRequest request) {
         return ResponseEntity.ok(authService.login(dto, IpDoCliente.de(request)));
+    }
+
+    @Operation(summary = "Cadastro público (tela \"Criar conta\")",
+            description = "Cria a conta com perfil Atendente e INATIVA: o login só funciona depois que um administrador "
+                    + "libera o usuário em /api/usuarios (onde também pode trocar o perfil). Não devolve token.")
+    @ApiResponse(responseCode = "201", description = "Conta criada, aguardando liberação")
+    @ApiResponse(responseCode = "400", description = "Campos inválidos ou username já cadastrado")
+    @PostMapping("/registro")
+    public ResponseEntity<UsuarioResponseDTO> registrar(@Valid @RequestBody RegistroRequestDTO dto) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(usuarioService.registrar(dto));
     }
 
     // dados do usuario logado (o front usa pra restaurar a sessao ao recarregar a pagina)
