@@ -39,7 +39,7 @@ service (campo `null`), e não uma rota separada só para o faturamento.
 
 ## Onde encontrar no código
 
-- `api/src/main/java/com/AJTBackend/controller/PainelController.java`
+- `api/src/main/java/com/ajtbackend/controller/PainelController.java`
 - `service/PainelService.java`, `dto/PainelResumoDTO.java`
 - Consultas: `repository/TransferRepository.java`, `repository/OrdemServicoRepository.java`
 - Testes: `service/PainelServiceTest.java` (regra de perfil e fuso), `repository/ConsultasDoPainelRepositoryTest.java`

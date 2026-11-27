@@ -61,8 +61,8 @@ Se alguém passar a usar sessão ou cookie para autenticar, esses testes quebram
 
 ## Onde encontrar no código
 
-- `api/src/main/java/com/AJTBackend/config/SecurityConfig.java` — método `semCsrf` e a cadeia `securityFilterChain`
-- `api/src/test/java/com/AJTBackend/integracao/AutenticacaoIntegrationTest.java` — testes
+- `api/src/main/java/com/ajtbackend/config/SecurityConfig.java` — método `semCsrf` e a cadeia `securityFilterChain`
+- `api/src/test/java/com/ajtbackend/integracao/AutenticacaoIntegrationTest.java` — testes
   `loginNaoAbreSessaoNemDevolveCookie` e `cookieSemOTokenNaoAutorizaEscrita`
 - [ADR-0004](0004-seguranca-de-login-e-sessao.md) — como o token é emitido, validado e invalidado
 

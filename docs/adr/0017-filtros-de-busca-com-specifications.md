@@ -45,7 +45,7 @@ Querydsl nem SQL montado à mão.
 
 ## Onde encontrar no código
 
-- Peças: `api/src/main/java/com/AJTBackend/repository/Especificacoes.java`
+- Peças: `api/src/main/java/com/ajtbackend/repository/Especificacoes.java`
 - Filtros: `dto/FiltroTransferDTO`, `FiltroOrdemServicoDTO`, `FiltroPassageiroDTO`, `FiltroMotoristaDTO`
 - Uso: método `listar` de `service/TransferService`, `OrdemServicoService`, `PassageiroService`, `MotoristaService`
 - Testes: `repository/EspecificacoesTest.java` (mocks), `repository/FiltrosNoBancoRepositoryTest.java` (banco real),

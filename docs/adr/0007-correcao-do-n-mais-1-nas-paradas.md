@@ -68,8 +68,8 @@ um loop — outro N+1, desta vez de escrita.
 - `@EntityGraph`: `repository/ParadaOsRepository.java`
 - `default_batch_fetch_size`: `application.yml`, `spring.jpa.properties.hibernate`
 - Busca em lote na escrita: `service/ParadaOsService.java`, método `buscarTransfers`
-- Teste de regressão de performance: `api/src/test/java/com/AJTBackend/integracao/PerformanceIntegrationTest.java`
-- Teste da busca em lote detectando ID inexistente: `api/src/test/java/com/AJTBackend/service/ParadaOsServiceTest.java`,
+- Teste de regressão de performance: `api/src/test/java/com/ajtbackend/integracao/PerformanceIntegrationTest.java`
+- Teste da busca em lote detectando ID inexistente: `api/src/test/java/com/ajtbackend/service/ParadaOsServiceTest.java`,
   método `buscaTransfersNumaUnicaConsultaEDetectaIdInexistente`
 
 ## Atualizações posteriores
@@ -79,6 +79,6 @@ um loop — outro N+1, desta vez de escrita.
   listar transfers com `passageiroIds` não gera uma query por transfer.
 - **2026-10-22 — teste de regressão no slice de repositório:** o `PerformanceIntegrationTest` (que subia a
   aplicação inteira com `@SpringBootTest` só para contar queries) foi substituído pelo
-  `api/src/test/java/com/AJTBackend/repository/ParadaOsRepositoryTest.java`, com `@DataJpaTest`. Ele conta as
+  `api/src/test/java/com/ajtbackend/repository/ParadaOsRepositoryTest.java`, com `@DataJpaTest`. Ele conta as
   queries direto no `ParadaOsRepository`: a lista de paradas da OS tem que sair em **1** query, e a paginada em
   no máximo 3 (página, contagem e um lote de transfers). Removendo o `@EntityGraph`, o teste falha.

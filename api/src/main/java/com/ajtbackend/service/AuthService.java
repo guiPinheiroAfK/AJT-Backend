@@ -1,0 +1,122 @@
+package com.ajtbackend.service;
+
+import com.ajtbackend.config.JwtService;
+import com.ajtbackend.dto.LoginRequestDTO;
+import com.ajtbackend.dto.LoginResponseDTO;
+import com.ajtbackend.dto.TrocaSenhaRequestDTO;
+import com.ajtbackend.exception.CredenciaisInvalidasException;
+import com.ajtbackend.exception.MuitasTentativasException;
+import com.ajtbackend.exception.RegraNegocioException;
+import com.ajtbackend.exception.UsuarioNaoEncontradoException;
+import com.ajtbackend.model.Usuario;
+import com.ajtbackend.repository.UsuarioRepository;
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.util.Optional;
+import java.util.UUID;
+
+@Service
+@RequiredArgsConstructor
+public class AuthService {
+
+    private static final Logger log = LoggerFactory.getLogger(AuthService.class);
+
+    private final UsuarioRepository usuarioRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final LoginAttemptService loginAttemptService;
+
+    // Hash usado quando o username nao existe, pra resposta levar o mesmo tempo
+    // e nao revelar quais usernames sao validos (timing attack)
+    private String hashFalso;
+
+    @PostConstruct
+    void gerarHashFalso() {
+        hashFalso = passwordEncoder.encode(UUID.randomUUID().toString());
+    }
+
+    // sem @Transactional de proposito: o BCrypt (~100ms) nao deve segurar uma conexao do pool.
+    // so o save() do ultimoLogin abre uma transacao curta.
+    public LoginResponseDTO login(LoginRequestDTO dto, String ip) {
+        String usuarioNoLog = sanitizar(dto.username());
+        if (loginAttemptService.bloqueado(ip, dto.username())) {
+            log.warn("Login bloqueado por excesso de tentativas: usuario={}, ip={}", usuarioNoLog, ip);
+            throw new MuitasTentativasException();
+        }
+
+        Optional<Usuario> encontrado = usuarioRepository.findByUsername(dto.username());
+        boolean senhaConfere = passwordEncoder.matches(dto.senha(),
+                encontrado.map(Usuario::getSenha).orElse(hashFalso));
+
+        if (encontrado.isEmpty() || !senhaConfere || !Boolean.TRUE.equals(encontrado.get().getAtivo())) {
+            loginAttemptService.registrarFalha(ip, dto.username());
+            String motivo = motivoDaFalha(encontrado.isPresent(), senhaConfere);
+            log.warn("Falha de login: usuario={}, ip={}, motivo={}", usuarioNoLog, ip, motivo);
+            throw new CredenciaisInvalidasException();
+        }
+
+        Usuario usuario = encontrado.get();
+        loginAttemptService.registrarSucesso(ip, dto.username());
+        usuario.setUltimoLogin(LocalDateTime.now(ZoneId.systemDefault()));
+        usuarioRepository.save(usuario);
+
+        log.info("Login bem-sucedido: usuario={}, role={}", usuario.getUsername(), usuario.getRole());
+        return gerarResposta(usuario);
+    }
+
+    /**
+     * Troca a senha do proprio usuario. Tokens emitidos antes da troca deixam
+     * de valer, entao ja devolve um token novo.
+     */
+    @Transactional
+    public LoginResponseDTO trocarSenha(String username, TrocaSenhaRequestDTO dto) {
+        Usuario usuario = usuarioRepository.findByUsername(username)
+                .orElseThrow(() -> new UsuarioNaoEncontradoException(username));
+
+        if (!passwordEncoder.matches(dto.senhaAtual(), usuario.getSenha())) {
+            log.warn("Troca de senha com senha atual incorreta: usuario={}", username);
+            throw new RegraNegocioException("Senha atual incorreta");
+        }
+        if (dto.senhaAtual().equals(dto.novaSenha())) {
+            throw new RegraNegocioException("A nova senha deve ser diferente da atual");
+        }
+
+        usuario.setSenha(passwordEncoder.encode(dto.novaSenha()));
+        usuario.setTrocarSenha(false);
+        usuario.setSenhaAlteradaEm(LocalDateTime.now(ZoneId.systemDefault()));
+
+        log.info("Senha alterada pelo proprio usuario: {}", username);
+        return gerarResposta(usuario);
+    }
+
+    private LoginResponseDTO gerarResposta(Usuario usuario) {
+        return new LoginResponseDTO(
+                jwtService.gerarToken(usuario.getUsername(), usuario.getRole()),
+                "Bearer",
+                jwtService.getExpiracaoSegundos(),
+                usuario.getUsername(),
+                usuario.getRole(),
+                Boolean.TRUE.equals(usuario.getTrocarSenha())
+        );
+    }
+
+    private static String motivoDaFalha(boolean usuarioExiste, boolean senhaConfere) {
+        if (!usuarioExiste) {
+            return "inexistente";
+        }
+        return senhaConfere ? "inativo" : "senha incorreta";
+    }
+
+    // evita log injection (quebra de linha forjando entradas no log)
+    private static String sanitizar(String valor) {
+        return valor == null ? null : valor.replaceAll("[\\r\\n\\t]", "_");
+    }
+}

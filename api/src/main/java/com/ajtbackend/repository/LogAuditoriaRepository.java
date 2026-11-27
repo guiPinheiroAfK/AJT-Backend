@@ -1,0 +1,14 @@
+package com.ajtbackend.repository;
+
+import com.ajtbackend.model.LogAuditoria;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+public interface LogAuditoriaRepository extends JpaRepository<LogAuditoria, Long> {
+
+    Page<LogAuditoria> findByTabelaAfetada(String tabelaAfetada, Pageable pageable);
+
+    // historico de um registro so (ex: um transfer); usa o indice (tabela_afetada, registro_id) da V8
+    Page<LogAuditoria> findByTabelaAfetadaAndRegistroId(String tabelaAfetada, Long registroId, Pageable pageable);
+}

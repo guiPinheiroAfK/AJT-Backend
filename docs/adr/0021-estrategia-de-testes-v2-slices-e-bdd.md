@@ -94,9 +94,9 @@ branches sem cobertura (99% e 99%), igual ao da `main` antes desta mudança.
 
 ## Onde encontrar no código
 
-- Bases: `api/src/test/java/com/AJTBackend/repository/RepositorioTestBase.java`,
+- Bases: `api/src/test/java/com/ajtbackend/repository/RepositorioTestBase.java`,
   `web/WebTestBase.java`, `web/ErrosWebTestBase.java`, `integracao/IntegracaoTestBase.java`
-- Slice de repositório: `api/src/test/java/com/AJTBackend/repository/*RepositoryTest.java`
+- Slice de repositório: `api/src/test/java/com/ajtbackend/repository/*RepositoryTest.java`
 - Perfil de teste: `api/src/test/resources/application-test.yml` (`generate_statistics` para contar queries)
 - [ADR-0014](0014-estrategia-de-testes-e-demonstracao.md) (os três níveis originais) e
   [ADR-0008](0008-testcontainers-singleton-e-versao-fixada.md) (container singleton)

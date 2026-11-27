@@ -1,0 +1,36 @@
+package com.ajtbackend.dto;
+
+import com.ajtbackend.dto.validacao.OnPatch;
+import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
+import jakarta.validation.groups.Default;
+
+public record PassageiroRequestDTO(
+        @NotBlank(message = "Nome é obrigatório")
+        @Pattern(regexp = "\\s*\\S.*", message = "Nome não pode ser vazio", groups = OnPatch.class)
+        @Size(max = 100, message = "Nome deve ter no máximo 100 caracteres", groups = {Default.class, OnPatch.class})
+        @Schema(example = "John Doe")
+        String nome,
+
+        @NotBlank(message = "Tipo de documento é obrigatório")
+        @Pattern(regexp = "\\s*\\S.*", message = "Tipo de documento não pode ser vazio", groups = OnPatch.class)
+        @Size(max = 20, message = "Tipo de documento deve ter no máximo 20 caracteres", groups = {Default.class, OnPatch.class})
+        @Schema(example = "PASSAPORTE")
+        String tipoDocumento,
+
+        @NotBlank(message = "Documento é obrigatório")
+        @Pattern(regexp = "\\s*\\S.*", message = "Documento não pode ser vazio", groups = OnPatch.class)
+        @Size(max = 50, message = "Documento deve ter no máximo 50 caracteres", groups = {Default.class, OnPatch.class})
+        @Schema(example = "XP9988776")
+        String documento,
+
+        @Size(max = 50, message = "Nacionalidade deve ter no máximo 50 caracteres", groups = {Default.class, OnPatch.class})
+        @Schema(example = "Americana")
+        String nacionalidade,
+
+        // versao que o cliente carregou (RNF008); se vier e estiver velha, a API responde 409
+        @Schema(example = "3")
+        Long versao
+) {}

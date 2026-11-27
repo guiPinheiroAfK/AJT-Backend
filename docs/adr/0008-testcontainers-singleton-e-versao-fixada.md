@@ -78,11 +78,11 @@ na prática ao rodar em Windows com Docker Desktop:
 ## Onde encontrar no código
 
 - Configuração da versão: `api/pom.xml`, propriedade `testcontainers.version`
-- Padrão singleton: `api/src/test/java/com/AJTBackend/integracao/IntegracaoTestBase.java`
+- Padrão singleton: `api/src/test/java/com/ajtbackend/integracao/IntegracaoTestBase.java`
   (bloco `static { POSTGRES.start(); COTACAO_API.start(); }`, com o comentário
   explicando o porquê de não usar `@Container`/`@RegisterExtension`)
 - As 4 classes que herdam desse padrão:
-  `api/src/test/java/com/AJTBackend/integracao/AutenticacaoIntegrationTest.java`,
+  `api/src/test/java/com/ajtbackend/integracao/AutenticacaoIntegrationTest.java`,
   `PersistenciaIntegrationTest.java`, `PerformanceIntegrationTest.java`,
   `CotacaoIntegrationTest.java`
 
@@ -90,6 +90,6 @@ na prática ao rodar em Windows com Docker Desktop:
 
 - **2026-10-22 — segundo uso do padrão, no slice de repositório:** o `PerformanceIntegrationTest` saiu (virou o
   `ParadaOsRepositoryTest`, ver [ADR-0007](0007-correcao-do-n-mais-1-nas-paradas.md)). Os testes de repositório
-  com `@DataJpaTest` herdam de `api/src/test/java/com/AJTBackend/repository/RepositorioTestBase.java`, que usa o
+  com `@DataJpaTest` herdam de `api/src/test/java/com/ajtbackend/repository/RepositorioTestBase.java`, que usa o
   mesmo container singleton (`static { POSTGRES.start(); }`) e a mesma imagem `postgres:16`. É um container
   separado do da integração, porque o `@DataJpaTest` monta outro contexto do Spring.

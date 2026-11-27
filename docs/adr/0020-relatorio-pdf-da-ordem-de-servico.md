@@ -34,7 +34,7 @@ O que o código mostra é a geração no backend, e não no front a partir do JS
 
 ## Onde encontrar no código
 
-- `api/src/main/java/com/AJTBackend/service/RelatorioOrdemServicoService.java`
+- `api/src/main/java/com/ajtbackend/service/RelatorioOrdemServicoService.java`
 - Rota: `controller/OrdemServicoController.java` (`relatorioPdf`)
 - Dependência: `api/pom.xml` (`openpdf`)
 - Testes: `service/RelatorioOrdemServicoServiceTest.java`, `integracao/RelacionamentosIntegrationTest.java`

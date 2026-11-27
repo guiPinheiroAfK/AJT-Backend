@@ -62,13 +62,13 @@ aplicação recusa subir — ver ADR-0009 sobre variáveis de ambiente obrigató
 
 ## Onde encontrar no código
 
-- Converter: `api/src/main/java/com/AJTBackend/config/CriptografiaConverter.java`
+- Converter: `api/src/main/java/com/ajtbackend/config/CriptografiaConverter.java`
 - Uso na entidade: `model/Passageiro.java`, campo `documento` com
   `@Convert(converter = CriptografiaConverter.class)`
 - Configuração da chave: `application.yml`, propriedade `ajt.crypto.key`, e
   `.env.example` com instrução de como gerar (`openssl rand -base64 32`)
-- Testes: `api/src/test/java/com/AJTBackend/config/CriptografiaConverterTest.java`
+- Testes: `api/src/test/java/com/ajtbackend/config/CriptografiaConverterTest.java`
   (ida e volta, chave errada, dado adulterado, valor legado sem prefixo) e
-  `api/src/test/java/com/AJTBackend/integracao/PersistenciaIntegrationTest.java`,
+  `api/src/test/java/com/ajtbackend/integracao/PersistenciaIntegrationTest.java`,
   método `documentoDoPassageiroFicaCifradoNoBancoMasVoltaLegivelNaApi` (prova
   com banco real que o valor no banco é diferente do valor na API)

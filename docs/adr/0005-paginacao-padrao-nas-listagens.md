@@ -76,9 +76,9 @@ não milhares), então paginar ali seria complexidade sem benefício real.
   `spring.data.web.pageable`
 - Tratamento de ordenação inválida: `exception/GlobalExceptionHandler.java`,
   método `handleOrdenacaoInvalida`
-- Testes: `api/src/test/java/com/AJTBackend/web/ValidacaoWebTest.java`, método
+- Testes: `api/src/test/java/com/ajtbackend/web/ValidacaoWebTest.java`, método
   `paginacaoTemPadraoETamanhoMaximo`, e contra banco real
-  `api/src/test/java/com/AJTBackend/integracao/PersistenciaIntegrationTest.java`,
+  `api/src/test/java/com/ajtbackend/integracao/PersistenciaIntegrationTest.java`,
   métodos `paginacaoRealComTotais` e `ordenarPorCampoInexistenteRetorna400`
 
 ## Atualizações posteriores
