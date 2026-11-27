@@ -8,7 +8,7 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 
 | Indicador | Situação atual |
 |---|---|
-| Testes | 955 execuções, 0 falhas (unitários, repository, web e integração) |
+| Testes | 965 execuções, 0 falhas (unitários, repository, web e integração) |
 | Cobertura (JaCoCo) | 100% de linhas e de branches |
 | SonarQube | Quality Gate aprovado: 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, notas A |
 | Banco | PostgreSQL 16, migrations Flyway V1 a V12 |
@@ -513,12 +513,15 @@ Regras extras:
 - Dos motoristas, o MOTORISTA só enxerga o **próprio cadastro** (CNH, telefone e posição dos outros são dados pessoais).
 - Atrás do nginx, o IP usado no bloqueio de login vem do `X-Real-IP`, aceito só quando a conexão vem da rede interna (o próprio nginx); direto da internet vale o IP da conexão. Além do limite por conta, um mesmo IP é bloqueado depois de 10 vezes esse limite somando todas as contas.
 
+Cadastro público: qualquer pessoa pode criar uma conta pela tela "Criar conta", mas ela nasce **inativa** e com perfil Atendente. Só entra depois que um ADMIN libera em Usuários, onde também define o perfil (ADR-0024).
+
 Outras proteções: bloqueio de login após tentativas erradas (HTTP 429), documento do passageiro cifrado com AES-256-GCM, CORS restrito às origens configuradas, CSRF desligado de propósito por ser uma API stateless com token Bearer (ADR-0015), container rodando sem root.
 
 ---
 
 ## Contrato da API para o front
 
+- **Criar conta (público):** `POST /api/auth/registro` `{ nome, username, senha }` → `201` com o usuário, **inativo** e com perfil `ATENDENTE`, sem token. O login só funciona depois que um ADMIN liga o `ativo` em `/api/usuarios` (e, se quiser, troca o perfil).
 - **Login:** `POST /api/auth/login` → `{ token, tipo, expiraEm (segundos), username, role, trocarSenha }`
 - **Sessão:** `GET /api/auth/me` devolve o usuário logado (use ao recarregar a página).
 - **Troca de senha:** `PUT /api/auth/senha` `{ senhaAtual, novaSenha }` → devolve um **token novo** (o antigo deixa de valer).
@@ -589,7 +592,7 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 
 ## Documentação de arquitetura
 
-- [docs/README.md](docs/README.md): índice das decisões de arquitetura (ADRs 0000 a 0023; a 0023 explica o deploy na EC2) e ordem de leitura sugerida.
+- [docs/README.md](docs/README.md): índice das decisões de arquitetura (ADRs 0000 a 0024; a 0023 explica o deploy na EC2 e a 0024 o cadastro público) e ordem de leitura sugerida.
 - [docs/mapa-do-codigo.md](docs/mapa-do-codigo.md): onde está cada coisa e o checklist para adicionar recursos, campos e regras.
 - [docs/catalogo-de-testes.md](docs/catalogo-de-testes.md): o que cada teste cobre, ligado aos requisitos.
 
