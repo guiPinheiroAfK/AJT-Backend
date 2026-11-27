@@ -14,10 +14,11 @@ documentar acontece direto aqui. Periodicamente — hoje o combinado é sempre p
 do dia 20 de cada mês — o conteúdo acumulado aqui é mergeado na `main`, e a branch
 `documentacao` continua viva pra receber as próximas ADRs.
 
-**Situação em 2026-11-27:** as ADRs vão até a 0023. A 0023 registra o deploy da entrega final: a aplicação
+**Situação em 2026-11-27:** as ADRs vão até a 0024. A 0023 registra o deploy da entrega final: a aplicação
 inteira numa EC2, montada pelo `deploy/provisionar-ec2.sh` (back-end no systemd, Angular no nginx com fallback
 de rotas, Postgres só em localhost e segredos gerados na própria máquina), e o `IpDoCliente`, que lê o IP real
-atrás do nginx para o bloqueio de login. O banco está na migration V12, a suíte tem 955 execuções e o
+atrás do nginx para o bloqueio de login. A 0024 registra o cadastro público ("Criar conta"): a conta nasce
+inativa e só entra depois que um admin libera. O banco está na migration V12, a suíte tem 965 execuções e o
 [mapa do código](mapa-do-codigo.md) e o [catálogo de testes](catalogo-de-testes.md) estão atualizados.
 
 ## Como funciona (resumo — o processo completo está na [ADR-0000](adr/0000-processo-de-adr.md))
@@ -67,6 +68,7 @@ atrás do nginx para o bloqueio de login. O banco está na migration V12, a suí
 | [0021](adr/0021-estrategia-de-testes-v2-slices-e-bdd.md) | Estratégia de testes v2: slice por camada, nomes `deve…_quando…` e given/when/then | Aceito |
 | [0022](adr/0022-scripts-de-verificacao-em-scripts.md) | Scripts de verificação da API organizados em `scripts/` | Aceito |
 | [0023](adr/0023-deploy-na-ec2-sem-docker.md) | Deploy na AWS EC2 sem Docker, com script de provisionamento | Aceito |
+| [0024](adr/0024-cadastro-publico-com-liberacao-pelo-admin.md) | Cadastro público de usuários com liberação pelo administrador | Aceito |
 
 ## Para quem está estudando o projeto agora
 
@@ -78,6 +80,7 @@ Ordem de leitura sugerida:
    e [ADR-0002](adr/0002-matriz-de-permissoes-por-perfil.md) — modelo de dados e quem pode fazer o quê.
 4. [ADR-0004](adr/0004-seguranca-de-login-e-sessao.md), [ADR-0015](adr/0015-csrf-desligado-em-api-stateless.md)
    e [ADR-0003](adr/0003-criptografia-documento-passageiro.md) — login, sessão, tokens, CSRF e o campo cifrado.
+   Depois a [ADR-0024](adr/0024-cadastro-publico-com-liberacao-pelo-admin.md), sobre o cadastro público.
 5. [ADR-0005](adr/0005-paginacao-padrao-nas-listagens.md), [ADR-0006](adr/0006-cache-e-timeout-da-cotacao-de-cambio.md)
    e [ADR-0007](adr/0007-correcao-do-n-mais-1-nas-paradas.md) — decisões de performance.
 6. [ADR-0011](adr/0011-auditoria-de-escritas.md) e [ADR-0012](adr/0012-documentacao-da-api-com-openapi.md)
