@@ -11,6 +11,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
@@ -26,7 +27,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * hora, perfil alterado valendo sem precisar logar de novo, o bloqueio
  * apos tentativas erradas de login, e as premissas do CSRF desligado
  * (ADR-0015): o login nao abre sessao nem devolve cookie, e cookie sem o
- * token nao autoriza escrita.
+ * token nao autoriza escrita. tambem o cadastro publico: a conta nasce
+ * inativa, o login recusa ate o admin liberar e depois entra normalmente.
  *
  * como rodar: precisa de docker (herda de IntegracaoTestBase). roda com
  * "mvn test"; sem docker, a classe inteira e pulada.
@@ -200,6 +202,32 @@ class AutenticacaoIntegrationTest extends IntegracaoTestBase {
 
         // then
         resposta.andExpect(status().isUnauthorized());
+    }
+
+    // ----- cadastro publico ("Criar conta") -----
+
+    @Test
+    void deveCriarContaInativaQueSoEntraDepoisDoAdminLiberar_quandoPessoaSeCadastraSemToken() throws Exception {
+        // given
+        String username = "novo-" + UUID.randomUUID().toString().substring(0, 8);
+        ResultActions cadastro = mockMvc.perform(post("/api/auth/registro")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"nome\":\"Pessoa Nova\",\"username\":\"" + username + "\",\"senha\":\"" + SENHA_INICIAL + "\"}"));
+        cadastro.andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("ATENDENTE"))
+                .andExpect(jsonPath("$.ativo").value(false));
+        long id = idDe(cadastro);
+        int loginAntesDeLiberar = tentarLogin(username, SENHA_INICIAL).andReturn().getResponse().getStatus();
+        patchJson("/api/usuarios/" + id, bearer(Role.ADMIN), "{\"ativo\":true}").andExpect(status().isOk());
+
+        // when
+        ResultActions resposta = tentarLogin(username, SENHA_INICIAL);
+
+        // then
+        assertThat(loginAntesDeLiberar).isEqualTo(401);
+        resposta.andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("ATENDENTE"))
+                .andExpect(jsonPath("$.trocarSenha").value(false));
     }
 
     private ResultActions tentarLogin(String username, String senha) throws Exception {
