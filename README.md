@@ -228,7 +228,16 @@ AJT_PASS=<senha do admin> bash scripts/smoke-test.sh
 
 **Postman / Insomnia:** importe `postman/AJT-Backend.postman_collection.json` e rode *Autenticação → Login* primeiro. O token e os ids criados ficam salvos em variáveis para as requisições seguintes. O request "Trocar senha" muda a senha do admin de verdade.
 
-> Scripts, smoke test e coleção criam e apagam registros: não aponte para um banco de produção.
+**Seed de demonstração** (`scripts/seed-demo.sh`, precisa de `jq`): popula a API com usuários de cada perfil, motoristas, veículos, passageiros, transfers em todos os status e OS com paradas, em datas próximas de hoje. Os dados entram pela API, então passam pelas regras de negócio, pela criptografia e pela auditoria. Detalhes em [docs/seed-demo.md](docs/seed-demo.md).
+
+```bash
+AJT_URL=http://localhost:9090 AJT_PASS=<senha do admin> bash scripts/seed-demo.sh   # Docker Compose
+AJT_URL=http://<IP da EC2> AJT_PASS=<senha do admin> bash scripts/seed-demo.sh      # EC2 (rode do seu computador)
+```
+
+O seed não apaga nada: rodar duas vezes no mesmo banco gera `[FAIL]` nos registros duplicados.
+
+> Scripts, smoke test e coleção criam e apagam registros: não aponte para um banco de produção. O seed é a exceção pensada para a EC2 da demonstração.
 
 ---
 
@@ -420,6 +429,8 @@ sudo systemctl status ajt-backend     # situação do back-end
 sudo journalctl -u ajt-backend -f     # log do back-end
 sudo systemctl restart ajt-backend    # reiniciar o back-end
 sudo nginx -t && sudo systemctl reload nginx
+sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log   # acessos e erros do nginx
+sudo cat /etc/ajt/ajt.env             # variáveis de produção (só o root lê)
 ```
 
 ---
@@ -578,7 +589,7 @@ O projeto original era uma aplicação desktop (Java Swing, arquitetura View →
 
 ## Documentação de arquitetura
 
-- [docs/README.md](docs/README.md): índice das decisões de arquitetura (ADRs 0000 a 0022) e ordem de leitura sugerida.
+- [docs/README.md](docs/README.md): índice das decisões de arquitetura (ADRs 0000 a 0023; a 0023 explica o deploy na EC2) e ordem de leitura sugerida.
 - [docs/mapa-do-codigo.md](docs/mapa-do-codigo.md): onde está cada coisa e o checklist para adicionar recursos, campos e regras.
 - [docs/catalogo-de-testes.md](docs/catalogo-de-testes.md): o que cada teste cobre, ligado aos requisitos.
 
