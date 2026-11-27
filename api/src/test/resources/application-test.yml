@@ -11,6 +11,10 @@ ajt:
     bloqueio-minutos: 1
 
 spring:
+  # so pra resolver os placeholders: o banco de verdade vem do Testcontainers (@ServiceConnection)
+  datasource:
+    username: teste
+    password: teste
   jpa:
     show-sql: false
     properties:

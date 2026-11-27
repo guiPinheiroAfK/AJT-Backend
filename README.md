@@ -11,7 +11,7 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 | Testes | 914 execuções, 0 falhas (unitários, repository, web e integração) |
 | Cobertura (JaCoCo) | 100% de linhas e de branches |
 | SonarQube | Quality Gate aprovado: 0 bugs, 0 vulnerabilidades, 0 code smells, 0% de duplicação, notas A |
-| Banco | PostgreSQL 16, migrations Flyway V1 a V11 |
+| Banco | PostgreSQL 16, migrations Flyway V1 a V12 |
 
 ---
 
@@ -23,12 +23,13 @@ Este backend é a evolução do sistema desktop original (`SOSViale---Sistema-Re
 4. [Análise no SonarQube](#análise-no-sonarqube)
 5. [Scripts de verificação, smoke test e Postman](#scripts-de-verificação-smoke-test-e-postman)
 6. [Tudo em containers (Docker Compose)](#tudo-em-containers-docker-compose)
-7. [Problemas comuns](#problemas-comuns)
-8. [Estrutura do repositório](#estrutura-do-repositório)
-9. [Segurança e controle de acesso](#segurança-e-controle-de-acesso)
-10. [Contrato da API para o front](#contrato-da-api-para-o-front)
-11. [Domínio principal](#domínio-principal)
-12. [Documentação de arquitetura](#documentação-de-arquitetura)
+7. [Deploy na AWS (EC2)](#deploy-na-aws-ec2)
+8. [Problemas comuns](#problemas-comuns)
+9. [Estrutura do repositório](#estrutura-do-repositório)
+10. [Segurança e controle de acesso](#segurança-e-controle-de-acesso)
+11. [Contrato da API para o front](#contrato-da-api-para-o-front)
+12. [Domínio principal](#domínio-principal)
+13. [Documentação de arquitetura](#documentação-de-arquitetura)
 
 ---
 
@@ -107,28 +108,16 @@ O PostgreSQL fica em `localhost:5454` (só na própria máquina). Para conferir:
 
 ### 3. Rodar o back-end
 
-O Maven **não lê o `.env`**, então as variáveis precisam ser carregadas antes. Escolha um dos jeitos:
+A própria aplicação lê o `.env` da raiz do repositório (o `application.yml` importa o arquivo), então não é preciso carregar as variáveis antes:
 
-**PowerShell**
-
-```powershell
-Get-Content .env | ForEach-Object { if ($_ -match '^([A-Z_]+)=(.*)$') { [Environment]::SetEnvironmentVariable($matches[1], $matches[2]) } }
+```bash
 cd api
 mvn spring-boot:run
 ```
 
-**Git Bash / Linux / macOS**
+**IntelliJ:** abra o projeto (o `pom.xml` fica em `api/`) e rode a classe `com.ajtbackend.AJTBackendApplication`. O `.env` é encontrado tanto com a pasta de trabalho na raiz quanto em `api/`.
 
-```bash
-set -a && source .env && set +a
-cd api && mvn spring-boot:run
-```
-
-**IntelliJ**
-
-1. Abra o projeto no IntelliJ (o `pom.xml` fica em `api/`).
-2. Em *Run → Edit Configurations → AJTBackendApplication*, cole as variáveis do `.env` em **Environment variables** (formato `CHAVE=valor;CHAVE=valor`).
-3. Rode a classe `com.ajtbackend.AJTBackendApplication`.
+Variáveis definidas no ambiente (terminal, Run Configuration, systemd, Docker) têm prioridade sobre o `.env`.
 
 A API sobe em **http://localhost:8080**.
 
@@ -269,11 +258,79 @@ A imagem da API é multi-stage (build com Maven, runtime só com o JRE) e roda s
 
 ---
 
+## Deploy na AWS (EC2)
+
+Em produção a aplicação roda numa EC2 **sem Docker**, montada pelo script [`deploy/provisionar-ec2.sh`](deploy/provisionar-ec2.sh). Ele deixa tudo na mesma máquina:
+
+| Peça | Como fica |
+|---|---|
+| PostgreSQL | instalado pelo apt, escutando só em `localhost` (a 5432 não fica acessível de fora) |
+| Back-end | JAR do Spring Boot rodando em segundo plano como serviço do systemd (`ajt-backend`), em `127.0.0.1:8080` |
+| Front-end | build de produção do Angular servido pelo nginx na porta 80, com fallback de rotas SPA (`/login`, `/admin/...` devolvem o `index.html`) |
+| API | o nginx repassa `/api` para o back-end, então front e API ficam no mesmo endereço (sem `localhost` no código e sem problema de CORS) |
+| Segredos | senha do banco, segredo do JWT e chave de criptografia gerados na hora em `/etc/ajt/ajt.env` (só o root lê; nada vai para o Git) |
+
+### 1. Criar a EC2
+
+1. Instância **Ubuntu Server 24.04 ou 22.04**. Uma `t2.micro`/`t3.micro` (free tier) funciona: o script cria 2 GB de swap para o build caber na memória, mas a primeira execução demora mais (uns 15 minutos). Uma `t3.small` é bem mais rápida.
+2. Disco de pelo menos **16 GB** (dependências do Maven e do npm).
+3. **Security Group**, regras de entrada:
+
+   | Porta | Origem | Para quê |
+   |---|---|---|
+   | 22 (SSH) | só o seu IP | acessar a máquina |
+   | 80 (HTTP) | `0.0.0.0/0` | abrir o sistema no navegador |
+
+   Não abra a **5432** (PostgreSQL) nem a **8080** (API): as duas só escutam dentro da máquina.
+4. (Opcional) Associe um **Elastic IP**, para o endereço não mudar quando a instância reiniciar.
+
+### 2. Rodar o script
+
+Conecte na instância por SSH e rode:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/guiPinheiroAfK/AJT-Backend/main/deploy/provisionar-ec2.sh -o provisionar-ec2.sh
+sudo bash provisionar-ec2.sh
+```
+
+O script instala Java 17, Maven, Node.js 24, PostgreSQL, nginx e git, cria o banco, baixa os dois repositórios, compila o back-end, gera o build do Angular, configura o systemd e o nginx e liga o firewall do Ubuntu (SSH e HTTP). No fim ele confere se a API e o site responderam e mostra o endereço:
+
+```
+ AJT no ar: http://<IP público da EC2>
+```
+
+Primeiro acesso: `admin` / `admin123`. O sistema obriga a trocar a senha no primeiro login.
+
+Variáveis opcionais, passadas antes do `bash`:
+
+| Variável | Padrão | Para quê |
+|---|---|---|
+| `DOMINIO` | IP público da EC2 | domínio ou IP usado no CORS (só na primeira execução) |
+| `BRANCH` | `main` | branch dos dois repositórios |
+| `BACK_REPO` / `FRONT_REPO` | repositórios do GitHub do projeto | usar um fork |
+| `USAR_UFW` | `1` | `0` deixa a proteção só com o Security Group |
+
+Exemplo: `sudo BRANCH=develop bash provisionar-ec2.sh`.
+
+### 3. Atualizar e acompanhar
+
+Para publicar uma versão nova, rode o mesmo script de novo: ele baixa o código, refaz os builds e reinicia o serviço, **sem trocar as senhas já geradas** (trocar a chave de criptografia deixaria os documentos dos passageiros ilegíveis).
+
+```bash
+sudo systemctl status ajt-backend     # situação do back-end
+sudo journalctl -u ajt-backend -f     # log do back-end
+sudo systemctl restart ajt-backend    # reiniciar o back-end
+sudo nginx -t && sudo systemctl reload nginx
+```
+
+---
+
 ## Problemas comuns
 
 | Sintoma | Causa provável | Como resolver |
 |---|---|---|
-| `Could not resolve placeholder 'AJT_JWT_SECRET'` | o `.env` não foi carregado | carregue as variáveis (passo 3) ou configure na Run Configuration da IDE |
+| `Could not resolve placeholder 'AJT_JWT_SECRET'` (ou `AJT_DB_USER`/`AJT_DB_PASSWORD`) | o `.env` não foi encontrado | confira se o `.env` existe na raiz do repositório (passo 1) ou configure as variáveis na Run Configuration da IDE |
+| `docker compose` diz `defina AJT_DB_PASSWORD no .env` | o `.env` não tem a senha do banco | copie o `.env.example` para `.env` (passo 1) |
 | `invalid target release: 17` ou `UnsupportedClassVersionError` | Java 8 no `PATH` | aponte `JAVA_HOME` para um JDK 17 e coloque o `bin` dele na frente do `PATH` |
 | IntelliJ não acha `com.AJTBackend...` ou marca tudo em vermelho | o pacote virou `com.ajtbackend` (minúsculo) | *File → Invalidate Caches → Invalidate and Restart* e, se precisar, `mvn clean` |
 | `Connection refused` na porta 5454 | banco não subiu | abra o Docker Desktop e rode `docker compose up -d postgres` |
@@ -300,7 +357,7 @@ AJT-Backend/
 │   │   └── service/        # regras de negócio, transações, auditoria e PDF
 │   ├── src/main/resources/
 │   │   ├── application.yml
-│   │   └── db/migration/   # migrações Flyway (V1 a V11)
+│   │   └── db/migration/   # migrações Flyway (V1 a V12)
 │   ├── src/test/java/com/ajtbackend/
 │   │   ├── config/ service/    # unitários
 │   │   ├── repository/         # @DataJpaTest contra PostgreSQL real
@@ -308,6 +365,8 @@ AJT-Backend/
 │   │   └── integracao/         # @SpringBootTest + Testcontainers + WireMock
 │   ├── Dockerfile
 │   └── pom.xml
+├── deploy/
+│   └── provisionar-ec2.sh   # instala e configura tudo numa EC2 (systemd + nginx + PostgreSQL)
 ├── scripts/
 │   ├── smoke-test.sh        # sequência da demonstração, confere os status
 │   └── api/                 # um script por recurso (test-*.sh) + common.sh + run-all.sh
