@@ -256,6 +256,11 @@ Formato de cada entrada: **o que cobre**, **requisitos**, **caminhos tristes** e
 - Requisitos: HU02, RNF007.
 - Caminhos tristes: mesmo documento com pontuação, espaços ou caixa diferentes dá o mesmo hash; tipo ou chave diferentes dão outro; tipo e documento nulos; JVM sem HmacSHA256; backfill sem pendências.
 
+**IpDoClienteTest** — 1 método / 9 execuções
+- Cobre: o IP usado no bloqueio de login atrás do nginx (EC2 e docker compose): o `X-Real-IP` só vale quando a conexão vem de loopback ou rede privada.
+- Requisitos: HU01, RNF002.
+- Caminhos tristes: cabeçalho forjado direto da internet (ignorado), faixa 172.32 fora da rede privada, cabeçalho ausente, em branco ou com espaços.
+
 **OpenApiConfigTest** — 2 métodos / 2 execuções
 - Cobre: a documentação Swagger: esquema Bearer JWT e as respostas 401 e 403 em toda operação, menos no login.
 - Requisitos: RNF002.
