@@ -82,6 +82,7 @@ class PontoColetaServiceTest {
     @Test
     void deveDevolverOsPontosDaViagem_quandoListaPorTransfer() {
         // given
+        when(transferRepository.existsById(7L)).thenReturn(true);
         when(repository.findByTransferIdOrderByOrdemParadaAsc(7L)).thenReturn(List.of(ponto()));
 
         // when
@@ -90,6 +91,19 @@ class PontoColetaServiceTest {
         // then
         assertThat(resultado).extracting(PontoColetaResponseDTO::transferId).containsExactly(7L);
         assertThat(resultado).extracting(PontoColetaResponseDTO::ordemParada).containsExactly(1);
+    }
+
+    @Test
+    void deveLancarTransferNaoEncontradoSemConsultarPontos_quandoListaPorTransferInexistente() {
+        // given
+        when(transferRepository.existsById(99L)).thenReturn(false);
+
+        // when
+        Throwable erro = catchThrowable(() -> service.listarPorTransfer(99L));
+
+        // then: transfer que nao existe da 404, e nao uma lista vazia
+        assertThat(erro).isInstanceOf(TransferNaoEncontradoException.class);
+        verify(repository, never()).findByTransferIdOrderByOrdemParadaAsc(any());
     }
 
     @Test

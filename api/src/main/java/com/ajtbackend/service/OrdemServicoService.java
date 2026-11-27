@@ -12,8 +12,10 @@ import com.ajtbackend.exception.RegraNegocioException;
 import com.ajtbackend.exception.VeiculoNaoEncontradoException;
 import com.ajtbackend.model.Motorista;
 import com.ajtbackend.model.OrdemServico;
+import com.ajtbackend.model.Transfer;
 import com.ajtbackend.model.Veiculo;
 import com.ajtbackend.model.enums.StatusOrdemServico;
+import com.ajtbackend.model.enums.StatusTransfer;
 import com.ajtbackend.repository.Especificacoes;
 import com.ajtbackend.repository.MotoristaRepository;
 import com.ajtbackend.repository.OrdemServicoRepository;
@@ -39,6 +41,7 @@ public class OrdemServicoService {
     private static final Logger log = LoggerFactory.getLogger(OrdemServicoService.class);
     private static final StatusOrdemServico STATUS_PADRAO = StatusOrdemServico.ABERTA;
     private static final String TABELA = "ordens_servico";
+    private static final String TABELA_TRANSFERS = "transfers";
     private static final String CAMPO_MOTORISTA = "motorista.id";
 
     private final OrdemServicoRepository ordemServicoRepository;
@@ -134,6 +137,7 @@ public class OrdemServicoService {
         ordemServico.setVeiculo(buscarVeiculo(dto.veiculoId()));
         StatusOrdemServico statusAnterior = ordemServico.getStatus();
         ordemServico.setStatus(dto.status() != null ? dto.status() : STATUS_PADRAO);
+        liberarTransfersSeCancelada(ordemServico, statusAnterior);
 
         auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de serviço atualizada", statusAnterior, ordemServico.getStatus());
         ordemServicoRepository.flush(); // grava agora pra resposta ja levar a versao nova
@@ -160,6 +164,7 @@ public class OrdemServicoService {
         if (dto.status() != null) {
             ordemServico.setStatus(dto.status());
         }
+        liberarTransfersSeCancelada(ordemServico, statusAnterior);
 
         auditoriaService.registrarAtualizacao(TABELA, id, "Ordem de serviço atualizada", statusAnterior, ordemServico.getStatus());
         ordemServicoRepository.flush(); // grava agora pra resposta ja levar a versao nova
@@ -174,6 +179,29 @@ public class OrdemServicoService {
         ordemServicoRepository.deleteById(id);
         auditoriaService.registrar(TABELA, id, "Ordem de serviço removida");
         log.info("Ordem de serviço removida: id={}", id);
+    }
+
+    /*
+     * OS cancelada nao vai mais pra rua, mas os passageiros continuam precisando do transfer:
+     * os transfers que ainda nao foram concluidos (nem cancelados) saem dela, voltam pra
+     * "aguardando OS" (pra entrar em outra) e deixam de contar no faturamento da OS cancelada.
+     */
+    private void liberarTransfersSeCancelada(OrdemServico ordemServico, StatusOrdemServico statusAnterior) {
+        if (ordemServico.getStatus() != StatusOrdemServico.CANCELADA || statusAnterior == StatusOrdemServico.CANCELADA) {
+            return;
+        }
+        List<Transfer> liberados = ordemServico.getTransfers().stream()
+                .filter(transfer -> transfer.getStatus() != StatusTransfer.CONCLUIDO
+                        && transfer.getStatus() != StatusTransfer.CANCELADO)
+                .toList();
+        liberados.forEach(transfer -> {
+            transfer.setOrdemServico(null);
+            transfer.setStatus(StatusTransfer.AGUARDANDO_OS);
+            auditoriaService.registrar(TABELA_TRANSFERS, transfer.getId(),
+                    "Transfer liberado: ordem de serviço #" + ordemServico.getId() + " cancelada");
+        });
+        ordemServico.getTransfers().removeAll(liberados);
+        ordemServico.getParadas().forEach(parada -> parada.getTransfers().removeAll(liberados));
     }
 
     // RNF008: o cliente editou em cima de uma versao velha (outra pessoa salvou no meio tempo)

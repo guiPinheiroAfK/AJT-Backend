@@ -1,5 +1,6 @@
 package com.ajtbackend.controller;
 
+import com.ajtbackend.config.IpDoCliente;
 import com.ajtbackend.dto.LoginRequestDTO;
 import com.ajtbackend.dto.LoginResponseDTO;
 import com.ajtbackend.dto.TrocaSenhaRequestDTO;
@@ -34,7 +35,7 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDTO> login(@Valid @RequestBody LoginRequestDTO dto,
                                                   HttpServletRequest request) {
-        return ResponseEntity.ok(authService.login(dto, request.getRemoteAddr()));
+        return ResponseEntity.ok(authService.login(dto, IpDoCliente.de(request)));
     }
 
     // dados do usuario logado (o front usa pra restaurar a sessao ao recarregar a pagina)

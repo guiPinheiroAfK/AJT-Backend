@@ -27,30 +27,53 @@ public class MotoristaService {
     private static final Logger log = LoggerFactory.getLogger(MotoristaService.class);
 
     private final MotoristaRepository motoristaRepository;
+    private final AcessoMotorista acessoMotorista;
 
     // RF015: nome e cnh sao opcionais (contem, sem diferenciar maiusculas)
+    // o MOTORISTA so enxerga o proprio cadastro (CNH, telefone e posicao dos outros sao dados pessoais)
     public PaginaResponseDTO<MotoristaResponseDTO> listar(FiltroMotoristaDTO filtro, Pageable pageable) {
         Specification<Motorista> spec = Specification.allOf(
                 Especificacoes.contem("nome", filtro.nome()),
-                Especificacoes.contem("cnh", filtro.cnh()));
+                Especificacoes.contem("cnh", filtro.cnh()),
+                restricaoDoMotorista());
         return PaginaResponseDTO.de(motoristaRepository.findAll(spec, pageable), this::toResponseDTO);
     }
 
     public MotoristaResponseDTO buscarPorId(Long id) {
         Motorista motorista = motoristaRepository.findById(id)
+                .filter(this::visivel)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
         return toResponseDTO(motorista);
     }
 
     public MotoristaResponseDTO buscarPorCnh(String cnh) {
-        Motorista motorista = motoristaRepository.findByCnh(cnh)
+        Motorista motorista = motoristaRepository.findByCnh(normalizarCnh(cnh))
+                .filter(this::visivel)
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(cnh));
         return toResponseDTO(motorista);
     }
 
+    private Specification<Motorista> restricaoDoMotorista() {
+        if (!acessoMotorista.restrito()) {
+            return null;
+        }
+        return acessoMotorista.motoristaId()
+                .<Specification<Motorista>>map(id -> Especificacoes.igual("id", id))
+                .orElseGet(Especificacoes::nenhum);
+    }
+
+    private boolean visivel(Motorista motorista) {
+        return !acessoMotorista.restrito() || acessoMotorista.motoristaId().filter(motorista.getId()::equals).isPresent();
+    }
+
+    // a CNH e comparada como texto: espacos nas pontas nao podem gerar um "outro" motorista
+    static String normalizarCnh(String cnh) {
+        return cnh.trim();
+    }
+
     @Transactional
     public MotoristaResponseDTO criar(MotoristaRequestDTO dto) {
-        String cnh = dto.cnh();
+        String cnh = normalizarCnh(dto.cnh());
         if (motoristaRepository.existsByCnh(cnh)) {
             log.warn("Tentativa de cadastro com CNH ja existente: {}", cnh);
             throw new CnhJaCadastradaException(cnh);
@@ -58,7 +81,7 @@ public class MotoristaService {
 
         Motorista motorista = Motorista.builder()
                 .nome(dto.nome())
-                .cnh(dto.cnh())
+                .cnh(cnh)
                 .telefone(dto.telefone())
                 .latitudeAtual(dto.latitudeAtual())
                 .longitudeAtual(dto.longitudeAtual())
@@ -75,12 +98,13 @@ public class MotoristaService {
                 .orElseThrow(() -> new MotoristaNaoEncontradoException(id));
         Versoes.conferir(motorista.getVersao(), dto.versao(), "Motorista", id);
 
-        if (!dto.cnh().equals(motorista.getCnh()) && motoristaRepository.existsByCnh(dto.cnh())) {
-            throw new CnhJaCadastradaException(dto.cnh());
+        String cnh = normalizarCnh(dto.cnh());
+        if (!cnh.equals(motorista.getCnh()) && motoristaRepository.existsByCnh(cnh)) {
+            throw new CnhJaCadastradaException(cnh);
         }
 
         motorista.setNome(dto.nome());
-        motorista.setCnh(dto.cnh());
+        motorista.setCnh(cnh);
         motorista.setTelefone(dto.telefone());
         motorista.setLatitudeAtual(dto.latitudeAtual());
         motorista.setLongitudeAtual(dto.longitudeAtual());
@@ -99,10 +123,11 @@ public class MotoristaService {
             motorista.setNome(dto.nome());
         }
         if (dto.cnh() != null) {
-            if (!dto.cnh().equals(motorista.getCnh()) && motoristaRepository.existsByCnh(dto.cnh())) {
-                throw new CnhJaCadastradaException(dto.cnh());
+            String cnh = normalizarCnh(dto.cnh());
+            if (!cnh.equals(motorista.getCnh()) && motoristaRepository.existsByCnh(cnh)) {
+                throw new CnhJaCadastradaException(cnh);
             }
-            motorista.setCnh(dto.cnh());
+            motorista.setCnh(cnh);
         }
         if (dto.telefone() != null) {
             motorista.setTelefone(dto.telefone());

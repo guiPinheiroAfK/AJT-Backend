@@ -3,6 +3,7 @@ package com.ajtbackend.service;
 import com.ajtbackend.config.UsuarioLogado;
 import com.ajtbackend.dto.AuditoriaResponseDTO;
 import com.ajtbackend.dto.PaginaResponseDTO;
+import com.ajtbackend.exception.RegraNegocioException;
 import com.ajtbackend.model.LogAuditoria;
 import com.ajtbackend.model.enums.StatusTransfer;
 import com.ajtbackend.repository.LogAuditoriaRepository;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -198,16 +200,13 @@ class AuditoriaServiceTest {
     }
 
     @Test
-    void deveIgnorarORegistroIdEUsarFindAll_quandoTabelaEstaEmBranco() {
-        // given
-        when(repository.findAll(PAGINA)).thenReturn(new PageImpl<>(List.of(), PAGINA, 0));
-
+    void deveLancarRegraNegocioSemConsultar_quandoRegistroIdVemSemTabela() {
         // when
-        PaginaResponseDTO<AuditoriaResponseDTO> pagina = service.listar("  ", 7L, PAGINA);
+        Throwable erro = catchThrowable(() -> service.listar("  ", 7L, PAGINA));
 
-        // then
-        assertThat(pagina.conteudo()).isEmpty();
-        verify(repository).findAll(PAGINA);
+        // then: ids se repetem entre tabelas, entao registroId sozinho e pedido invalido (400)
+        assertThat(erro).isInstanceOf(RegraNegocioException.class).hasMessageContaining("tabela");
+        verify(repository, never()).findAll(PAGINA);
         verify(repository, never()).findByTabelaAfetadaAndRegistroId(any(), any(), any());
     }
 

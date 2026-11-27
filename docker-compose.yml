@@ -3,10 +3,11 @@ services:
   postgres:
     image: postgres:16
     container_name: ajt-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ajt_db
       POSTGRES_USER: ${AJT_DB_USER:-postgres}
-      POSTGRES_PASSWORD: ${AJT_DB_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${AJT_DB_PASSWORD:?defina AJT_DB_PASSWORD no .env}
     ports:
       # so acessivel pela propria maquina (nao expoe o banco na rede)
       - "127.0.0.1:5454:5432"
@@ -22,6 +23,7 @@ services:
     build:
       context: ./api
     container_name: ajt-backend
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -30,7 +32,7 @@ services:
     environment:
       AJT_DB_URL: jdbc:postgresql://postgres:5432/ajt_db
       AJT_DB_USER: ${AJT_DB_USER:-postgres}
-      AJT_DB_PASSWORD: ${AJT_DB_PASSWORD:-postgres}
+      AJT_DB_PASSWORD: ${AJT_DB_PASSWORD:?defina AJT_DB_PASSWORD no .env}
       AJT_JWT_SECRET: ${AJT_JWT_SECRET:?defina AJT_JWT_SECRET no .env}
       AJT_JWT_EXPIRATION: ${AJT_JWT_EXPIRATION:-86400000}
       AJT_CRYPTO_KEY: ${AJT_CRYPTO_KEY:?defina AJT_CRYPTO_KEY no .env}
@@ -44,6 +46,7 @@ services:
     build:
       context: ${AJT_FRONT_DIR:-../AJT-Frontend}
     container_name: ajt-frontend
+    restart: unless-stopped
     depends_on:
       - app
     ports:
