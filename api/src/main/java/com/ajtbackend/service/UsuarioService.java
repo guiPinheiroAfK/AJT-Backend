@@ -2,6 +2,7 @@ package com.ajtbackend.service;
 
 import com.ajtbackend.config.UsuarioLogado;
 import com.ajtbackend.dto.PaginaResponseDTO;
+import com.ajtbackend.dto.RegistroRequestDTO;
 import com.ajtbackend.dto.UsuarioRequestDTO;
 import com.ajtbackend.dto.UsuarioResponseDTO;
 import com.ajtbackend.exception.MotoristaNaoEncontradoException;
@@ -50,6 +51,34 @@ public class UsuarioService {
         Usuario usuario = usuarioRepository.findByUsername(username)
                 .orElseThrow(() -> new UsuarioNaoEncontradoException(username));
         return toResponseDTO(usuario);
+    }
+
+    /**
+     * Cadastro publico ("Criar conta"). A conta nasce inativa e com o perfil de menor acesso
+     * a cadastros (Atendente): so entra no sistema depois que um admin libera em Usuarios,
+     * onde tambem pode trocar o perfil. Assim ninguem de fora ganha acesso sozinho aos dados
+     * dos passageiros. A senha foi escolhida pela propria pessoa, entao nao obriga troca.
+     */
+    @Transactional
+    public UsuarioResponseDTO registrar(RegistroRequestDTO dto) {
+        String username = dto.username();
+        if (usuarioRepository.existsByUsername(username)) {
+            log.warn("Tentativa de cadastro publico com username ja existente: {}", username);
+            throw new UsernameJaCadastradoException(username);
+        }
+
+        Usuario usuario = Usuario.builder()
+                .nome(dto.nome().trim())
+                .username(username)
+                .senha(passwordEncoder.encode(dto.senha())) // hash, nunca texto plano
+                .role(Role.ATENDENTE)
+                .ativo(false) // aguarda o admin liberar
+                .trocarSenha(false)
+                .build();
+
+        Usuario salvo = usuarioRepository.save(usuario);
+        log.info("Cadastro publico aguardando liberacao: id={}, username={}", salvo.getId(), salvo.getUsername());
+        return toResponseDTO(salvo);
     }
 
     @Transactional
